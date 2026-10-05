@@ -1,2 +1,62 @@
+name: Day 1 CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check app tests
+
+      - name: Unit tests
+        run: python -m pytest -q
+
+      - name: Scan Git history for secrets
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/repo:ro" \
+            zricethezav/gitleaks:v8.24.2 \
+            git /repo --redact
+
+      - name: Build shared image
+        run: docker build -t manzil-ai:ci .
+
+      - name: Verify both container roles
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          trap 'docker logs ci-web; docker logs ci-worker; docker rm -f ci-web ci-worker' EXIT
+
+          docker run -d --name ci-web -p 8000:8000 manzil-ai:ci web
+          docker run -d --name ci-worker manzil-ai:ci worker
+
           curl --fail --retry 10 --retry-all-errors --retry-delay 1 \
             --connect-timeout 2 --max-time 5 http://localhost:8000/live
+
+          test "$(docker inspect -f '{{.State.Running}}' ci-web)" = "true"
+          test "$(docker inspect -f '{{.State.Running}}' ci-worker)" = "true"
+
+          WEB_IMAGE=$(docker inspect -f '{{.Image}}' ci-web)
+          WORKER_IMAGE=$(docker inspect -f '{{.Image}}' ci-worker)
+          test "$WEB_IMAGE" = "$WORKER_IMAGE"
