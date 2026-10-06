@@ -9,6 +9,8 @@ class Settings:
     s3_bucket: str | None
     s3_region: str | None
     s3_endpoint_url: str | None
+    meta_app_secret: str | None
+    webhook_verify_token: str | None
 
 
 def _optional(name):
@@ -23,4 +25,6 @@ def load_settings():
         s3_bucket=_optional("S3_BUCKET"),
         s3_region=_optional("S3_REGION"),
         s3_endpoint_url=_optional("S3_ENDPOINT_URL"),
+        meta_app_secret=_optional("META_APP_SECRET"),
+        webhook_verify_token=_optional("WEBHOOK_VERIFY_TOKEN"),
     )
