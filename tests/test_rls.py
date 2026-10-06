@@ -71,7 +71,12 @@ def rls_db(migration_database):
     # Random and confined to the dedicated test cluster. Never print the password.
     password = secrets.token_urlsafe(32)
     with psycopg.connect(admin_url, autocommit=True) as admin:
-        admin.execute(sql.SQL("ALTER ROLE manzil_app PASSWORD {}").format(sql.Literal(password)))
+        verifier = admin.pgconn.encrypt_password(
+            password.encode("utf-8"), b"manzil_app", b"scram-sha-256"
+        )
+        admin.execute(sql.SQL("ALTER ROLE manzil_app PASSWORD {}").format(
+            sql.Literal(verifier.decode("ascii"))
+        ))
     try:
         with psycopg.connect(
             make_conninfo(admin_url, user="manzil_app", password=password), autocommit=True

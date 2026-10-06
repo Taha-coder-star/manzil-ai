@@ -29,7 +29,7 @@ for the actual server, region, and selective browser-terminal transfer workflow.
 ## Approved deployment procedure
 
 1. Transfer the reviewed release files with a selective archive through the approved
-   browser terminal. Include app/db.py and migrations/002_tenant_rls.sql and any
+   browser terminal. Include app/db.py, deploy/activate_rls.py, migrations/002_tenant_rls.sql and any
    changed release files. Do not transfer .env, .local, test artifacts, or credentials.
    Keep migration 001 byte-for-byte unchanged and include it in the image.
 2. Keep the migration administrator's DATABASE_URL in a separate owner-readable
@@ -53,13 +53,15 @@ for the actual server, region, and selective browser-terminal transfer workflow.
    On the current deployed schema expect one applied, one skipped. Repeat the same
    command: expect zero applied, two skipped. Stop if checksums or permissions fail;
    never edit an applied migration or its ledger to bypass the failure.
-5. Connect privately using psql as the authorized administrator, using a protected
-   service/password configuration rather than a connection string on the command
-   line. Run `\password manzil_app` and enter a newly generated password at its hidden
-   prompts. Store it in the approved private credential store. Do not use a literal
-   ALTER ROLE password command in terminal history. Configure the runtime .env
-   DATABASE_URL privately for manzil_app and retain required TLS options. Keep
-   provider variables and port configuration intact.
+5. Keep the original administrator URL as the only line in a protected migration
+   environment file at `/home/ubuntu/.config/manzil/migrate.env` (directory mode
+   0700, file mode 0600). Run `sudo python3 deploy/activate_rls.py` from the server
+   checkout. The script creates a private backup of .env, generates a random
+   password, hashes it client-side with SCRAM before ALTER ROLE, verifies a direct
+   restricted login and missing-context zero rows, then replaces only the DATABASE_URL
+   line atomically and sets .env to mode 0600. It prints no credentials or connection strings. Retain the
+   protected admin file for future migrations; do not put its URL back into runtime
+   .env. Keep provider variables and port configuration intact.
 6. Recreate both runtime containers:
 
    ```sh
@@ -103,7 +105,7 @@ for later tasks (docs/OPEN_ISSUES.md).
 
 Use a dedicated loopback PostgreSQL 18 database named manzil_schema_test. Configure
 TEST_DATABASE_URL privately with its test administrator, set REQUIRE_DATABASE_TESTS=1,
-then run `python -m ruff check app tests` and `python -m pytest -q`. Tests create/drop
+then run `python -m ruff check app tests deploy` and `python -m pytest -q`. Tests create/drop
 isolated schemas and provision random temporary manzil_app passwords, cleared on
 fixture teardown. The cluster role remains for migration repeatability. CI requires
 the database, so absent configuration fails rather than silently skipping checks.

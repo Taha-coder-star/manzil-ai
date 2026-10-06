@@ -1,5 +1,9 @@
 # Task log
 
+- 2026-10-06: Added deploy/activate_rls.py for private server-side role password generation, SCRAM verifier creation, restricted login validation, protected admin backup, and atomic runtime .env switch. Added parser/URL tests and changed disposable RLS tests to use client-side SCRAM. Ruff, 103 local tests, 103 Docker Python 3.12 tests, and 34-file Gitleaks scan passed. Deployment archive and remote CI still need refresh; AWS remains read-only.
+
+- 2026-10-06: AWS read-only preflight via user's EC2 terminal: sudo Docker works; web/worker/Caddy running; public schema, manzil_admin has CREATEROLE and owns agency, one migration recorded. Adding a private activation helper to generate a password on the server, hash it client-side, verify restricted login, and atomically switch runtime .env. No AWS mutation yet; final tests/CI and release archive regeneration pending.
+
 - 2026-10-06: Committed Task 2.2 and approved memory files as 34494fb, pushed feature/task-2-2-rls, and opened draft PR #4. GitHub Actions run 37436313894 passed. Prepared selective, credential-free release archive in ignored .local/task-2-2-release.b64. AWS deployment awaits the user's authenticated EC2 Instance Connect terminal; no server/database changes or merge occurred.
 
 - 2026-10-06: User approved including memory files in Task 2.2 branch and deploying Task 2.2 to AWS. Beginning branch publication and deployment; no merge approval given. Verification results from prior session remain valid pending remote CI and live checks.
