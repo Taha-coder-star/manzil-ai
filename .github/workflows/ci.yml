@@ -1,4 +1,4 @@
-name: Day 1 CI
+name: Manzil AI CI
 
 on:
   push:
@@ -10,6 +10,24 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: manzil_test
+          POSTGRES_PASSWORD: local_test_only
+          POSTGRES_DB: manzil_schema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U manzil_test -d manzil_schema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgresql://manzil_test:local_test_only@127.0.0.1:5432/manzil_schema_test
 
     steps:
       - name: Checkout repository
@@ -26,9 +44,9 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check app tests
+        run: python -m ruff check app tests
 
-      - name: Unit tests
+      - name: Unit and migration tests
         run: python -m pytest -q
 
       - name: Scan Git history for secrets
@@ -40,6 +58,11 @@ jobs:
 
       - name: Build shared image
         run: docker build -t manzil-ai:ci .
+
+      - name: Verify migration SQL is included
+        run: |
+          docker run --rm --entrypoint python manzil-ai:ci \
+            -c "from pathlib import Path; p = Path('/app/migrations/001_schema_v1.sql'); assert p.is_file(); print('Migration SQL is included')"
 
       - name: Verify both container roles
         shell: bash
