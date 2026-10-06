@@ -15,7 +15,9 @@ def main():
     if args.role == "web":
         import uvicorn
 
-        uvicorn.run("app.web:app", host="0.0.0.0", port=8000)
+        from app.config import load_settings
+
+        uvicorn.run("app.web:app", host="0.0.0.0", port=load_settings().port)
     else:
         from app.worker import run
 

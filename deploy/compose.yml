@@ -1,0 +1,35 @@
+# Demo deployment: web + worker from one image, Caddy for public HTTPS.
+# Run from the repo root on the server:
+#   docker compose -f deploy/compose.yml --env-file .env build
+#   docker compose -f deploy/compose.yml --env-file .env up -d
+services:
+  web:
+    build: ..
+    image: manzil-ai:latest
+    command: ["web"]
+    env_file: ../.env
+    restart: unless-stopped
+
+  worker:
+    image: manzil-ai:latest
+    pull_policy: never
+    command: ["worker"]
+    env_file: ../.env
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+
+volumes:
+  caddy_data:
+  caddy_config:
