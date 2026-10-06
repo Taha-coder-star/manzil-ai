@@ -160,17 +160,21 @@ def test_secrets_never_logged(caplog):
 
 
 def test_access_log_redacts_verify_token():
+    # Shape of Meta's real request: every parameter is sent dotted and underscored.
+    path = (
+        f"/webhook?hub.mode=subscribe&hub.challenge=7&hub.verify_token={VERIFY_TOKEN}"
+        f"&hub_mode=subscribe&hub_challenge=7&hub_verify_token={VERIFY_TOKEN}"
+        f"&hub%2Everify_token={VERIFY_TOKEN}"
+    )
     record = logging.LogRecord(
         "uvicorn.access", logging.INFO, __file__, 0,
-        '%s - "%s %s HTTP/%s" %d',
-        ("1.2.3.4:5", "GET",
-         f"/webhook?hub.mode=subscribe&hub.verify_token={VERIFY_TOKEN}&hub.challenge=7",
-         "1.1", 200),
-        None,
+        '%s - "%s %s HTTP/%s" %d', ("1.2.3.4:5", "GET", path, "1.1", 200), None,
     )
 
     webhook.RedactVerifyTokenFilter().filter(record)
 
     message = record.getMessage()
     assert VERIFY_TOKEN not in message
-    assert "hub.verify_token=[REDACTED]&hub.challenge=7" in message
+    assert "hub.verify_token=[REDACTED]&hub_mode" in message
+    assert "hub_verify_token=[REDACTED]&" in message
+    assert "hub%2Everify_token=[REDACTED] " in message

@@ -14,7 +14,8 @@ SIGNATURE_HEADER = "X-Hub-Signature-256"
 MAX_BODY_BYTES = 1024 * 1024
 
 _SIGNATURE_RE = re.compile(r"sha256=([0-9a-fA-F]{64})")
-_VERIFY_TOKEN_RE = re.compile(r"(hub\.verify_token=)[^&\s\"]*")
+# Meta sends the parameters twice: hub.verify_token and hub_verify_token.
+_VERIFY_TOKEN_RE = re.compile(r"(hub(?:\.|_|%2e)verify_token=)[^&\s\"]*", re.IGNORECASE)
 
 
 def verify_challenge(mode, token, challenge, expected_token):
