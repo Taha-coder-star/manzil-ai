@@ -1,8 +1,12 @@
 # Task 2.2 runtime-role deployment
 
-Local implementation only. Obtain explicit approval before AWS changes. Local tests
-do not establish that production uses manzil_app. See ignored infrastructure notes
-for the actual server, region, and selective browser-terminal transfer workflow.
+AWS deployment was approved and completed on 2026-10-06. Migration 002 applied
+and repeated successfully. Private runtime activation passed. Both recreated
+runtime containers connected as manzil_app and confirmed FORCE RLS and zero rows
+without tenant context across all nine tables. The public /health endpoint
+returned HTTP 200 with database and bucket checks ok; Caddy, web, and worker
+remained running. See ignored infrastructure notes for server metadata and the
+selective browser-terminal transfer workflow. Do not merge without separate approval.
 
 ## Design and prerequisites
 
@@ -32,6 +36,9 @@ for the actual server, region, and selective browser-terminal transfer workflow.
    browser terminal. Include app/db.py, deploy/activate_rls.py, migrations/002_tenant_rls.sql and any
    changed release files. Do not transfer .env, .local, test artifacts, or credentials.
    Keep migration 001 byte-for-byte unchanged and include it in the image.
+   If the archive is extracted under umask 077, set only transferred source files
+   to mode 0644 and their code directories to 0755 before building; appuser must
+   read Python/SQL files. Do not relax .env or private administrator file modes.
 2. Keep the migration administrator's DATABASE_URL in a separate owner-readable
    environment file outside the checkout and runtime compose configuration (mode
    0600 in a directory of mode 0700). Provision it privately; do not echo, paste into

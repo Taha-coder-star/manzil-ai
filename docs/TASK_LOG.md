@@ -1,5 +1,21 @@
 # Task log
 
+- 2026-10-06: Task 2.2 AWS deployment verified complete. Public /health returned HTTP 200 with database and bucket checks ok; Compose showed Caddy, web, and worker running after two minutes. Both runtime containers had already passed restricted-role and nine-table forced-RLS checks. Updated project state and deployment notes; no merge.
+
+- 2026-10-06: Live read-only checks from both web and worker succeeded: direct database role manzil_app had restricted flags; all nine application tables had RLS enabled and forced, and each returned zero rows without tenant context. Public health and stable service status remain to be checked.
+
+- 2026-10-06: First live identity-check command omitted Compose `--env-file .env`; Compose stopped during SITE_ADDRESS interpolation before entering web. No service or database change. Repeat the read-only check with `--env-file .env`.
+
+- 2026-10-06: User force-recreated web and worker after restricted-login activation. Compose reported both started and running from manzil-ai:latest; Caddy remained up. Next: inspect actual database role/RLS behavior from both containers and public health.
+
+- 2026-10-06: First activation attempt from /home/ubuntu failed before running the script because its relative path was absent there. User changed to /home/ubuntu/manzil-ai and reported `Restricted login verified; private runtime environment updated.` Restricted direct login and missing-context checks passed; runtime .env switched privately. Web/worker recreation and live checks remain.
+
+- 2026-10-06: User reported successful AWS RDS migration after source permissions were repaired and the image rebuilt: first run `1 applied, 1 skipped`; repeat run `0 applied, 2 skipped`. Migration 002 is now applied and must not be edited. Runtime credential activation and service recreation/verification are next.
+
+- 2026-10-06: EC2 archive listed expected paths and migration 001 matched exactly. A private code backup and migrate.env were created; updated source was extracted and web image built. Migration command failed before Python loaded with PermissionError on /app/app/migrate.py because umask 077 made extracted code unreadable to appuser. Running containers stayed up, and no SQL was applied. Next: set normal read permissions on transferred code, rebuild, rerun migration apply/repeat.
+
+- 2026-10-06: User confirmed the EC2 release archive checksum is OK (release 9ca4c6a). Preparing the guarded migration-001 comparison, code backup, selective extraction, private admin environment setup, Docker build, and migration apply/repeat commands. No migration application or runtime switch is confirmed yet.
+
 - 2026-10-06: Published server activation helper as commit 9ca4c6a; GitHub Actions run 37438232576 passed. Regenerated selective seven-file archive and sent EC2 terminal transfer/checksum/migration-001 comparison commands. Awaiting the user's safe verification output before extraction. No AWS mutation or merge.
 
 - 2026-10-06: Added deploy/activate_rls.py for private server-side role password generation, SCRAM verifier creation, restricted login validation, protected admin backup, and atomic runtime .env switch. Added parser/URL tests and changed disposable RLS tests to use client-side SCRAM. Ruff, 103 local tests, 103 Docker Python 3.12 tests, and 34-file Gitleaks scan passed. Deployment archive and remote CI still need refresh; AWS remains read-only.

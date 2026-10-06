@@ -1,6 +1,5 @@
 # Open issues
 
-- Task 2.2 deployment needs explicit approval, admin migration privileges, private runtime-role password provisioning, a runtime credential switch, identity checks, and healthy web/worker verification. Production still uses the prior configuration per handoff.
 - Webhook sender-to-agency routing needs a trusted bootstrap mechanism under RLS. Missing context intentionally returns no rows; do not weaken policies or grant BYPASSRLS.
 - Worker tenant discovery and later job claiming (Task 3.1) need a trusted discovery mechanism under RLS.
 - GEMINI_API_KEY and ELEVENLABS_API_KEY were missing on the server in the last reported check; partner delivery is pending. Do not claim installation or retesting.
