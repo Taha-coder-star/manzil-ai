@@ -148,6 +148,13 @@ def main():
     except MigrationError as exc:
         logger.error("%s", exc)
         return 1
+    except psycopg.errors.InsufficientPrivilege:
+        logger.error(
+            "Migration permission denied; use the schema/table owner with "
+            "CREATEROLE and required role-administration privileges, "
+            "not the runtime login. Changes were rolled back."
+        )
+        return 1
     except (psycopg.Error, OSError, UnicodeError) as exc:
         # Do not print database errors or connection credentials.
         logger.error(

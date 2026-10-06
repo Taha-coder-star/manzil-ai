@@ -27,6 +27,7 @@ jobs:
           --health-retries 10
 
     env:
+      REQUIRE_DATABASE_TESTS: "1"
       TEST_DATABASE_URL: postgresql://manzil_test:local_test_only@127.0.0.1:5432/manzil_schema_test
 
     steps:
@@ -46,7 +47,7 @@ jobs:
       - name: Lint
         run: python -m ruff check app tests
 
-      - name: Unit and migration tests
+      - name: Unit, migration, and restricted-login RLS tests
         run: python -m pytest -q
 
       - name: Scan Git history for secrets
@@ -62,7 +63,7 @@ jobs:
       - name: Verify migration SQL is included
         run: |
           docker run --rm --entrypoint python manzil-ai:ci \
-            -c "from pathlib import Path; p = Path('/app/migrations/001_schema_v1.sql'); assert p.is_file(); print('Migration SQL is included')"
+            -c "from pathlib import Path; root = Path('/app/migrations'); assert all((root / name).is_file() for name in ['001_schema_v1.sql', '002_tenant_rls.sql']); print('Schema and RLS SQL are included')"
 
       - name: Verify both container roles
         shell: bash
