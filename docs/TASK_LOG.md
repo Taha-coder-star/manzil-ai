@@ -1,5 +1,7 @@
 # Task log
 
+- 2026-10-06: Committed Task 2.2 and approved memory files as 34494fb, pushed feature/task-2-2-rls, and opened draft PR #4. GitHub Actions run 37436313894 passed. Prepared selective, credential-free release archive in ignored .local/task-2-2-release.b64. AWS deployment awaits the user's authenticated EC2 Instance Connect terminal; no server/database changes or merge occurred.
+
 - 2026-10-06: User approved including memory files in Task 2.2 branch and deploying Task 2.2 to AWS. Beginning branch publication and deployment; no merge approval given. Verification results from prior session remain valid pending remote CI and live checks.
 
 - 2026-10-06: Final validation: Ruff passed; 98/98 tests passed on Python 3.14 and 98/98 on Docker Python 3.12 with PostgreSQL 18, no skips. Upgrade preserved rows; permission errors are credential-safe. Rebuilt image, verified packaging, web/worker and /live HTTP 200; removed temporary containers. Gitleaks found no secrets. Migration 001 unchanged; git diff --check passed; nothing staged/committed. Memory approval, remote CI, and authorized AWS runtime switch remain pending.
