@@ -1,5 +1,7 @@
 # Task log
 
+- 2026-10-06: Published server activation helper as commit 9ca4c6a; GitHub Actions run 37438232576 passed. Regenerated selective seven-file archive and sent EC2 terminal transfer/checksum/migration-001 comparison commands. Awaiting the user's safe verification output before extraction. No AWS mutation or merge.
+
 - 2026-10-06: Added deploy/activate_rls.py for private server-side role password generation, SCRAM verifier creation, restricted login validation, protected admin backup, and atomic runtime .env switch. Added parser/URL tests and changed disposable RLS tests to use client-side SCRAM. Ruff, 103 local tests, 103 Docker Python 3.12 tests, and 34-file Gitleaks scan passed. Deployment archive and remote CI still need refresh; AWS remains read-only.
 
 - 2026-10-06: AWS read-only preflight via user's EC2 terminal: sudo Docker works; web/worker/Caddy running; public schema, manzil_admin has CREATEROLE and owns agency, one migration recorded. Adding a private activation helper to generate a password on the server, hash it client-side, verify restricted login, and atomically switch runtime .env. No AWS mutation yet; final tests/CI and release archive regeneration pending.
