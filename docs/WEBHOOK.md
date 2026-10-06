@@ -15,7 +15,7 @@ Caddy already proxies every path to `web:8000`; no Caddyfile change is needed.
 
 - `GET /webhook`: `hub.mode=subscribe` and a matching `hub.verify_token` (constant-time
   compare) return `hub.challenge` as `text/plain` 200. Anything else, including an unset
-  token, returns 403. A uvicorn access-log filter redacts `hub.verify_token`.
+  token, returns 403. A uvicorn access-log filter redacts the verify token. Meta sends every parameter twice (`hub.verify_token` and `hub_verify_token`); both forms, and `hub%2Everify_token`, are redacted.
 - `POST /webhook`, in order:
   1. no `META_APP_SECRET`: 503 (fail closed; Meta retries);
   2. body over 1 MB: 413;
@@ -90,3 +90,8 @@ the `WEBHOOK_SENDER_AGENCIES=...` line to add to `.env`.
 3. Check from outside: a GET with a wrong token gives 403, and an unsigned POST gives 401.
 4. Meta dashboard: App, then WhatsApp, then Configuration, then Webhook. Set the callback URL
    and verify token, then **Verify and save**. After Task 2.4 is deployed and provisioned, subscribe the `messages` field and send a test message.
+
+## Operational notes
+
+- The verify token is never the Meta access token (`EAA...`). Entering the access token there sends it to our server in the URL.
+- While the Meta app is unpublished, Meta delivers only dashboard **Test** webhooks. Its sample uses a fake `phone_number_id`, so the expected log line is `stored=0 ... unknown_sender=1`. Real messages need the app published.
