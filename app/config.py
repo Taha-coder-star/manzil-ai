@@ -11,6 +11,7 @@ class Settings:
     s3_endpoint_url: str | None
     meta_app_secret: str | None
     webhook_verify_token: str | None
+    webhook_sender_agencies: str | None
 
 
 def _optional(name):
@@ -27,4 +28,5 @@ def load_settings():
         s3_endpoint_url=_optional("S3_ENDPOINT_URL"),
         meta_app_secret=_optional("META_APP_SECRET"),
         webhook_verify_token=_optional("WEBHOOK_VERIFY_TOKEN"),
+        webhook_sender_agencies=_optional("WEBHOOK_SENDER_AGENCIES"),
     )

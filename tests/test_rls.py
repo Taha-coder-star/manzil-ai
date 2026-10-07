@@ -1,14 +1,11 @@
-import secrets
 import uuid
 
 import psycopg
 import pytest
 from psycopg import sql
-from psycopg.conninfo import make_conninfo
 from psycopg.pq import TransactionStatus
 from psycopg.types.json import Jsonb
 
-from app import migrate
 from app.db import tenant_transaction
 
 TABLES = (
@@ -65,31 +62,15 @@ def insert_row(conn, table, row):
 
 
 @pytest.fixture
-def rls_db(migration_database):
-    admin_url, schema = migration_database
-    migrate.apply_migrations(admin_url)
-    # Random and confined to the dedicated test cluster. Never print the password.
-    password = secrets.token_urlsafe(32)
-    with psycopg.connect(admin_url, autocommit=True) as admin:
-        verifier = admin.pgconn.encrypt_password(
-            password.encode("utf-8"), b"manzil_app", b"scram-sha-256"
-        )
-        admin.execute(sql.SQL("ALTER ROLE manzil_app PASSWORD {}").format(
-            sql.Literal(verifier.decode("ascii"))
-        ))
-    try:
-        with psycopg.connect(
-            make_conninfo(admin_url, user="manzil_app", password=password), autocommit=True
-        ) as conn:
-            tenants = [tenant_rows(), tenant_rows()]
-            for rows in tenants:
-                with tenant_transaction(conn, rows["agency"]["id"]):
-                    for table, row in rows.items():
-                        insert_row(conn, table, row)
-            yield conn, tenants, schema, admin_url
-    finally:
-        with psycopg.connect(admin_url, autocommit=True) as admin:
-            admin.execute("ALTER ROLE manzil_app PASSWORD NULL")
+def rls_db(app_role_db):
+    admin_url, app_url, schema = app_role_db
+    with psycopg.connect(app_url, autocommit=True) as conn:
+        tenants = [tenant_rows(), tenant_rows()]
+        for rows in tenants:
+            with tenant_transaction(conn, rows["agency"]["id"]):
+                for table, row in rows.items():
+                    insert_row(conn, table, row)
+        yield conn, tenants, schema, admin_url
 
 
 @pytest.mark.parametrize("table", TABLES)

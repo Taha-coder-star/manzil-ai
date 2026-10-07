@@ -1,9 +1,13 @@
 import os
+import secrets
 import uuid
 
 import psycopg
 import pytest
+from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+from app import migrate
 
 
 @pytest.fixture(scope="session")
@@ -38,3 +42,24 @@ def migration_database(test_database_url):
                     psycopg.sql.Identifier(schema)
                 )
             )
+
+
+@pytest.fixture
+def app_role_db(migration_database):
+    """Migrated schema plus a conninfo for the restricted manzil_app login."""
+    admin_url, schema = migration_database
+    migrate.apply_migrations(admin_url)
+    # Random and confined to the dedicated test cluster. Never print the password.
+    password = secrets.token_urlsafe(32)
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        verifier = admin.pgconn.encrypt_password(
+            password.encode("utf-8"), b"manzil_app", b"scram-sha-256"
+        )
+        admin.execute(sql.SQL("ALTER ROLE manzil_app PASSWORD {}").format(
+            sql.Literal(verifier.decode("ascii"))
+        ))
+    try:
+        yield admin_url, make_conninfo(admin_url, user="manzil_app", password=password), schema
+    finally:
+        with psycopg.connect(admin_url, autocommit=True) as admin:
+            admin.execute("ALTER ROLE manzil_app PASSWORD NULL")

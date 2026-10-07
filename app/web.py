@@ -1,11 +1,15 @@
 import json
 import logging
 
+import psycopg
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 
 from app import health, webhook
 from app.config import load_settings
+from app.ingest import IngestError, ingest_events
+from app.routing import EnvSenderResolver, RoutingConfigError
 
 logger = logging.getLogger(__name__)
 logging.getLogger("uvicorn.access").addFilter(webhook.RedactVerifyTokenFilter())
@@ -83,10 +87,27 @@ async def webhook_receive(request: Request):
         logger.warning("Webhook POST ignored: unsupported payload")
         return JSONResponse({"status": "ignored"})
 
-    entries = envelope.get("entry")
+    events, skipped = webhook.extract_events(envelope)
+    if skipped:
+        logger.info("Webhook POST: %d unsupported items skipped", skipped)
+    if not events:
+        return JSONResponse({"status": "received"})
+
+    try:
+        if not settings.database_url:
+            raise RoutingConfigError("DATABASE_URL is not set")
+        resolver = EnvSenderResolver.from_config(settings.webhook_sender_agencies)
+        result = await run_in_threadpool(
+            ingest_events, settings.database_url, resolver, events
+        )
+    except (RoutingConfigError, IngestError, psycopg.Error) as exc:
+        # Not durably accepted: answer non-2xx so Meta retries. Type only;
+        # psycopg messages can include connection details.
+        logger.error("Webhook POST not persisted: %s", type(exc).__name__)
+        return Response(status_code=503)
+
     logger.info(
-        "Webhook POST authenticated: %d entries",
-        len(entries) if isinstance(entries, list) else 0,
+        "Webhook POST persisted: stored=%d duplicate=%d unknown_sender=%d inactive=%d",
+        result.stored, result.duplicate, result.unknown_sender, result.inactive_agency,
     )
-    # Task 2.4 adds durable, idempotent persistence here.
     return JSONResponse({"status": "received"})
