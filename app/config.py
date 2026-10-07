@@ -12,6 +12,7 @@ class Settings:
     meta_app_secret: str | None
     webhook_verify_token: str | None
     webhook_sender_agencies: str | None
+    privacy_contact_email: str | None
 
 
 def _optional(name):
@@ -29,4 +30,5 @@ def load_settings():
         meta_app_secret=_optional("META_APP_SECRET"),
         webhook_verify_token=_optional("WEBHOOK_VERIFY_TOKEN"),
         webhook_sender_agencies=_optional("WEBHOOK_SENDER_AGENCIES"),
+        privacy_contact_email=_optional("PRIVACY_CONTACT_EMAIL"),
     )
