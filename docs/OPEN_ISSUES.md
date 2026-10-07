@@ -4,7 +4,7 @@
 - Worker tenant discovery and later job claiming (Task 3.1) need a trusted discovery mechanism under RLS.
 - GEMINI_API_KEY and ELEVENLABS_API_KEY were missing on the server in the last reported check; partner delivery is pending. Do not claim installation or retesting.
 - Meta system-user token was regenerated on 2026-10-08 (after the exposure); record its expiry and arrange renewal before it.
-- Meta app is unpublished, so only dashboard test webhooks are delivered. Publish the app (privacy policy URL etc.) before the live 1 event + 1 job check and before M1 (Day 5).
+- The Meta app webhook subscribes 10 fields; only messages is handled (others are skipped with 200). Untick the rest to reduce noise.
 - Remaining team-phone hello_world receipts are unconfirmed; new_lead_alert template approval was pending.
 - Voice must reject silence before provider calls; current provider limits/models require verification when voice work starts. Demo data remains fictional and team-only.
 - Local pre-commit secret hook deferred; CI scans full history with Gitleaks.

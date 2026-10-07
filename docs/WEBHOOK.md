@@ -95,3 +95,4 @@ the `WEBHOOK_SENDER_AGENCIES=...` line to add to `.env`.
 
 - The verify token is never the Meta access token (`EAA...`). Entering the access token there sends it to our server in the URL.
 - While the Meta app is unpublished, Meta delivers only dashboard **Test** webhooks. Its sample uses a fake `phone_number_id`, so the expected log line is `stored=0 ... unknown_sender=1`. Real messages need the app published.
+- The WhatsApp Business Account must be subscribed to **our** app (`POST /{WABA_ID}/subscribed_apps` with the system-user token; check with `GET`). Without it, Meta delivers nothing even when the app webhook and the `messages` field are set.
