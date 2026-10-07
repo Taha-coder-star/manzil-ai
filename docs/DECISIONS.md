@@ -13,3 +13,4 @@
 - Keep estimated usage measurements null when unknown; do not invent zero costs or usage.
 - updated_at is maintained by application code; schema v1 has no automatic timestamp trigger.
 - Provider choices from handoff are Gemini for text/audio fallback and ElevenLabs Scribe for primary transcription; keys and current provider behavior remain unverified locally.
+- Webhook callback path is /webhook. Signature is verified over raw bytes before parsing; missing app secret fails closed with 503; authentic but unusable payloads get 200 (retries cannot fix them). The verify token is redacted from access logs.

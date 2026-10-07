@@ -1,5 +1,9 @@
 # Task log
 
+- 2026-10-06: Task 2.3 deployed to EC2 by the owner (branch code, PR #5 unmerged) via EC2 Instance Connect browser terminal: three-file archive (sha256 checked), WEBHOOK_VERIFY_TOKEN added privately to server .env, image rebuilt, web/worker recreated. Live: GET wrong token 403, unsigned POST 401, bad-signature POST 401 (proves META_APP_SECRET loaded), /health 200 with database/bucket ok. Meta 'Verify and save' blocked: owner's account has app Administrator role but no access to the Manzil AI business portfolio; Taha to grant. The owner's local SSH key file is missing; deploy through the browser terminal.
+
+- 2026-10-06: Task 2.3 (reassigned from D1 to D2 per Taha's handoff) implemented on feature/task-2-3-webhook: GET /webhook verify handshake, POST X-Hub-Signature-256 check on raw bytes (401 before parsing/storage), fail-closed 503 without META_APP_SECRET, 1 MB cap, uvicorn access-log redaction of hub.verify_token. Ruff passed; 129 tests passed (103 existing + 26 new) against disposable PostgreSQL 18. Docker image check: challenge echoed 200, bad token 403, unsigned POST 401, access log redacted. Pending: deploy, Meta dashboard verification, then Task 2.4 persistence. No AWS change or merge.
+
 - 2026-10-06: Task 2.2 AWS deployment verified complete. Public /health returned HTTP 200 with database and bucket checks ok; Compose showed Caddy, web, and worker running after two minutes. Both runtime containers had already passed restricted-role and nine-table forced-RLS checks. Updated project state and deployment notes; no merge.
 
 - 2026-10-06: Live read-only checks from both web and worker succeeded: direct database role manzil_app had restricted flags; all nine application tables had RLS enabled and forced, and each returned zero rows without tenant context. Public health and stable service status remain to be checked.
