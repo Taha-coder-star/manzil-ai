@@ -27,8 +27,12 @@ WITH new_event AS (
     ON CONFLICT (agency_id, event_key) DO NOTHING
     RETURNING id
 ), new_job AS (
-    INSERT INTO job (agency_id, inbound_event_id, job_type, dedupe_key, payload)
-    SELECT %(agency_id)s, id, %(job_type)s, %(dedupe_key)s, %(job_payload)s FROM new_event
+    INSERT INTO job (
+        agency_id, inbound_event_id, job_type, dedupe_key, payload, conversation_key
+    )
+    SELECT %(agency_id)s, id, %(job_type)s, %(dedupe_key)s, %(job_payload)s,
+           %(conversation_key)s
+    FROM new_event
     ON CONFLICT (agency_id, dedupe_key) DO NOTHING
     RETURNING id
 )
@@ -59,6 +63,7 @@ def store_event(conn, agency_id, event):
         "job_type": event.job_type,
         "dedupe_key": event.dedupe_key,
         "job_payload": Jsonb(event.job_payload),
+        "conversation_key": event.conversation_key,
     }).fetchone()
     if events != jobs:
         # A job already holds this dedupe key without its event: never leave
