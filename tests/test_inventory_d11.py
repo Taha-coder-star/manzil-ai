@@ -414,8 +414,8 @@ def schema_at_006_with_rows(conn, schema, **property_overrides):
         sql.Identifier(schema)))
     become_migrator(conn, schema)
     migrations = migrate.load_migrations()
-    assert migrations[-1][0] == "007_inventory_d11.sql"
-    for _, _, statement in migrations[:-1]:
+    at_007 = [name for name, _, _ in migrations].index("007_inventory_d11.sql")
+    for _, _, statement in migrations[:at_007]:
         conn.execute(statement, prepare=False)
 
     karachi = insert(conn, "location", level="city", name="Karachi")
@@ -437,7 +437,7 @@ def schema_at_006_with_rows(conn, schema, **property_overrides):
     pid = insert(conn, "property", **active_property(
         agency, dha, public_features=Jsonb({}), **property_overrides))
     insert(conn, "property", agency_id=agency, listing_code="DH6-105", status="sold")
-    return migrations[-1][2], owner, agency, dha, pid
+    return migrations[at_007][2], owner, agency, dha, pid
 
 
 def test_upgrade_from_006_as_non_superuser_owner_preserves_rows(migration_database):

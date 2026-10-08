@@ -7,7 +7,9 @@ fails as ValueError instead of a Meta error. WhatsAppClient adds the envelope.
 Never log the access token, request or response bodies, or recipient numbers.
 """
 
+import hashlib
 import logging
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -36,6 +38,12 @@ CTA_DISPLAY_TEXT_MAX = 20
 # Meta error codes that are throttling or temporary: retrying can succeed.
 RETRYABLE_META_CODES = frozenset({1, 2, 4, 80007, 130429, 131056})
 
+# Media download URLs (5-minute life) are fetched with the access token, so the
+# token is only ever sent to Meta's own hosts.
+MEDIA_HOST_SUFFIXES = (".fbsbx.com", ".facebook.com", ".whatsapp.net", ".fbcdn.net")
+# A download URL that has expired (or was never ours) answers with one of these.
+EXPIRED_URL_STATUSES = frozenset({401, 403, 404, 410})
+
 
 class SendError(Exception):
     """Base class; code is log-safe (never the message body or the token)."""
@@ -55,6 +63,22 @@ class PermanentSendError(SendError):
 
 class AmbiguousSendError(SendError):
     """The request may have been processed (e.g. read timeout): never resend it."""
+
+
+class MediaError(Exception):
+    """Base class for media fetches; code is log-safe."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+class RetryableMediaError(MediaError):
+    """Transient (network, throttling, 5xx, corrupt transfer): a later attempt can succeed."""
+
+
+class PermanentMediaError(MediaError):
+    """The media is gone, too large or rejected by Meta; retrying cannot help."""
 
 
 def _check_text(value, name, limit, *, required=True):
@@ -214,7 +238,9 @@ class WhatsAppClient:
     def __init__(self, phone_number_id, access_token, api_version, *, http=None):
         if not phone_number_id or not access_token or not api_version:
             raise ValueError("phone_number_id, access_token and api_version are required")
-        self._url = f"{GRAPH_URL}/{api_version}/{phone_number_id}/messages"
+        self._graph = f"{GRAPH_URL}/{api_version}"
+        self._phone_number_id = phone_number_id
+        self._url = f"{self._graph}/{phone_number_id}/messages"
         self._http = http or httpx.Client(
             timeout=httpx.Timeout(READ_TIMEOUT_SECONDS, connect=CONNECT_TIMEOUT_SECONDS)
         )
@@ -243,6 +269,76 @@ class WhatsAppClient:
             body["typing_indicator"] = {"type": "text"}
         self._post(body)
 
+    def media_info(self, media_id):
+        """Metadata of an inbound media ID: a fresh 5-minute URL, mime_type, sha256, size."""
+        if not isinstance(media_id, str) or not media_id.isalnum():
+            raise PermanentMediaError("invalid_media_id")
+        try:
+            response = self._http.get(
+                f"{self._graph}/{media_id}",
+                params={"phone_number_id": self._phone_number_id},
+                headers=self._headers,
+            )
+        except httpx.TransportError as exc:
+            raise RetryableMediaError(type(exc).__name__) from None
+        if response.status_code != 200:
+            raise _media_status_error(response, "info")
+        try:
+            data = response.json()
+            url = data["url"]
+        except (ValueError, KeyError, TypeError):
+            raise RetryableMediaError("info_invalid_json") from None
+        if not isinstance(url, str):
+            raise RetryableMediaError("info_invalid_json")
+        return data
+
+    def download_media(self, url, max_bytes):
+        """Bytes behind a media URL, at most max_bytes. Raises MediaExpired for a dead URL."""
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        if parts.scheme != "https" or not host.endswith(MEDIA_HOST_SUFFIXES):
+            raise PermanentMediaError("untrusted_media_host")
+        try:
+            with self._http.stream("GET", url, headers=self._headers) as response:
+                if response.status_code in EXPIRED_URL_STATUSES:
+                    raise MediaUrlExpired(f"http_{response.status_code}")
+                if response.status_code != 200:
+                    raise _media_status_error(response, "download")
+                declared = response.headers.get("content-length")
+                if declared and declared.isdigit() and int(declared) > max_bytes:
+                    raise PermanentMediaError("too_large")
+                chunks, size = [], 0
+                for chunk in response.iter_bytes():
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise PermanentMediaError("too_large")
+                    chunks.append(chunk)
+        except httpx.TransportError as exc:
+            raise RetryableMediaError(type(exc).__name__) from None
+        return b"".join(chunks)
+
+    def fetch_media(self, media_id, max_bytes):
+        """Download an inbound media ID; returns (bytes, meta mime_type).
+
+        The URL is re-queried once if it expired between lookup and download.
+        """
+        for attempt in (1, 2):
+            info = self.media_info(media_id)
+            declared = info.get("file_size")
+            if isinstance(declared, int) and declared > max_bytes:
+                raise PermanentMediaError("too_large")
+            try:
+                data = self.download_media(info["url"], max_bytes)
+            except MediaUrlExpired:
+                if attempt == 2:
+                    raise RetryableMediaError("url_expired") from None
+                continue
+            expected = info.get("sha256")
+            if isinstance(expected, str) and hashlib.sha256(data).hexdigest() != expected.lower():
+                raise RetryableMediaError("sha256_mismatch")
+            mime = info.get("mime_type")
+            return data, mime if isinstance(mime, str) else None
+
     def _post(self, body):
         try:
             response = self._http.post(self._url, json=body, headers=self._headers)
@@ -269,6 +365,23 @@ class WhatsAppClient:
         ):
             raise RetryableSendError(code)
         raise PermanentSendError(code)
+
+
+class MediaUrlExpired(RetryableMediaError):
+    """The 5-minute download URL no longer works; query the media ID again."""
+
+
+def _media_status_error(response, stage):
+    meta_code = _meta_error_code(response)
+    code = f"{stage}_http_{response.status_code}" + (f"_meta_{meta_code}" if meta_code else "")
+    logger.warning("WhatsApp media request rejected: %s", code)
+    if (
+        response.status_code == 429
+        or response.status_code >= 500
+        or meta_code in RETRYABLE_META_CODES
+    ):
+        return RetryableMediaError(code)
+    return PermanentMediaError(code)
 
 
 def _meta_error_code(response):

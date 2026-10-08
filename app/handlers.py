@@ -1,4 +1,5 @@
-"""Worker job handlers (Task 3.2): process_message (echo bot) and reconcile_status.
+"""Worker job handlers (Task 3.2): process_message (echo bot) and reconcile_status;
+Task 4.1 adds fetch_media (app.media), enqueued here for staff photos.
 
 Both are idempotent: the inbound message insert dedupes on its WAMID, replies
 dedupe on "echo:{wamid}:{seq}" (app.outbound), and status updates only move
@@ -10,7 +11,7 @@ import logging
 from contextlib import closing
 from datetime import UTC, datetime
 
-from app import echo, outbound, whatsapp
+from app import echo, media, outbound, whatsapp
 from app.db import tenant_transaction
 from app.queue import PermanentJobError
 
@@ -32,7 +33,7 @@ def _set_timeout(conn):
 
 
 def _inbound_fields(message):
-    """(message_type, text_body, media_id) for the message log."""
+    """(message_type, text_body, media_id, mime_type) for the message log."""
     kind = message.get("type") or "unknown"
     content = message.get(kind) if isinstance(message.get(kind), dict) else {}
     text_body = None
@@ -46,7 +47,8 @@ def _inbound_fields(message):
     elif kind in MEDIA_TYPES:
         text_body = content.get("caption")
     media_id = content.get("id") if kind in MEDIA_TYPES else None
-    return kind, text_body, media_id
+    mime_type = content.get("mime_type") if kind in MEDIA_TYPES else None
+    return kind, text_body, media_id, mime_type
 
 
 def _timestamp(value):
@@ -93,8 +95,8 @@ def record_inbound(conn, job):
             {"sender": sender, "ts": sent_at},
         ).fetchone()[0]
 
-        message_type, text_body, media_id = _inbound_fields(message)
-        conn.execute(
+        message_type, text_body, media_id, mime_type = _inbound_fields(message)
+        row = conn.execute(
             """
             INSERT INTO message (
                 agency_id, conversation_id, inbound_event_id, provider_message_id,
@@ -105,16 +107,26 @@ def record_inbound(conn, job):
                 to_timestamp(%s::bigint)
             )
             ON CONFLICT (agency_id, provider_message_id) DO NOTHING
+            RETURNING id
             """,
             (conversation_id, job.inbound_event_id, wamid, message_type, text_body,
              media_id, sent_at),
-        )
+        ).fetchone()
+        if row is None:  # a replayed job: the message is already logged
+            row = conn.execute(
+                "SELECT id FROM message WHERE provider_message_id = %s", (wamid,)
+            ).fetchone()
+        if media_id and media.is_stageable(message_type, mime_type):
+            media.stage_inbound_media(
+                conn, conversation_id, row[0], sender, media_id, job.inbound_event_id
+            )
     return conversation_id, message, phone_number_id
 
 
-def make_handlers(settings, *, client_factory=None, image_link=None):
+def make_handlers(settings, *, client_factory=None, image_link=None, storage=None):
     """Build the job handlers. process_message is only registered when sending is
-    configured, so its jobs wait (pending) instead of failing without a token."""
+    configured, so its jobs wait (pending) instead of failing without a token;
+    fetch_media also needs the bucket and its public URL."""
 
     handlers = {"reconcile_status": reconcile_status}
     if client_factory is None:
@@ -139,6 +151,20 @@ def make_handlers(settings, *, client_factory=None, image_link=None):
         )
 
     handlers["process_message"] = process
+
+    public_base = media.public_base_url(settings)
+    if storage is None and settings.s3_bucket:
+        storage = media.S3Storage(
+            settings.s3_bucket, settings.s3_region, settings.s3_endpoint_url
+        )
+    if storage is None or public_base is None:
+        logger.error("Media bucket or public URL not configured; fetch_media jobs stay pending")
+        return handlers
+
+    def fetch(conn, job):
+        media.fetch_media(conn, job, client_factory, storage, public_base)
+
+    handlers[media.JOB_TYPE] = fetch
     return handlers
 
 
