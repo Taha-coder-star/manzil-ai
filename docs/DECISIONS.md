@@ -14,3 +14,5 @@
 - updated_at is maintained by application code; schema v1 has no automatic timestamp trigger.
 - Provider choices from handoff are Gemini for text/audio fallback and ElevenLabs Scribe for primary transcription; keys and current provider behavior remain unverified locally.
 - Webhook callback path is /webhook. Signature is verified over raw bytes before parsing; missing app secret fails closed with 503; authentic but unusable payloads get 200 (retries cannot fix them). The verify token is redacted from access logs.
+- Webhook routing (Task 2.4): demo uses an env map WEBHOOK_SENDER_AGENCIES behind a SenderResolver protocol, resolved before the tenant transaction and re-verified inside it against agency.meta_phone_number_id and is_active. No DB resolver, no extra RLS policy, no BYPASSRLS. Unknown/inactive senders are dropped with 200; misrouting or persistence failures return 503.
+- Event keys: wa:msg:{wamid} and wa:status:{wamid}:{status}; jobs process_message / reconcile_status with matching dedupe keys. Event + job are written by one INSERT ... ON CONFLICT DO NOTHING statement per event.
