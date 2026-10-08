@@ -1,5 +1,7 @@
 # Task log
 
+- 2026-10-08: Migration 007 applied on RDS by the owner after PR #15 CI passed (owner chose to apply before Taha's review). First attempt from ~/manzil-ai failed safely before applying anything (`Applied migration file is missing: 003_job_conversation_key.sql`): that server checkout is stale (only 001/002). Rebuilt as manzil-ai:2c447d3-007 (`FROM manzil-ai:2c447d3` + 007 only; 007 sha256 08b44e0e...42f2 verified in the image), ran with PGOPTIONS lock_timeout=3s: `1 applied, 6 skipped`, repeat `0 applied, 7 skipped`; /health 200; echo received. web / worker unchanged on 2c447d3. The stray manzil-ai:task33-007 image (old source) was removed.
+
 - 2026-10-08: Review fixes to 007 (owner-approved): last_confirmed_at stays NULL on pre-007 rows (default now() only for new rows); marla / kanal convert with property.area_marla_sqft tied to agency (id, marla_sqft) by a composite FK, no hardcoded 225; agency.marla_sqft limited to 225 / 272.25; RDS lock scope corrected (8 tables ACCESS EXCLUSIVE + FK-target locks on message / staff / agency) with a lock_timeout runbook in OPEN_ISSUES. 650 passed, 0 skipped; 21/21 mutations caught. Not committed; 007 not on RDS.
 
 - 2026-10-08: Task 3.3 D11 alignment (migration 007) on feature/task-3-3-d11-alignment from main 2c447d3, following Taha's handoff (3.3 alignment -> 4.1 -> 4.2). Additive migration for SPEC_ALIGNMENT G1-G15, G18, G19; G16 deferred to 4.1, G17 to 7.4 / 9.2. Ruff passed; 630 passed, 0 skipped; 15/15 mutations caught; Gitleaks clean; 001-006 unchanged. Not committed; awaiting owner approval.
