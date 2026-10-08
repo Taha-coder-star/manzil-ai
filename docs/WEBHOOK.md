@@ -43,7 +43,14 @@ resolver can replace it later without changing the pipeline. No RLS exceptions a
 | Status update | `wa:status:{wamid}:{status}` | `reconcile_status:{wamid}:{status}` | `reconcile_status` |
 
 sent, delivered, read and failed share a WAMID, so the status is part of the key. Status
-jobs have their own type, so they never enter the message / AI path (Task 3.2 consumes them).
+jobs have their own type, so they never enter the message / AI path.
+
+**Consumers (Task 3.2, `app/handlers.py`).** `process_message` logs the conversation and
+inbound `message`, marks it read and (for now) sends the echo reply through
+`app/outbound.py`. `reconcile_status` matches `outbound_message.provider_message_id` and moves
+`delivery_status` forward only (sent < delivered < failed < read; failed is terminal). A
+status that arrives before its send is recorded is retried; an unmatched one on the last
+attempt is a logged no-op.
 
 **Atomicity.** One SQL statement per event inserts the event with
 `ON CONFLICT (agency_id, event_key) DO NOTHING` and inserts the job only from the
