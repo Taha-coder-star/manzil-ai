@@ -272,3 +272,68 @@ delete, cross-tenant move, missing and invalid context); cross-tenant composite 
 including delete/move behaviour; publication rule and NULL facts; version; draft uniqueness; append-only
 events; the public view's allowlist, ACTIVE filter, isolation and invoker semantics; exact privilege
 matrix including PUBLIC; a catalog guard that every tenant-to-tenant FK starts with agency_id. tests/test_rls_migration.py covers pg_trgm with a non-superuser migration role.
+
+## Migration 007: D11 alignment (Task 3.3 follow-up)
+
+Additive forward migration for the 005 gaps in docs/SPEC_ALIGNMENT.md section 2 (G1-G15, G18, G19).
+005 is unchanged. No row is rewritten by an UPDATE: every new column is nullable or has a constant
+default (FORCE RLS would hide rows from the owner). Replaced 005 CHECKs are looked up by name and the
+migration fails if one is missing.
+
+- **location**: level `zone` under a `sub_area` (Ph 6 > Bukhari Commercial) or an `area` (PECHS >
+  Tariq Road); nothing may sit below a zone. New `code` (unique listing-code prefix, `^[A-Z0-9]{2,4}$`),
+  `display_name` (`name` stays canonical), `level_label` (phase / precinct / block / sector / zone /
+  corridor, for bare-number resolution), `city_code` (city rows only), `centroid_lat/lng` (a pair),
+  `is_commercial_zone`. Listing codes are not forced to match a location code (PRJ-..., zones).
+- **location_alias**: `kind` (official / common / misspelling / urdu_script / voice_stt, default common),
+  `weight` 0-1 (default 1). **location_neighbor**: `weight` (0, 1] (default 1).
+- **property, typed (search filters, ranking, soft preferences)**: types + penthouse / showroom /
+  warehouse / building / floor; status + on_hold / archived; construction + grey_structure / off_plan;
+  `possession_status`, `expected_possession` (first of month), `installment_available`, `is_tenanted`,
+  `investment_tags`; `size_nominal_sqyd` (Bahria 250 nominal with area_value 272 sq_yd),
+  `covered_area_sqft`; `last_confirmed_at` (last confirmed **by staff**: rows that exist before 007 stay
+  NULL = never confirmed; new rows default to now(); see below); `furnishing`, `facing[]`, `is_corner`, `features[]`, `portion_level` (portions only),
+  `year_built`. Vocabulary arrays are checked by `text_set_within()` (subset, no NULLs, no repeats).
+  Penthouses need bedrooms to be active.
+- **property, display-only facts in public_features**: a key allowlist (title <= 60, description <= 600,
+  floor_no, total_floors, parking_spaces, price_negotiable, rent deposit / advance months, maintenance,
+  min lease, available_from, down payment, installment months / amount, current rent). Internal data
+  cannot be parked there. Search never filters on these keys (owner decision 2026-10-08).
+- **property, internal only** (never in a view): source_type, owner_name, owner_phone, floor_price_pkr,
+  commission_pct / note, is_exclusive, assigned_broker_id (composite FK to staff), docs_status,
+  visit_notes, address_detail, source_message_ids, duplicate_group_id. `created_by_staff_id` is D11's
+  listed_by_staff_id.
+- **property_event**: `reconfirmed` event type (records the current version with from_version NULL);
+  `source_message_id`, composite FK to message, ON DELETE SET NULL.
+- **project**: project_type, expected_completion (first of month), payment_plan_summary, amenities,
+  approval_note (internal); construction + grey_structure / off_plan.
+- **agency**: city_default (KHI), marla_sqft (225 default; only 225 or 272.25, D11 4.1), settings, and
+  `UNIQUE (id, marla_sqft)`. **staff**: areas_covered (location IDs, not referential).
+- **Views**: v_public_listing appends the typed customer columns (existing order and grants kept);
+  new v_public_project (no approval_note, is_demo or created_at), security_invoker + security_barrier,
+  SELECT only for manzil_app. Media columns (G16) come with Task 4.1; draft fields (G17) with 7.4 / 9.2.
+- **Tests**: tests/test_inventory_d11.py (zone placement, codes and attributes, every new enum / array /
+  JSON key rule, internal-field and cross-tenant FKs, reconfirmed events, project / agency / staff
+  settings, both view allowlists and privileges, and an upgrade from 006 with existing rows as a
+  non-superuser owner under FORCE RLS).
+
+### last_confirmed_at contract (007)
+Means "last confirmed by staff" (D11 5 staleness; R17 ranking freshness 10%, ties by
+last_confirmed_at). 007 adds the column without a default (existing rows stay NULL) and then sets
+`DEFAULT now()` in a separate statement, so only new rows get it. NULL = never confirmed: readers give
+it the lowest freshness, sort it last on ties, treat it as due for the reconfirm prompt, and start the
+45-day auto-hold clock from the prompt, never from NULL. The 9.2 save and the reconfirm action set it
+explicitly; the 4.3 seed sets explicit fictional dates.
+
+### Marla basis (007)
+`area_sqft` no longer hardcodes 225. A marla or kanal size records the agency's convention in
+`property.area_marla_sqft`; `area_sqft = area_value * (1 | 9 | area_marla_sqft | 20 * area_marla_sqft)`
+for sq_ft / sq_yd / marla / kanal (`ALTER COLUMN ... SET EXPRESSION`, PostgreSQL 17+). Rules:
+`property_area_marla_basis_check` (basis present exactly for marla / kanal) and the composite FK
+`property_area_marla_basis_fkey (agency_id, area_marla_sqft) -> agency (id, marla_sqft)`, so the basis
+must be the listing agency's current setting (tenant-scoped; RLS does not apply to FK checks). The FK is
+NO ACTION: an agency cannot change marla_sqft while listings use the old basis (a deliberate
+re-normalisation step). A pre-007 marla / kanal row has no basis and makes 007 fail and roll back.
+Contract for the 6.2 normaliser (not implemented yet): inside the tenant transaction read
+agency.marla_sqft and use it for customer queries ("10 marla" -> sq ft) and staff saves (store the raw
+area_value / area_unit plus area_marla_sqft). 225 must not be hardcoded in application code.
