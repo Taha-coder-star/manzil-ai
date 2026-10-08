@@ -6,8 +6,9 @@ runs inside tenant_transaction for one configured agency. Agencies are polled
 round-robin. Each thread owns one connection; a job's conversation lock lives
 on that connection while the handler runs.
 
-Handlers take (conn, job), open their own tenant_transaction(conn, job.agency_id)
-and must be idempotent: a crashed job is retried after its lease expires.
+Handlers (app.handlers.make_handlers) take (conn, job), open their own
+tenant_transaction(conn, job.agency_id) and must be idempotent: a crashed job
+is retried after its lease expires.
 Raise PermanentJobError to dead-letter without retrying.
 """
 
@@ -23,6 +24,7 @@ from psycopg.pq import TransactionStatus
 
 from app import queue
 from app.config import load_settings
+from app.handlers import make_handlers
 from app.routing import RoutingConfigError, parse_sender_agencies
 
 logger = logging.getLogger(__name__)
@@ -31,10 +33,6 @@ CONNECT_TIMEOUT_SECONDS = 5
 POLL_SECONDS = 1.0
 REAP_EVERY_SECONDS = 30
 MAX_RECONNECT_DELAY_SECONDS = 30
-
-# job_type -> handler(conn, job). Only registered types are claimed; others stay pending.
-HANDLERS = {}
-
 
 class Worker:
     def __init__(
@@ -151,8 +149,10 @@ def run():
         logger.info("Worker stopped cleanly.")
         return
 
+    # job_type -> handler(conn, job). Only registered types are claimed; others stay pending.
+    handlers = make_handlers(settings)
     workers = [
-        Worker(settings.database_url, agency_ids, HANDLERS, stop, name=f"worker-{i + 1}")
+        Worker(settings.database_url, agency_ids, handlers, stop, name=f"worker-{i + 1}")
         for i in range(settings.worker_concurrency)
     ]
     threads = [threading.Thread(target=w.run, name=f"worker-{i + 1}") for i, w in enumerate(workers)]
@@ -160,7 +160,7 @@ def run():
         thread.start()
     logger.info(
         "Worker started: %d thread(s), %d agency(ies), job types: %s",
-        len(threads), len(set(agency_ids)), ", ".join(sorted(HANDLERS)) or "none yet",
+        len(threads), len(set(agency_ids)), ", ".join(sorted(handlers)) or "none",
     )
     while not stop.is_set():
         stop.wait(1.0)
