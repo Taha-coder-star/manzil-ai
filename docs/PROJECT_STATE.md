@@ -1,9 +1,9 @@
 # Project state
 
-Updated: 2026-10-06. Repository files take precedence over the original handoff.
+Updated: 2026-10-08. Repository files take precedence over the original handoff.
 
 - Project: WhatsApp automation for Pakistani real estate agencies. Task sequence: 2.1 -> 2.2 -> 2.3 -> 2.4. Do not start webhook or voice work without a new task.
-- Current task: Tasks 2.3 and 2.4 are complete and verified live (Meta verified the callback; a real message was stored as 1 inbound_event + 1 process_message job). Meta app published; WABA subscribed to the app. 2.4 reaches main via PR #7 (PR #6 merged into the stacked branch); the /privacy page is PR #8 (merge after #7). Next: Day 3 (3.1/3.2 Taha, 3.3/3.4 owner). Do not merge without approval.
+- Current task: Task 3.1 (worker runtime) implemented and tested locally on feature/task-3-1-worker, stacked on feature/task-2-4-ingest (PR #7 and the /privacy PR #8 are still open; retarget to main once they merge). Day 3 order swapped: owner does 3.1 then 3.2 (gateway + echo bot, which registers the process_message / reconcile_status handlers); Taha does 3.3/3.4 later with migrations from 004. Not deployed: apply migration 003 on RDS first. Do not merge without approval.
 - Branch: feature/task-2-2-rls. Draft PR #4: https://github.com/Taha-coder-star/manzil-ai/pull/4. Release code was published at 9ca4c6a; subsequent documentation updates record the live deployment. The server checkout has no .git and received a selective archive. Memory files are approved for this branch; ignored .local/INFRA_NOTES.md must never be tracked.
 - Foundation: health/runtime, provider placeholders, nine-table schema, checksum/advisory-lock migration runner, PostgreSQL/Gitleaks CI, Docker SQL packaging. Migration 001 is unchanged.
 - Task 2.2: migration 002 creates and validates restricted non-owner manzil_app, grants limited DML, and enables FORCE RLS on all nine application tables. Missing tenant context returns zero rows. app/db.py scopes a trusted agency UUID to a transaction and rejects stale/nested context. deploy/activate_rls.py privately provisions the restricted login and switches runtime .env while retaining a protected admin migration file.

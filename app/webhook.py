@@ -48,6 +48,8 @@ class InboundEvent:
     job_type: str
     dedupe_key: str
     job_payload: dict
+    # Jobs sharing a key never run concurrently; None means no conversation lock.
+    conversation_key: str | None = None
 
 
 def _text(value):
@@ -99,6 +101,7 @@ def extract_events(envelope):
                     job_type="process_message",
                     dedupe_key=f"process_message:{wamid}",
                     job_payload={"provider_message_id": wamid},
+                    conversation_key=_text(message.get("from")),
                 ))
 
             for status in _dicts(value.get("statuses")):

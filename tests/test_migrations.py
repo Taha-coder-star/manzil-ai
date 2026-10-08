@@ -102,20 +102,23 @@ def test_failed_migration_rolls_back(
 
 def test_upgrade_from_schema_v1_preserves_data(migration_database, migration_files):
     database_url, _ = migration_database
-    rls_path = migration_files / "002_tenant_rls.sql"
-    pending_path = rls_path.with_suffix(".pending")
-    rls_path.rename(pending_path)
+    # Everything after schema v1 (002 RLS and later) is pending at first.
+    later = sorted(p for p in migration_files.glob("*.sql") if p.name[:3] != "001")
+    for path in later:
+        path.rename(path.with_suffix(".pending"))
     assert migrate.apply_migrations(database_url) == (1, 0)
     with psycopg.connect(database_url) as conn:
         agency_id = conn.execute(
             "INSERT INTO agency (name, slug) VALUES ('Existing demo', 'existing') RETURNING id"
         ).fetchone()[0]
-    pending_path.rename(rls_path)
-    assert migrate.apply_migrations(database_url) == (1, 1)
-    assert migrate.apply_migrations(database_url) == (0, 2)
+    for path in later:
+        path.with_suffix(".pending").rename(path)
+    total = len(later) + 1
+    assert migrate.apply_migrations(database_url) == (len(later), 1)
+    assert migrate.apply_migrations(database_url) == (0, total)
     with psycopg.connect(database_url) as conn:
         assert conn.execute("SELECT id FROM agency").fetchone() == (agency_id,)
-        assert conn.execute("SELECT count(*) FROM schema_migration").fetchone() == (2,)
+        assert conn.execute("SELECT count(*) FROM schema_migration").fetchone() == (total,)
 
 
 def test_permission_failure_explains_admin_requirement_without_details(monkeypatch, caplog):
