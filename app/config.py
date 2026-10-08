@@ -13,6 +13,7 @@ class Settings:
     webhook_verify_token: str | None
     webhook_sender_agencies: str | None
     worker_concurrency: int
+    privacy_contact_email: str | None
 
 
 def _optional(name):
@@ -31,4 +32,5 @@ def load_settings():
         webhook_verify_token=_optional("WEBHOOK_VERIFY_TOKEN"),
         webhook_sender_agencies=_optional("WEBHOOK_SENDER_AGENCIES"),
         worker_concurrency=max(1, int(os.environ.get("WORKER_CONCURRENCY") or "2")),
+        privacy_contact_email=_optional("PRIVACY_CONTACT_EMAIL"),
     )

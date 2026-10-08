@@ -4,11 +4,12 @@ import logging
 import psycopg
 from fastapi import FastAPI, Request
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
 from app import health, webhook
 from app.config import load_settings
 from app.ingest import IngestError, ingest_events
+from app.privacy import render_privacy_page
 from app.routing import EnvSenderResolver, RoutingConfigError
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,11 @@ app = FastAPI(title="Manzil AI")
 @app.get("/live")
 def live():
     return {"status": "running", "role": "web"}
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy():
+    return render_privacy_page(load_settings().privacy_contact_email)
 
 
 @app.get("/health")
