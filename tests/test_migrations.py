@@ -1,7 +1,9 @@
 import shutil
+import uuid
 
 import psycopg
 import pytest
+from psycopg import sql
 
 from app import migrate
 
@@ -31,6 +33,15 @@ def test_apply_and_repeat(migration_database, migration_files):
         "conversation",
         "message",
         "usage_event",
+        "location",
+        "location_alias",
+        "location_neighbor",
+        "project",
+        "property",
+        "property_media",
+        "property_event",
+        "listing_draft",
+        "staff_session",
         "schema_migration",
     }
 
@@ -119,6 +130,34 @@ def test_upgrade_from_schema_v1_preserves_data(migration_database, migration_fil
     with psycopg.connect(database_url) as conn:
         assert conn.execute("SELECT id FROM agency").fetchone() == (agency_id,)
         assert conn.execute("SELECT count(*) FROM schema_migration").fetchone() == (total,)
+
+
+def test_inventory_reuses_pg_trgm_installed_in_another_schema(
+    migration_database, test_database_url
+):
+    database_url, schema = migration_database
+    extension_name = "trgm_test_" + uuid.uuid4().hex
+    extension_schema = sql.Identifier(extension_name)
+    with psycopg.connect(test_database_url, autocommit=True) as conn:
+        conn.execute(sql.SQL("CREATE SCHEMA {}").format(extension_schema))
+        conn.execute(sql.SQL("CREATE EXTENSION pg_trgm WITH SCHEMA {}").format(extension_schema))
+    try:
+        migrate.apply_migrations(database_url)
+        with psycopg.connect(database_url) as conn:
+            definition = conn.execute(
+                "SELECT indexdef FROM pg_indexes "
+                "WHERE schemaname = %s AND indexname = 'location_alias_trgm_idx'",
+                (schema,),
+            ).fetchone()[0]
+            installed = conn.execute(
+                "SELECT extnamespace::regnamespace::text FROM pg_extension "
+                "WHERE extname = 'pg_trgm'"
+            ).fetchall()
+        assert f"{extension_name}.gin_trgm_ops" in definition
+        assert installed == [(extension_name,)]
+    finally:
+        with psycopg.connect(test_database_url, autocommit=True) as conn:
+            conn.execute(sql.SQL("DROP SCHEMA {} CASCADE").format(extension_schema))
 
 
 def test_permission_failure_explains_admin_requirement_without_details(monkeypatch, caplog):

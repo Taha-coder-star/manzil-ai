@@ -61,30 +61,61 @@ def test_existing_permissive_policy_rejected(pending_rls):
         conn.execute((migrate.MIGRATIONS_DIR / "002_tenant_rls.sql").read_text())
 
 
+def become_migrator(conn, schema):
+    """Switch to a fresh schema owner with CREATEROLE but no superuser or database CREATE."""
+    owner = sql.Identifier("test_migrator_" + uuid.uuid4().hex)
+    conn.execute(sql.SQL("CREATE ROLE {} CREATEROLE NOSUPERUSER NOBYPASSRLS").format(owner))
+    # Exercise the CREATE ROLE path even if prior tests provisioned manzil_app.
+    if conn.execute("SELECT 1 FROM pg_roles WHERE rolname = 'manzil_app'").fetchone():
+        conn.execute(sql.SQL("ALTER ROLE manzil_app RENAME TO {}").format(
+            sql.Identifier("saved_app_" + uuid.uuid4().hex)
+        ))
+    conn.execute(sql.SQL("GRANT USAGE, CREATE ON SCHEMA {} TO {}").format(
+        sql.Identifier(schema), owner
+    ))
+    conn.execute(sql.SQL("SET LOCAL ROLE {}").format(owner))
+    assert conn.execute(
+        "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"
+    ).fetchone() == (False, False)
+    assert conn.execute(
+        "SELECT has_database_privilege(current_database(), 'CREATE')"
+    ).fetchone() == (False,)
+    conn.execute("CREATE TABLE schema_migration (name text)")
+
+
 def test_schema_owner_with_createrole_can_apply_without_superuser(migration_database):
     database_url, schema = migration_database
     with psycopg.connect(database_url) as conn:
         try:
-            owner = sql.Identifier("test_migrator_" + uuid.uuid4().hex)
-            conn.execute(sql.SQL("CREATE ROLE {} CREATEROLE NOSUPERUSER NOBYPASSRLS").format(owner))
-            # Exercise the CREATE ROLE path even if prior tests provisioned manzil_app.
-            if conn.execute("SELECT 1 FROM pg_roles WHERE rolname = 'manzil_app'").fetchone():
-                conn.execute(sql.SQL("ALTER ROLE manzil_app RENAME TO {}").format(
-                    sql.Identifier("saved_app_" + uuid.uuid4().hex)
-                ))
-            conn.execute(sql.SQL("GRANT USAGE, CREATE ON SCHEMA {} TO {}").format(
-                sql.Identifier(schema), owner
+            # pg_trgm pre-provisioned by a DBA; the migration reuses it without extra privileges.
+            conn.execute(sql.SQL("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA {}").format(
+                sql.Identifier(schema)
             ))
-            conn.execute(sql.SQL("SET LOCAL ROLE {}").format(owner))
-            assert conn.execute(
-                "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"
-            ).fetchone() == (False, False)
-            conn.execute("CREATE TABLE schema_migration (name text)")
+            become_migrator(conn, schema)
             for _, _, statement in migrate.load_migrations():
                 conn.execute(statement, prepare=False)
             # FORCE also applies to an ordinary table owner with no tenant policy.
             assert conn.execute("SELECT count(*) FROM agency").fetchone() == (0,)
+            assert conn.execute("SELECT count(*) FROM property").fetchone() == (0,)
             with pytest.raises(psycopg.errors.InsufficientPrivilege):
                 conn.execute("INSERT INTO agency (name, slug) VALUES ('demo', 'demo')")
+        finally:
+            conn.rollback()
+
+
+def test_missing_pg_trgm_without_create_privilege_fails_clearly(migration_database):
+    database_url, schema = migration_database
+    with psycopg.connect(database_url) as conn:
+        try:
+            assert conn.execute(
+                "SELECT count(*) FROM pg_extension WHERE extname = 'pg_trgm'"
+            ).fetchone() == (0,)
+            become_migrator(conn, schema)
+            for name, _, statement in migrate.load_migrations():
+                if name == "005_inventory.sql":
+                    break
+                conn.execute(statement, prepare=False)
+            with pytest.raises(psycopg.errors.RaiseException, match="pg_trgm is not installed"):
+                conn.execute(statement, prepare=False)
         finally:
             conn.rollback()

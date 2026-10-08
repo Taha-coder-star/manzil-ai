@@ -239,10 +239,16 @@ def test_role_and_table_hardening(rls_db):
         "JOIN pg_roles r ON r.oid = c.relowner WHERE n.nspname = %s AND c.relkind = 'r'",
         (schema,),
     ).fetchall()
-    assert {r[0] for r in rows} == set(TABLES) | {"schema_migration"}
+    # Shared gazetteer tables have no tenant column; they are read-only for the runtime.
+    shared = {"location", "location_alias", "location_neighbor"}
+    inventory = {
+        "project", "property", "property_media", "property_event", "listing_draft",
+        "staff_session",
+    }
+    assert {r[0] for r in rows} == set(TABLES) | inventory | shared | {"schema_migration"}
     for name, enabled, forced, owner in rows:
         assert owner != "manzil_app"
-        if name != "schema_migration":
+        if name not in shared | {"schema_migration"}:
             assert enabled and forced
 
 
