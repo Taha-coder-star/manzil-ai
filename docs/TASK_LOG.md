@@ -1,5 +1,7 @@
 # Task log
 
+- 2026-10-09: Task 4.2 outbound media on feature/task-4-2-outbound-media (stacked on 4.1). Migration 009, send_image with the wa_media_id cache and link fallback (sync refusal and failed status), '#demo photo [badid]' echo check. Ruff passed; 719 passed on 3.14 and 3.12; 11/11 mutations caught; Gitleaks clean. Committed locally; not deployed or pushed.
+
 - 2026-10-09: Task 4.1 deployed to production by the owner (paste file, CloudShell + EC2). Snapshot manzil-pre-008-2026-10-09; bucket policy GetObject on card/* only (ACL blocks kept); role and hop limit already fine. Image manzil-ai:4.1-40e9913 (FROM 2c447d3-007; checksums verified in the image), 008 applied 1 / 7 then 0 / 8, web + worker recreated (rollback tag manzil-ai:pre-4.1), /health ok, worker job types include fetch_media. Real-phone check: stored, original / wa / card with no EXIF, public card 200, original 403. Done condition met.
 
 - 2026-10-09: Task 4.1 inbound media on feature/task-4-1-inbound-media (stacked on feature/task-3-3-d11-alignment; PR #15 open). Migration 008 (inbound_media + property_media G16), app/media.py, WhatsApp media download with URL re-query, staff-only staging in record_inbound, fetch_media handler, Pillow dependency (owner-approved). Ruff passed; 696 passed, 0 skipped; 8/8 mutations caught; Gitleaks clean on changed files. Not committed; AWS card/ policy and RDS 008 await approval (docs/MEDIA.md).

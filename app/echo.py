@@ -3,13 +3,27 @@
 Removed when the conversation orchestrator (C3) replaces process_message.
 "#demo <type>" sends a fictional sample of each outbound message type so the
 rendering can be checked on real phones. All sample content is fictional.
+"#demo photo [badid]" (staff only, app.handlers) sends the sender's own latest
+staff photo back through the Task 4.2 media cache.
 """
 
 from app import whatsapp
 
 ECHO_PREFIX = "Echo: "
-DEMO_TYPES = ("buttons", "list", "location", "cta", "image")
+DEMO_TYPES = ("buttons", "list", "location", "cta", "image", "photo")
+PHOTO_VARIANTS = ("", "badid")
 DEMO_IMAGE_CAPTION = "Sample image (DEMO)"
+
+
+def photo_command(message):
+    """'' or 'badid' for "#demo photo [badid]", else None."""
+    if message.get("type") != "text":
+        return None
+    words = ((message.get("text") or {}).get("body") or "").strip().lower().split()
+    if words[:2] != ["#demo", "photo"] or len(words) > 3:
+        return None
+    variant = words[2] if len(words) == 3 else ""
+    return variant if variant in PHOTO_VARIANTS else None
 
 
 def reply(message, *, privacy_url=None, image_link=None):

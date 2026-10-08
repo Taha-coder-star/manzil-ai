@@ -339,6 +339,28 @@ class WhatsAppClient:
             mime = info.get("mime_type")
             return data, mime if isinstance(mime, str) else None
 
+    def upload_media(self, data, mime_type, filename="image.jpg"):
+        """Upload bytes to the Media API; return the media ID (valid 30 days)."""
+        try:
+            response = self._http.post(
+                f"{self._graph}/{self._phone_number_id}/media",
+                data={"messaging_product": "whatsapp", "type": mime_type},
+                files={"file": (filename, data, mime_type)},
+                headers=self._headers,
+            )
+        except httpx.TransportError as exc:
+            # An upload that may have landed only leaves an unused ID at Meta.
+            raise RetryableMediaError(type(exc).__name__) from None
+        if response.status_code != 200:
+            raise _media_status_error(response, "upload")
+        try:
+            media_id = response.json()["id"]
+        except (ValueError, KeyError, TypeError):
+            raise RetryableMediaError("upload_invalid_json") from None
+        if not isinstance(media_id, str) or not media_id:
+            raise RetryableMediaError("upload_invalid_json")
+        return media_id
+
     def _post(self, body):
         try:
             response = self._http.post(self._url, json=body, headers=self._headers)

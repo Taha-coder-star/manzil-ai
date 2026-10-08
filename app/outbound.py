@@ -50,7 +50,7 @@ def _set_timeout(conn):
 
 def send_message(
     conn, client, agency_id, conversation_id, recipient, payload, dedupe_key,
-    *, ai_generated=True, reply_to=None,
+    *, ai_generated=True, reply_to=None, media_source=None,
 ):
     """Send one built payload at most once per dedupe_key.
 
@@ -58,9 +58,11 @@ def send_message(
     'failed' (outside the 24 h window, or an earlier permanent failure) or
     'unknown' (ambiguous). Raises RetryableSendError after putting the row back
     to 'pending', and PermanentSendError after recording 'failed'.
+    media_source: (table, id) of the stored image an image payload shows (app.media).
     """
     outbound_id, status = _prepare(
-        conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated
+        conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated,
+        media_source,
     )
     if status != "sending":
         return SendResult(status)
@@ -85,7 +87,18 @@ def send_message(
     return SendResult("sent", wamid)
 
 
-def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated):
+def prior_attempt(conn, agency_id, dedupe_key):
+    """(status, last_error_code) of an earlier send with this key, or None."""
+    with tenant_transaction(conn, agency_id):
+        _set_timeout(conn)
+        return conn.execute(
+            "SELECT status, last_error_code FROM outbound_message WHERE dedupe_key = %s",
+            (dedupe_key,),
+        ).fetchone()
+
+
+def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated,
+             media_source=None):
     """Return (outbound_id, status); status is 'sending' only when this call may send."""
     with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
@@ -129,12 +142,13 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
                 """
                 INSERT INTO outbound_message (
                     agency_id, conversation_id, message_id, dedupe_key,
-                    recipient_wa_id, payload
+                    recipient_wa_id, payload, media_source, media_source_id
                 )
-                VALUES (current_agency_id(), %s, %s, %s, %s, %s)
+                VALUES (current_agency_id(), %s, %s, %s, %s, %s, %s, %s)
                 RETURNING id
                 """,
-                (conversation_id, message_id, dedupe_key, recipient, Jsonb(payload)),
+                (conversation_id, message_id, dedupe_key, recipient, Jsonb(payload),
+                 *(media_source or (None, None))),
             ).fetchone()[0]
 
         # Send-time gate (R-28): after a handoff the AI never speaks.

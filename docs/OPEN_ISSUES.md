@@ -32,3 +32,5 @@
 - Staff photos are only fetched for senders in the staff table (admin / agent, active). Only the owner's phone is a staff row so far (agent, demo agency); the rest of the 1.1 role map is open. Once role routing exists that phone is staff, so it should not double as a scenario customer.
 - inbound_media rows that end failed / rejected are not yet reported to staff; the staff flow (7.x / 9.x) owns "ask to resend" (D14).
 - A transient failure exhausting all 3 attempts marks the photo failed; with the 5 s / 10 s backoff that window is short. Fine for the demo (the media ID stays valid for days, so a later manual replay can recover it).
+- Task 4.2: whether Meta refuses an invalid / expired media ID synchronously (400) or only via a failed status (131052 / 131053) is unverified; both fall back to the link. Any failed status of an image sent by ID triggers one link resend, even when the cause is not the media (e.g. an undeliverable recipient): at most one extra send.
+- Task 4.2 deploy: migration 009 must be applied before the code; the release image builds FROM manzil-ai:4.1-40e9913.

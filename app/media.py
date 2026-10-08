@@ -1,4 +1,4 @@
-"""Inbound media (Task 4.1, component C5, D14).
+"""Inbound media (Task 4.1) and outbound image sends (Task 4.2); component C5, D14.
 
 A staff photo is staged in inbound_media by record_inbound (app.handlers), then
 the fetch_media job runs at once, because the WhatsApp download URL lives for
@@ -18,6 +18,13 @@ and card/<agency_id>/<card_token>.jpg. Only card/ is publicly readable; the
 token is random, so card URLs are unguessable. Objects are written once under
 stable keys, so a retried job overwrites the same objects.
 
+Outbound (send_image): an image message shows the stored WhatsApp derivative.
+It is uploaded to the Media API once and its ID cached on the source row for
+30 days (reused for 25, then re-uploaded lazily). The send goes through
+app.outbound (dedupe, send-time gate, 24 h window). If the cached ID is
+refused, at send time or by a failed status webhook (link_fallback), the cache
+is cleared and the image is sent once more by a short-lived presigned link.
+
 Never log image bytes, phone numbers or URLs.
 """
 
@@ -33,7 +40,7 @@ import psycopg
 from PIL import Image, ImageOps
 from psycopg.pq import TransactionStatus
 
-from app import whatsapp
+from app import outbound, whatsapp
 from app.db import tenant_transaction
 from app.queue import PermanentJobError, enqueue_job
 
@@ -229,6 +236,14 @@ class S3Storage:
     def delete(self, key):
         self._client.delete_object(Bucket=self.bucket, Key=key)
 
+    def get(self, key):
+        return self._client.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+
+    def presigned_url(self, key, seconds):
+        return self._client.generate_presigned_url(
+            "get_object", Params={"Bucket": self.bucket, "Key": key}, ExpiresIn=seconds
+        )
+
 
 def public_base_url(settings):
     """Base URL of the public card/ objects, or None if it cannot be known."""
@@ -249,15 +264,8 @@ def stage_inbound_media(conn, conversation_id, message_id, sender, wa_media_id,
     """Inside the record_inbound tenant transaction: stage a photo from active
     inventory staff and enqueue its fetch. Returns the inbound_media id, or None
     when the sender is not admin / agent staff (role comes from the allowlist)."""
-    staff = conn.execute(
-        """
-        SELECT id FROM staff
-        WHERE is_active AND role IN ('admin', 'agent')
-          AND regexp_replace(whatsapp_number, '[^0-9]', '', 'g') = %s
-        """,
-        (sender,),
-    ).fetchone()
-    if staff is None:
+    staff_id = staff_id_for(conn, sender)
+    if staff_id is None:
         return None
     row = conn.execute(
         """
@@ -266,7 +274,7 @@ def stage_inbound_media(conn, conversation_id, message_id, sender, wa_media_id,
         ON CONFLICT (agency_id, message_id) DO NOTHING
         RETURNING id
         """,
-        (conversation_id, message_id, staff[0], wa_media_id),
+        (conversation_id, message_id, staff_id, wa_media_id),
     ).fetchone()
     if row is None:
         row = conn.execute(
@@ -393,3 +401,229 @@ def _fetch_and_store(conn, job, media_id, wa_media_id, card_token, phone_number_
                 storage.delete(key)
             except Exception:  # noqa: BLE001 - an orphan object is harmless
                 logger.warning("Could not delete a superseded media object")
+
+
+def staff_id_for(conn, sender):
+    """Inside a tenant transaction: the active admin / agent staff ID of a sender."""
+    row = conn.execute(
+        """
+        SELECT id FROM staff
+        WHERE is_active AND role IN ('admin', 'agent')
+          AND regexp_replace(whatsapp_number, '[^0-9]', '', 'g') = %s
+        """,
+        (sender,),
+    ).fetchone()
+    return row[0] if row else None
+
+
+# --- outbound (Task 4.2) ----------------------------------------------------------
+
+FALLBACK_JOB_TYPE = "media_link_fallback"
+WA_MEDIA_TTL_DAYS = 30
+# A cached ID is reused while it has more than this left (re-upload after ~25 days).
+WA_MEDIA_REFRESH_DAYS = 5
+# Long enough for Meta to fetch it; the object itself stays private.
+LINK_SECONDS = 3600
+# Upload-cache columns per source table (inbound_media.wa_media_id is the inbound ID).
+CACHE_COLUMNS = {
+    "property_media": ("wa_media_id", "wa_media_expires_at"),
+    "inbound_media": ("wa_upload_id", "wa_upload_expires_at"),
+}
+SOURCE_TABLES = tuple(CACHE_COLUMNS)
+# An ID Meta will refuse, for the "#demo photo badid" check.
+INVALID_MEDIA_ID = "1000000000000000"
+
+
+@dataclass(frozen=True)
+class ImageSendResult:
+    status: str
+    via: str | None
+    provider_message_id: str | None = None
+
+
+def _source(conn, agency_id, table, source_id):
+    """(table, id, wa_image_key, cached wa_media_id or None). A duplicate inbound
+    photo resolves to its stored copy, which owns the objects and the cache."""
+    if table not in SOURCE_TABLES:
+        raise ValueError("unknown media source")
+    with tenant_transaction(conn, agency_id):
+        _set_timeout(conn)
+        if table == "inbound_media":
+            row = conn.execute(
+                "SELECT status, duplicate_of_id FROM inbound_media WHERE id = %s", (source_id,)
+            ).fetchone()
+            if row is None or row[0] not in ("stored", "duplicate"):
+                raise LookupError("media source not usable")
+            if row[0] == "duplicate":
+                source_id = row[1]
+        row = conn.execute(
+            _cache_sql(
+                table,
+                "SELECT wa_image_key, CASE WHEN {expires} > now() + "
+                "make_interval(days => %s) THEN {media_id} END FROM {table} WHERE id = %s",
+            ),
+            (WA_MEDIA_REFRESH_DAYS, source_id),
+        ).fetchone()
+    if row is None or row[0] is None:
+        raise LookupError("media source not usable")
+    return table, source_id, row[0], row[1]
+
+
+def _cache_sql(table, template):
+    media_id, expires = CACHE_COLUMNS[table]
+    return psycopg.sql.SQL(template).format(
+        table=psycopg.sql.Identifier(table), media_id=psycopg.sql.Identifier(media_id),
+        expires=psycopg.sql.Identifier(expires),
+    )
+
+
+def _cache(conn, agency_id, table, source_id, media_id):
+    with tenant_transaction(conn, agency_id):
+        _set_timeout(conn)
+        conn.execute(
+            _cache_sql(
+                table,
+                "UPDATE {table} SET {media_id} = %s, "
+                "{expires} = now() + make_interval(days => %s) WHERE id = %s",
+            ),
+            (media_id, WA_MEDIA_TTL_DAYS, source_id),
+        )
+
+
+def clear_cached_id(conn, table, source_id, media_id):
+    """Inside a tenant transaction: forget a refused ID (only if it is still cached)."""
+    if table not in SOURCE_TABLES:
+        return
+    conn.execute(
+        _cache_sql(
+            table,
+            "UPDATE {table} SET {media_id} = NULL, {expires} = NULL "
+            "WHERE id = %s AND {media_id} = %s",
+        ),
+        (source_id, media_id),
+    )
+
+
+def _upload(conn, client, storage, agency_id, table, source_id, key):
+    """Upload the derivative and cache its ID; None if Meta refused (send by link)."""
+    data = storage.get(key)
+    try:
+        media_id = client.upload_media(data, "image/jpeg")
+    except whatsapp.MediaError as exc:
+        logger.warning("Media upload failed (%s); sending by link", exc.code)
+        return None
+    _cache(conn, agency_id, table, source_id, media_id)
+    return media_id
+
+
+def _send_link(conn, client, storage, agency_id, conversation_id, recipient, key, caption,
+               dedupe_key, ai_generated, media_source):
+    return outbound.send_message(
+        conn, client, agency_id, conversation_id, recipient,
+        whatsapp.image(link=storage.presigned_url(key, LINK_SECONDS), caption=caption),
+        f"{dedupe_key}:link", ai_generated=ai_generated, media_source=media_source,
+    )
+
+
+def send_image(conn, client, storage, agency_id, conversation_id, recipient, source,
+               dedupe_key, *, caption=None, ai_generated=True):
+    """Send one stored image at most once per dedupe_key: by cached or freshly
+    uploaded ID, or by presigned link (key dedupe_key + ':link') if the ID is refused.
+
+    source: (table, id), table in SOURCE_TABLES. Returns an ImageSendResult.
+    """
+    table, source_id, key, cached = _source(conn, agency_id, *source)
+    media_source = (table, source_id)
+    prior = outbound.prior_attempt(conn, agency_id, dedupe_key)
+    if prior is not None and prior[0] == "failed" and prior[1] == "outside_window":
+        return ImageSendResult("failed", None)
+    if prior is not None and prior[0] not in ("pending", "failed"):
+        return ImageSendResult(prior[0], "id")
+
+    if prior is None or prior[0] == "pending":
+        media_id = cached or _upload(conn, client, storage, agency_id, table, source_id, key)
+        if media_id is not None:
+            try:
+                result = outbound.send_message(
+                    conn, client, agency_id, conversation_id, recipient,
+                    whatsapp.image(media_id=media_id, caption=caption), dedupe_key,
+                    ai_generated=ai_generated, media_source=media_source,
+                )
+            except whatsapp.PermanentSendError as exc:
+                logger.warning("Image by ID refused (%s); sending by link", exc.code)
+                with tenant_transaction(conn, agency_id):
+                    clear_cached_id(conn, table, source_id, media_id)
+            else:
+                if result.status == "failed":  # outside the window: no link either
+                    return ImageSendResult("failed", None)
+                return ImageSendResult(result.status, "id", result.provider_message_id)
+
+    result = _send_link(conn, client, storage, agency_id, conversation_id, recipient, key,
+                        caption, dedupe_key, ai_generated, media_source)
+    return ImageSendResult(result.status, "link", result.provider_message_id)
+
+
+def on_failed_status(conn, outbound_id, table, source_id, payload):
+    """Inside reconcile_status's tenant transaction, for a 'failed' status: if an
+    image sent by ID failed after Meta accepted it, clear the ID and enqueue one
+    resend by link (an image already sent by link is not retried)."""
+    image = payload.get("image") if payload.get("type") == "image" else None
+    media_id = image.get("id") if isinstance(image, dict) else None
+    if table is None or media_id is None:
+        return
+    clear_cached_id(conn, table, source_id, media_id)
+    enqueue_job(conn, FALLBACK_JOB_TYPE, f"media-fallback:{outbound_id}",
+                {"outbound_message_id": str(outbound_id)})
+
+
+def link_fallback(conn, job, client_factory, storage):
+    """The media_link_fallback job: resend a failed image-by-ID once by link."""
+    with tenant_transaction(conn, job.agency_id):
+        _set_timeout(conn)
+        row = conn.execute(
+            """
+            SELECT o.conversation_id, o.recipient_wa_id, o.dedupe_key, o.payload,
+                   o.media_source, o.media_source_id, a.meta_phone_number_id
+            FROM outbound_message o JOIN agency a ON a.id = o.agency_id
+            WHERE o.id = %s
+            """,
+            (job.payload.get("outbound_message_id"),),
+        ).fetchone()
+    if row is None or row[4] is None:
+        raise PermanentJobError("fallback_source_missing")
+    conversation_id, recipient, dedupe_key, payload, table, source_id, phone_number_id = row
+    try:
+        table, source_id, key, _ = _source(conn, job.agency_id, table, source_id)
+    except LookupError:
+        raise PermanentJobError("fallback_source_unusable") from None
+    caption = (payload.get("image") or {}).get("caption")
+    with closing(client_factory(phone_number_id)) as client:
+        try:
+            _send_link(conn, client, storage, job.agency_id, conversation_id, recipient, key,
+                       caption, dedupe_key, True, (table, source_id))
+        except whatsapp.PermanentSendError as exc:
+            raise PermanentJobError(exc.code) from None
+
+
+def latest_staff_photo(conn, agency_id, sender):
+    """(staff_id, id of the sender's newest usable staged photo or None)."""
+    with tenant_transaction(conn, agency_id):
+        _set_timeout(conn)
+        staff_id = staff_id_for(conn, sender)
+        if staff_id is None:
+            return None, None
+        row = conn.execute(
+            """
+            SELECT id FROM inbound_media
+            WHERE staff_id = %s AND status IN ('stored', 'duplicate')
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (staff_id,),
+        ).fetchone()
+    return staff_id, row[0] if row else None
+
+
+def force_invalid_cached_id(conn, agency_id, inbound_media_id):
+    """Demo aid ("#demo photo badid"): cache an ID that Meta will refuse."""
+    table, source_id, _, _ = _source(conn, agency_id, "inbound_media", inbound_media_id)
+    _cache(conn, agency_id, table, source_id, INVALID_MEDIA_ID)
