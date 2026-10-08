@@ -103,6 +103,68 @@ def test_schema_owner_with_createrole_can_apply_without_superuser(migration_data
             conn.rollback()
 
 
+def test_control_state_backfill_works_for_owner_under_force_rls(migration_database):
+    """Upgrade with live conversations as a non-superuser owner, as on RDS.
+
+    A superuser bypasses RLS, so only this path proves the backfill is not a
+    silent no-op on the forced conversation table.
+    """
+    database_url, schema = migration_database
+    with psycopg.connect(database_url) as conn:
+        try:
+            conn.execute(sql.SQL("CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA {}").format(
+                sql.Identifier(schema)
+            ))
+            become_migrator(conn, schema)
+            owner = sql.Identifier(conn.execute("SELECT current_user").fetchone()[0])
+            for name, _, statement in migrate.load_migrations():
+                if name == "006_conversation_state.sql":
+                    break
+                conn.execute(statement, prepare=False)
+
+            # The test migrator does not own the schema, so 002's schema grant was a no-op.
+            conn.execute("RESET ROLE")
+            conn.execute(sql.SQL("GRANT USAGE ON SCHEMA {} TO manzil_app").format(
+                sql.Identifier(schema)
+            ))
+            # Existing tenant data, written the only way FORCE RLS allows.
+            agency = uuid.uuid4()
+            conn.execute("SET LOCAL ROLE manzil_app")
+            conn.execute("SELECT set_config('app.agency_id', %s, true)", (str(agency),))
+            conn.execute(
+                "INSERT INTO agency (id, name, slug) VALUES (%s, 'Fictional (DEMO)', 'demo')",
+                (agency,),
+            )
+            for n, mode in enumerate(("ai", "human", "paused")):
+                conversation = conn.execute(
+                    "INSERT INTO conversation (agency_id, customer_wa_id, mode) "
+                    "VALUES (%s, %s, %s) RETURNING id",
+                    (agency, f"92300000000{n}", mode),
+                ).fetchone()[0]
+                conn.execute(
+                    "INSERT INTO message (agency_id, conversation_id, direction, message_type) "
+                    "VALUES (%s, %s, 'inbound', 'audio')",
+                    (agency, conversation),
+                )
+
+            conn.execute(sql.SQL("SET LOCAL ROLE {}").format(owner))
+            # The owner has no policy: FORCE hides every row from it.
+            assert conn.execute("SELECT count(*) FROM conversation").fetchone() == (0,)
+            conn.execute(statement, prepare=False)
+            assert conn.execute(
+                "SELECT relrowsecurity, relforcerowsecurity FROM pg_class "
+                "WHERE oid = 'conversation'::regclass"
+            ).fetchone() == (True, True)
+
+            conn.execute("SET LOCAL ROLE manzil_app")
+            assert dict(conn.execute("SELECT mode, control_state FROM conversation").fetchall()) == {
+                "ai": "ai_active", "human": "human_owned", "paused": "human_owned",
+            }
+            assert conn.execute("SELECT DISTINCT modality FROM message").fetchall() == [("voice",)]
+        finally:
+            conn.rollback()
+
+
 def test_missing_pg_trgm_without_create_privilege_fails_clearly(migration_database):
     database_url, schema = migration_database
     with psycopg.connect(database_url) as conn:

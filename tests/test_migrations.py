@@ -42,6 +42,16 @@ def test_apply_and_repeat(migration_database, migration_files):
         "property_event",
         "listing_draft",
         "staff_session",
+        "requirement_state",
+        "requirement_patch_log",
+        "search_run",
+        "shown_item",
+        "focus",
+        "media_sent",
+        "pending_clarification",
+        "lead",
+        "lead_property",
+        "handoff",
         "schema_migration",
     }
 
@@ -122,14 +132,42 @@ def test_upgrade_from_schema_v1_preserves_data(migration_database, migration_fil
         agency_id = conn.execute(
             "INSERT INTO agency (name, slug) VALUES ('Existing demo', 'existing') RETURNING id"
         ).fetchone()[0]
+        conversations = {}
+        for n, mode in enumerate(("ai", "human", "paused")):
+            conversations[mode] = conn.execute(
+                "INSERT INTO conversation (agency_id, customer_wa_id, mode) "
+                "VALUES (%s, %s, %s) RETURNING id",
+                (agency_id, f"92300000000{n}", mode),
+            ).fetchone()[0]
+        for message_type in ("text", "audio", "image"):
+            conn.execute(
+                "INSERT INTO message (agency_id, conversation_id, direction, message_type) "
+                "VALUES (%s, %s, 'inbound', %s)",
+                (agency_id, conversations["ai"], message_type),
+            )
     for path in later:
         path.with_suffix(".pending").rename(path)
     total = len(later) + 1
     assert migrate.apply_migrations(database_url) == (len(later), 1)
     assert migrate.apply_migrations(database_url) == (0, total)
+    # The test login bypasses RLS; test_rls_migration covers a non-superuser owner.
     with psycopg.connect(database_url) as conn:
         assert conn.execute("SELECT id FROM agency").fetchone() == (agency_id,)
         assert conn.execute("SELECT count(*) FROM schema_migration").fetchone() == (total,)
+        assert conn.execute("SELECT next_lead_number FROM agency").fetchone() == (1,)
+        assert dict(conn.execute(
+            "SELECT id, control_state FROM conversation"
+        ).fetchall()) == {
+            conversations["ai"]: "ai_active",
+            conversations["human"]: "human_owned",
+            conversations["paused"]: "human_owned",
+        }
+        assert dict(conn.execute("SELECT id, mode FROM conversation").fetchall()) == {
+            conversation_id: mode for mode, conversation_id in conversations.items()
+        }
+        assert dict(conn.execute(
+            "SELECT message_type, modality FROM message"
+        ).fetchall()) == {"text": "text", "audio": "voice", "image": None}
 
 
 def test_inventory_reuses_pg_trgm_installed_in_another_schema(

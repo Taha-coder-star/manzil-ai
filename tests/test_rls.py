@@ -245,7 +245,13 @@ def test_role_and_table_hardening(rls_db):
         "project", "property", "property_media", "property_event", "listing_draft",
         "staff_session",
     }
-    assert {r[0] for r in rows} == set(TABLES) | inventory | shared | {"schema_migration"}
+    state = {
+        "requirement_state", "requirement_patch_log", "search_run", "shown_item", "focus",
+        "media_sent", "pending_clarification", "lead", "lead_property", "handoff",
+    }
+    assert {r[0] for r in rows} == (
+        set(TABLES) | inventory | state | shared | {"schema_migration"}
+    )
     for name, enabled, forced, owner in rows:
         assert owner != "manzil_app"
         if name not in shared | {"schema_migration"}:
