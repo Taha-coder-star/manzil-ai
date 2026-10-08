@@ -1,0 +1,16 @@
+# Local test image: Python 3.12 (as in CI) with dev requirements; source is bind-mounted.
+# Not used by CI or production. Build: docker build -f Dockerfile.test -t manzil-ai:test .
+# Usage (Ruff, database tests): see docs/PROJECT_STATE.md.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+
+COPY requirements.txt requirements-dev.txt ./
+
+RUN python -m pip install --no-cache-dir \
+    -r requirements-dev.txt
+
+CMD ["python", "-m", "pytest", "-q"]

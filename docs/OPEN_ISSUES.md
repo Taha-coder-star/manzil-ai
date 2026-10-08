@@ -15,3 +15,9 @@
 - WhatsApp token is the env META_ACCESS_TOKEN for the demo; per-tenant encrypted tokens (C15, tenant_secret) are deferred.
 - Outside the 24 h window session sends are recorded failed/outside_window; template fallback (new_lead_alert) arrives with handoff on Day 11.
 - '#demo image' needs a fictional, DEMO-watermarked demo/echo-test.jpg in the bucket (upload needs AWS approval).
+- Migration 005 (Task 3.3) is not applied on RDS. Before applying, confirm pg_trgm is available and either already installed or the migration role has CREATE on the database (`has_database_privilege(current_database(), 'CREATE')`); otherwise 005 stops with "pg_trgm is not installed ..." and rolls back. Do not widen privileges without approval.
+- Release archives: before any deployment, verify the sha256 of every migrations/*.sql in the archive or image against the committed blobs (docs/PROJECT_STATE.md lists them). .gitattributes now forces LF for *.sql, but a checkout made before it, or a manual file copy, can still carry CRLF. Note that plain `git archive` applies autocrlf conversion to files without an eol attribute.
+- is_demo is not database-enforced per agency: production agencies must hold no is_demo rows (needs an agency-level demo flag in a later migration).
+- v_public_listing is not a hard privilege boundary while manzil_app can read property; a customer-path role would be needed for that.
+- Tenant seed data under FORCE RLS (Task 4.3) must be written as manzil_app inside tenant_transaction (the owner has no policy); the gazetteer is loaded by the migration/admin role.
+- property_event rows are kept indefinitely; retention is undecided.
