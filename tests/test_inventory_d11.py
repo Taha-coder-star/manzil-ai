@@ -173,7 +173,7 @@ def test_penthouse_needs_bedrooms_to_publish(inv):
 
 def test_last_confirmed_at_defaults_to_now_for_new_rows(inv):
     pid = add(inv)
-    confirmed = datetime.datetime(2026, 8, 1, tzinfo=datetime.timezone.utc)
+    confirmed = datetime.datetime(2026, 8, 1, tzinfo=datetime.UTC)
     explicit = add(inv, last_confirmed_at=confirmed)
     unconfirmed = add(inv, last_confirmed_at=None)
     with tenant_transaction(inv.conn, inv.a.agency):

@@ -10,7 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY migrations ./migrations
-# Fictional demo dataset read by the seed loader (python -m app.seed); data only.
+# Fictional demo dataset (python -m app.seed) and the demo media plan / intake
+# manifests (python -m app.media_seed); data only, no images.
 COPY demo ./demo
 
 RUN useradd --create-home appuser

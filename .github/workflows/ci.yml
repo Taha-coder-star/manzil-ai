@@ -68,6 +68,9 @@ jobs:
       - name: Verify the demo dataset is included and valid
         run: docker run --rm --entrypoint python manzil-ai:ci -m app.demo_dataset
 
+      - name: Verify the demo media plan is included and valid
+        run: docker run --rm --entrypoint python manzil-ai:ci -m app.demo_media validate --plan-only
+
       - name: Verify both container roles
         shell: bash
         run: |
