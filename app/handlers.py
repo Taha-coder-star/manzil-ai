@@ -1,9 +1,11 @@
-"""Worker job handlers (Task 3.2): process_message (echo bot) and reconcile_status;
-Task 4.1 adds fetch_media (app.media), enqueued here for staff photos; Task 4.2
-adds media_link_fallback, enqueued by reconcile_status for a failed image by ID.
+"""Worker job handlers (Task 3.2): process_message and reconcile_status; Task 4.1
+adds fetch_media (app.media), enqueued here for staff photos; Task 4.2 adds
+media_link_fallback, enqueued by reconcile_status for a failed image by ID.
+Task 5.1: process_message runs one coalesced turn (app.orchestrator) instead of
+the echo bot.
 
-Both are idempotent: the inbound message insert dedupes on its WAMID, replies
-dedupe on "echo:{wamid}:{seq}" (app.outbound), and status updates only move
+All are idempotent: the inbound message insert dedupes on its WAMID, replies
+dedupe on "turn:{turn_id}:{seq}" (app.outbound), and status updates only move
 forward (sent < delivered < failed-unless-read < read; failed is terminal).
 Never log payloads, message text or phone numbers.
 """
@@ -12,7 +14,7 @@ import logging
 from contextlib import closing
 from datetime import UTC, datetime
 
-from app import echo, media, outbound, whatsapp
+from app import echo, media, orchestrator, outbound, whatsapp
 from app.db import tenant_transaction
 from app.queue import PermanentJobError
 
@@ -60,8 +62,14 @@ def _timestamp(value):
 
 
 def record_inbound(conn, job):
-    """Store the conversation and inbound message; return (conversation_id, message, sender id)."""
-    with tenant_transaction(conn, job.agency_id):
+    """Store the conversation and inbound message of a process_message job; return
+    (conversation_id, message, business phone_number_id)."""
+    return record_event(conn, job.agency_id, job.inbound_event_id)
+
+
+def record_event(conn, agency_id, inbound_event_id):
+    """record_inbound for any stored message event (coalesced sibling jobs too)."""
+    with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
         row = conn.execute(
             """
@@ -69,7 +77,7 @@ def record_inbound(conn, job):
             FROM inbound_event e JOIN agency a ON a.id = e.agency_id
             WHERE e.id = %s
             """,
-            (job.inbound_event_id,),
+            (inbound_event_id,),
         ).fetchone()
         if row is None:
             raise PermanentJobError("inbound_event_missing")
@@ -110,7 +118,7 @@ def record_inbound(conn, job):
             ON CONFLICT (agency_id, provider_message_id) DO NOTHING
             RETURNING id
             """,
-            (conversation_id, job.inbound_event_id, wamid, message_type, text_body,
+            (conversation_id, inbound_event_id, wamid, message_type, text_body,
              media_id, sent_at),
         ).fetchone()
         if row is None:  # a replayed job: the message is already logged
@@ -119,7 +127,7 @@ def record_inbound(conn, job):
             ).fetchone()
         if media_id and media.is_stageable(message_type, mime_type):
             media.stage_inbound_media(
-                conn, conversation_id, row[0], sender, media_id, job.inbound_event_id
+                conn, conversation_id, row[0], sender, media_id, inbound_event_id
             )
     return conversation_id, message, phone_number_id
 
@@ -176,61 +184,60 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
 
 def process_message(conn, job, client_factory, *, privacy_url=None, image_link=None,
                     storage=None):
-    conversation_id, message, phone_number_id = record_inbound(conn, job)
-    wamid, sender = message["id"], message["from"]
-    with closing(client_factory(phone_number_id)) as client:
+    """One coalesced turn (app.orchestrator): record this message and every pending
+    sibling of the conversation, then answer them together."""
+    _, message, phone_number_id = record_inbound(conn, job)
+    for event_id in orchestrator.pending_sibling_events(conn, job):
         try:
-            client.mark_read(wamid)
-        except whatsapp.SendError as exc:
-            # Blue ticks are cosmetic; never block the reply on them.
-            logger.warning("Mark-read failed: %s", exc.code)
+            record_event(conn, job.agency_id, event_id)
+        except PermanentJobError:
+            pass  # left pending: that job dead-letters itself when it runs
+    sender = message["from"]
 
-        photo = echo.photo_command(message)
-        if photo is not None:
-            _demo_photo(conn, client, storage, job, conversation_id, sender, wamid, photo)
-            return
-
-        for seq, payload in enumerate(
-            echo.reply(message, privacy_url=privacy_url, image_link=image_link)
-        ):
-            try:
+    with closing(client_factory(phone_number_id)) as client:
+        def demo(turn, command, dedupe_prefix):
+            photo = echo.photo_command(command)
+            if photo is not None:
+                _demo_photo(conn, client, storage, turn, dedupe_prefix, photo)
+                return
+            for seq, payload in enumerate(
+                echo.reply(command, privacy_url=privacy_url, image_link=image_link)
+            ):
                 outbound.send_message(
-                    conn, client, job.agency_id, conversation_id, sender, payload,
-                    f"echo:{wamid}:{seq}",
+                    conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+                    payload, f"{dedupe_prefix}:{seq}",
                 )
-            except whatsapp.PermanentSendError as exc:
-                raise PermanentJobError(exc.code) from None
+
+        orchestrator.run_turns(conn, job, client, sender, demo=demo)
 
 
-def _demo_photo(conn, client, storage, job, conversation_id, sender, wamid, variant):
-    """Echo-bot check for Task 4.2: send the staff sender's newest stored photo back
-    (cached ID on repeat; "badid" forces a refused ID, so the link fallback runs)."""
+def _demo_photo(conn, client, storage, turn, dedupe_prefix, variant):
+    """Staff '#demo photo' check for Task 4.2: send the sender's newest stored photo
+    back (cached ID on repeat; "badid" forces a refused ID, so the link fallback runs).
+    Send errors propagate to app.orchestrator."""
+    agency_id, sender, key = turn.agency_id, turn.sender_wa_id, f"{dedupe_prefix}:0"
     reply = None
     if storage is None:
         reply = "Photo demo is not configured (no bucket)."
     else:
-        staff_id, photo_id = media.latest_staff_photo(conn, job.agency_id, sender)
+        staff_id, photo_id = media.latest_staff_photo(conn, agency_id, sender)
         if staff_id is None:
             reply = "Photo demo is for staff numbers only."
         elif photo_id is None:
             reply = "No stored photo yet: send a photo first."
-    try:
-        if reply is not None:
-            outbound.send_message(
-                conn, client, job.agency_id, conversation_id, sender,
-                whatsapp.text(reply), f"echo:{wamid}:0",
-            )
-            return
-        if variant == "badid":
-            media.force_invalid_cached_id(conn, job.agency_id, photo_id)
-        result = media.send_image(
-            conn, client, storage, job.agency_id, conversation_id, sender,
-            ("inbound_media", photo_id), f"echo:{wamid}:0",
-            caption=f"Your latest photo (DEMO) {variant or ''}".strip(),
+    if reply is not None:
+        outbound.send_message(
+            conn, client, agency_id, turn.conversation_id, sender, whatsapp.text(reply), key,
         )
-        logger.info("Demo photo sent via %s: %s", result.via, result.status)
-    except whatsapp.PermanentSendError as exc:
-        raise PermanentJobError(exc.code) from None
+        return
+    if variant == "badid":
+        media.force_invalid_cached_id(conn, agency_id, photo_id)
+    result = media.send_image(
+        conn, client, storage, agency_id, turn.conversation_id, sender,
+        ("inbound_media", photo_id), key,
+        caption=f"Your latest photo (DEMO) {variant or ''}".strip(),
+    )
+    logger.info("Demo photo sent via %s: %s", result.via, result.status)
 
 
 def reconcile_status(conn, job):

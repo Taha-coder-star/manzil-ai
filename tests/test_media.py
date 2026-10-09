@@ -280,13 +280,15 @@ class FakeChannel:
         self.uploads = []
         self.upload_errors = []
         self.refuse_ids = set()
+        self.sends = 0  # WAMIDs stay unique even after a test clears self.sent
 
     def send(self, to, payload, *, reply_to=None):
         image = payload.get("image") or {}
         if image.get("id") in self.refuse_ids:
             raise whatsapp.PermanentSendError("http_400_meta_131009")
         self.sent.append(payload)
-        return f"wamid.OUT{len(self.sent)}"
+        self.sends += 1
+        return f"wamid.OUT{self.sends}"
 
     def upload_media(self, data, mime_type, filename="image.jpg"):
         if self.upload_errors:

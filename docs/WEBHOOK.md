@@ -46,8 +46,8 @@ sent, delivered, read and failed share a WAMID, so the status is part of the key
 jobs have their own type, so they never enter the message / AI path.
 
 **Consumers (Task 3.2, `app/handlers.py`).** `process_message` logs the conversation and
-inbound `message`, marks it read and (for now) sends the echo reply through
-`app/outbound.py`. `reconcile_status` matches `outbound_message.provider_message_id` and moves
+inbound `message`, then runs one coalesced turn (Task 5.1, `app/orchestrator.py`,
+docs/STATE_SCHEMA.md "Conversation turns") and sends its reply through `app/outbound.py`. `reconcile_status` matches `outbound_message.provider_message_id` and moves
 `delivery_status` forward only (sent < delivered < failed < read; failed is terminal). A
 status that arrives before its send is recorded is retried; an unmatched one on the last
 attempt is a logged no-op.

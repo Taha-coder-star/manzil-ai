@@ -230,9 +230,10 @@ def test_demo_photo_command(md):  # noqa: F811
     assert "link" in md.channel.sent[-1]["image"]
     assert md.channel.sent[-1]["image"]["caption"] == "Your latest photo (DEMO) badid"
 
+    # Task 5.1: customers never reach the #demo commands; they get the customer route.
     md.deliver(text("wamid.T4", "#demo photo", sender=CUSTOMER))
     md.drain()
-    assert md.channel.sent[-1] == whatsapp.text("Photo demo is for staff numbers only.")
+    assert md.channel.sent[-1] == whatsapp.text("Customer mode (stub) · 1 message in this turn")
 
 
 def test_demo_photo_without_a_photo(md):  # noqa: F811

@@ -53,6 +53,7 @@ def test_apply_and_repeat(migration_database, migration_files):
         "lead_property",
         "handoff",
         "inbound_media",
+        "conversation_turn",
         "schema_migration",
     }
 

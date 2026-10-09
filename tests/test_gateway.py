@@ -1,5 +1,5 @@
-"""Task 3.2 acceptance tests: idempotent sends, the send-time gate, the echo bot and
-status reconciliation, all through the restricted manzil_app login (RLS on).
+"""Task 3.2 acceptance tests: idempotent sends, the send-time gate, the turn reply
+(Task 5.1 stub; the echo bot before it) and status reconciliation, all through the restricted manzil_app login (RLS on).
 
 The WhatsApp client is a fake; all data is fictional.
 """
@@ -114,12 +114,15 @@ def conversation_id(gw):
     return gw.query("SELECT id FROM conversation")[0][0]
 
 
-def test_echo_replies_and_logs_messages(gw):
+CUSTOMER_REPLY = "Customer mode (stub) · 1 message in this turn"
+
+
+def test_turn_reply_and_logs_messages(gw):
     gw.deliver(messages=[text_message("wamid.IN1", "Salaam")])
     gw.drain()
 
     assert gw.client.read == ["wamid.IN1"]
-    assert gw.client.sent == [(CUSTOMER, whatsapp.text("Echo: Salaam"))]
+    assert gw.client.sent == [(CUSTOMER, whatsapp.text(CUSTOMER_REPLY))]
     assert gw.client.closed == 1
     assert job_states(gw, "process_message") == [("succeeded", None)]
     assert gw.query(
@@ -127,7 +130,7 @@ def test_echo_replies_and_logs_messages(gw):
         "ORDER BY direction"
     ) == [
         ("inbound", "text", "Salaam", "wamid.IN1"),
-        ("outbound", "text", "Echo: Salaam", "wamid.OUT1"),
+        ("outbound", "text", CUSTOMER_REPLY, "wamid.OUT1"),
     ]
     assert outbound_rows(gw) == [("sent", "wamid.OUT1", None, False, False, None, None)]
     assert gw.query(
@@ -159,7 +162,7 @@ def test_interrupted_send_becomes_unknown_and_is_not_resent(gw):
         gw.conn, gw.client, gw.agency, conv, CUSTOMER, whatsapp.text("x"), "k1"
     )
     assert result.status == "unknown"
-    assert len(gw.client.sent) == 1  # only the echo
+    assert len(gw.client.sent) == 1  # only the turn reply
 
 
 def test_control_gate_cancels_ai_messages(gw):

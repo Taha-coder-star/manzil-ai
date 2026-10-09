@@ -1,4 +1,4 @@
-"""Task 3.2: WhatsApp payload builders, client error handling and the echo bot.
+"""Task 3.2: WhatsApp payload builders, client error handling and the #demo samples.
 
 No network: the client runs against httpx.MockTransport. All content is fictional.
 """
@@ -228,10 +228,11 @@ def inbound_text(body):
     return {"from": TO, "id": "wamid.IN1", "type": "text", "text": {"body": body}}
 
 
-def test_echo_text_and_truncation():
-    assert echo.reply(inbound_text("hi")) == [whatsapp.text("Echo: hi")]
-    long = echo.reply(inbound_text("x" * 5000))[0]["text"]["body"]
-    assert len(long) == whatsapp.TEXT_MAX
+def test_non_demo_text_gets_no_demo_reply():
+    # Task 5.1: plain text is answered by the orchestrator, not echoed.
+    assert echo.reply(inbound_text("hi")) == []
+    assert echo.reply(inbound_text("demo buttons")) == []
+    assert echo.is_demo("  #DEMO list") and not echo.is_demo("hi #demo")
 
 
 @pytest.mark.parametrize(("command", "kind"), [
@@ -251,12 +252,10 @@ def test_echo_demo_location_image_and_help():
         assert echo.reply(inbound_text(command))[0]["type"] == "text"
 
 
-def test_echo_interactive_reply_and_other_types():
+def test_demo_reply_ignores_other_message_types():
     tapped = {"type": "interactive", "interactive": {
         "type": "button_reply", "button_reply": {"id": "demo_btn_2", "title": "Visit"},
     }}
-    assert echo.reply(tapped) == [whatsapp.text("You picked demo_btn_2 · Visit")]
+    assert echo.reply(tapped) == []
     assert echo.reply({"type": "reaction", "reaction": {"emoji": "👍"}}) == []
-    assert echo.reply({"type": "audio", "audio": {"id": "1"}}) == [
-        whatsapp.text("Received a message of type audio")
-    ]
+    assert echo.reply({"type": "audio", "audio": {"id": "1"}}) == []
