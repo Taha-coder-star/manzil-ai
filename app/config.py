@@ -9,6 +9,7 @@ class Settings:
     s3_bucket: str | None
     s3_region: str | None
     s3_endpoint_url: str | None
+    media_public_base_url: str | None
     meta_app_secret: str | None
     meta_access_token: str | None
     meta_api_version: str
@@ -31,6 +32,7 @@ def load_settings():
         s3_bucket=_optional("S3_BUCKET"),
         s3_region=_optional("S3_REGION"),
         s3_endpoint_url=_optional("S3_ENDPOINT_URL"),
+        media_public_base_url=_optional("MEDIA_PUBLIC_BASE_URL"),
         meta_app_secret=_optional("META_APP_SECRET"),
         meta_access_token=_optional("META_ACCESS_TOKEN"),
         meta_api_version=_optional("META_API_VERSION") or "v25.0",

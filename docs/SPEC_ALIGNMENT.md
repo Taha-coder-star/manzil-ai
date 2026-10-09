@@ -10,7 +10,7 @@ values (owner decision), so `ON_HOLD` here means `on_hold` in SQL.
 | Part | Scope | Status |
 |---|---|---|
 | A (section 1) | Task 3.4: migration 006, conversation state / handoff schema | **Complete locally on feature/task-3-4-conversation-state** (verified; awaiting commit approval) |
-| B (section 2) | Inventory gaps in applied migration 005 against D11 / R17 | **Migration 007** (`007_inventory_d11.sql`, branch feature/task-3-3-d11-alignment): G1-G15, G18, G19 done; G16 with Task 4.1, G17 with 7.4 / 9.2 |
+| B (section 2) | Inventory gaps in applied migration 005 against D11 / R17 | **Migration 007** (`007_inventory_d11.sql`, branch feature/task-3-3-d11-alignment): G1-G15, G18, G19 done; G16 done by **migration 008** (Task 4.1, docs/MEDIA.md); G17 with 7.4 / 9.2 |
 
 ## 1. Part A: Migration 006 (Task 3.4), complete
 
@@ -66,7 +66,7 @@ next data task (4.3 seed: 30 listings, gazetteer, projects).
 | G13 | property customer fields: title (<=60), description (<=600), furnishing, facing (multi), is_corner, features (controlled list), floor_no, total_floors, portion_level, parking_spaces, age/year_built, price_negotiable, rent deposit / advance months, maintenance, min_lease_months, available_from, address_detail (post-handoff) | D11 1.1 (renderer 9.1, known_fields R-05). `public_features` JSONB can carry some, but search filters and the view allowlist need typed columns for anything filtered |
 | G14 | property internal fields: source_type, owner_name, owner_phone, floor_price_pkr, commission_pct / note, is_exclusive, assigned_broker_id, docs_status, visit_notes, source_message_ids, duplicate_group_id | D11 1.1 (internal-only; never in v_public_listing); R17 edge 14 |
 | G15 | project: project_type, expected_completion, payment_plan_summary, amenities, approval_note (internal) | D11 1.2 |
-| G16 | property_media: kind, label, public_url_card, wa_media_id, wa_media_expires_at, exif_stripped | D11 1.3 / D14 (tasks 4.1 / 4.2, as 005 already noted) |
+| G16 | property_media: kind, label, public_url_card, wa_media_id, wa_media_expires_at, exif_stripped | D11 1.3 / D14. **Done in 008** (Task 4.1): kind (default image), label, public_url_card, wa_media_id + wa_media_expires_at (set together), exif_stripped, plus source_inbound_media_id |
 | G17 | listing_draft: `superseded` status, conflicts[], confirmation-card WAMID (reply-to-card attach), segment grouping (1-5 drafts per segment) | Red-Team R-08, R-10, R-12, R-14 (tasks 7.4 / 8.2 / 9.2) |
 | G18 | agency: city_default, marla_sqft (default 225), settings; staff: areas_covered | D11 1.5; RFC C13 / C15 (normalisers 6.2, routing 11.1) |
 | G19 | v_public_listing must add every new customer-visible column (and keep internal ones out) | D11 customer-visible rule |

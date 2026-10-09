@@ -1,0 +1,95 @@
+# Inbound media (Task 4.1, component C5)
+
+Sources: RFC section 11 (media storage boundary), R4/R9 D14 (media storage and re-send), D11 1.3
+(property_media), Red-Team R-36 (originals down-scaled on ingest). Migration 008, `app/media.py`,
+`app/whatsapp.py` (`media_info` / `download_media` / `fetch_media`).
+
+## Flow
+
+1. `record_inbound` (app/handlers.py) logs the message. When it is an `image`, or a `document` with an
+   image MIME type, **and** the sender is active `admin` / `agent` staff (the role comes from the staff
+   allowlist, never from content), it inserts an `inbound_media` row (unique per message) and enqueues a
+   `fetch_media` job (dedupe `media:<inbound_media_id>`), in the same transaction. Photos from customers and
+   brokers are logged as messages only; they are not downloaded.
+2. The `fetch_media` job runs at once (no conversation key). Each attempt asks Graph
+   `GET /<version>/<media_id>?phone_number_id=...` for a fresh 5-minute URL, then downloads it with the
+   access token. An expired URL (401/403/404/410) is re-queried once within the attempt; later attempts
+   query again, since the media ID lives for days. The token is only sent to Meta hosts
+   (`*.fbsbx.com`, `*.facebook.com`, `*.whatsapp.net`, `*.fbcdn.net`, https only). Meta's `sha256` is
+   checked when present. Cap: 16 MB.
+3. Validation: the magic bytes must be JPEG / PNG / WebP, match Meta's MIME type and Pillow's format;
+   width x height <= 50 MP is checked from the header before decoding (decompression bombs).
+4. Hash dedupe: the sha256 of the delivered bytes. If the agency already has a `stored` row with that
+   hash, the new row becomes `duplicate`, points at it (`duplicate_of_id`) and copies its keys: nothing is
+   uploaded. A partial unique index keeps one `stored` row per (agency, hash); a concurrent loser becomes
+   `duplicate` and deletes its own objects.
+5. Pillow builds three images with orientation applied and **no EXIF / GPS / XMP** (Pillow writes no
+   metadata it is not given; each output is re-opened and checked, and a failure rejects the photo):
+   - `original`: long edge <= 2,560 px (R-36); JPEG q92, or PNG for PNG input;
+   - `wa`: JPEG, 8-bit RGB, long edge <= 1,600 px, < 5 MB (quality, then size, is lowered until it fits);
+   - `card`: JPEG 1,200 x 628 (1.91:1), cropped and centred. The ratio is to be confirmed with the Day-5
+     carousel check on Android / iPhone / Web.
+6. Upload, then the row becomes `stored` with keys, size, dimensions, `public_url_card`, `exif_stripped`.
+
+Outcomes: `stored` / `duplicate` (usable, CHECK-enforced keys + `exif_stripped`); `rejected` (not an image,
+too large, gone at Meta: the job succeeds, no retry); `failed` (transient errors through the last of 3
+attempts: the job is dead). Telling staff to resend a lost photo belongs to the staff flow (D14,
+Tasks 7.x / 9.x), which reads these statuses.
+
+## Bucket layout
+
+| Object | Key | Access |
+|---|---|---|
+| original | `tenant/<agency_id>/inbound/<inbound_media_id>/original.jpg` (or `.png`) | private |
+| WhatsApp image | `tenant/<agency_id>/inbound/<inbound_media_id>/wa.jpg` | private (Task 4.2 uploads it to Meta) |
+| card | `card/<agency_id>/<card_token>.jpg` | **public read**, `Cache-Control: public, max-age=31536000, immutable` |
+
+The RFC sketch is `tenant/<agency_id>/property/<property_id>/<media_id>/...`. Staff photos arrive before
+the listing exists (the draft is saved later, Task 9.2), so objects are keyed by the inbound media ID and
+`property_media` will reference them by key; nothing is moved. Public cards sit under their own `card/`
+prefix so one bucket-policy statement covers exactly the public objects, and `card_token` is a random
+UUID, so card URLs are unguessable and reveal no internal ID. Keys are stable, so a retried job overwrites
+the same objects.
+
+Public URL: `MEDIA_PUBLIC_BASE_URL` when set (CDN or non-AWS storage), otherwise
+`https://<S3_BUCKET>.s3.<S3_REGION>.amazonaws.com`. The `fetch_media` handler is only registered when the
+bucket and a public base are configured (and `META_ACCESS_TOKEN`); otherwise its jobs stay pending.
+
+## AWS change needed for the done condition (owner approval required, not applied)
+
+The bucket is private. For "card URL opens publicly":
+
+1. Bucket `manzil-demo-media-284460774230` > Permissions > Block public access: untick only
+   **"Block public access to buckets and objects granted through new public bucket or access point
+   policies"** and **"... through any public bucket or access point policies"**. Keep both ACL options
+   ticked. (If the account-level setting blocks public policies, the same two must be relaxed there.)
+2. Bucket policy (read-only, `card/` only):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Sid": "PublicCardImagesOnly",
+       "Effect": "Allow",
+       "Principal": "*",
+       "Action": "s3:GetObject",
+       "Resource": "arn:aws:s3:::manzil-demo-media-284460774230/card/*"
+     }]
+   }
+   ```
+
+   No `s3:ListBucket`, so there is no directory listing.
+3. Role `manzil-ec2-role` needs `s3:PutObject` and `s3:DeleteObject` on
+   `arn:aws:s3:::manzil-demo-media-284460774230/tenant/*` and `.../card/*` (check what it has today).
+
+Check: `curl -sI https://manzil-demo-media-284460774230.s3.us-east-1.amazonaws.com/card/<agency>/<token>.jpg`
+returns 200, and the same request for a `tenant/...` key returns 403.
+
+## Not in 4.1
+
+- Outbound image sends, the `wa_media_id` upload cache and the link fallback: Task 4.2 (property_media
+  `wa_media_id` / `wa_media_expires_at` exist from 008).
+- Attaching staged photos to a listing (`property_media` rows, `source_inbound_media_id`): Task 9.2.
+- Customer voice audio (`tenant/<id>/audio/`, short retention): Task 10.x (C4), which reuses
+  `WhatsAppClient.fetch_media`.
+- Lifecycle rules, per-listing photo cap, storage metering (R-36): production.

@@ -249,8 +249,9 @@ def test_role_and_table_hardening(rls_db):
         "requirement_state", "requirement_patch_log", "search_run", "shown_item", "focus",
         "media_sent", "pending_clarification", "lead", "lead_property", "handoff",
     }
+    media = {"inbound_media"}
     assert {r[0] for r in rows} == (
-        set(TABLES) | inventory | state | shared | {"schema_migration"}
+        set(TABLES) | inventory | state | media | shared | {"schema_migration"}
     )
     for name, enabled, forced, owner in rows:
         assert owner != "manzil_app"
