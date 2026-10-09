@@ -128,7 +128,8 @@ def test_listing_field_rules(data, code, field, value, fragment):
 
 def test_public_features_keys_are_allowlisted(dataset, tmp_path):
     for path in dd.DEMO_DIR.iterdir():
-        shutil.copy(path, tmp_path / path.name)
+        if path.is_file():  # demo/media/ (Task 4.4) is not part of the dataset
+            shutil.copy(path, tmp_path / path.name)
     properties = tmp_path / "properties.csv"
     properties.write_text(
         properties.read_text("utf-8").replace("pf_floor_no", "pf_owner_phone", 1), "utf-8")
@@ -141,7 +142,8 @@ def test_public_features_keys_are_allowlisted(dataset, tmp_path):
 
 def test_wrong_field_count_is_rejected(tmp_path):
     for path in dd.DEMO_DIR.iterdir():
-        shutil.copy(path, tmp_path / path.name)
+        if path.is_file():  # demo/media/ (Task 4.4) is not part of the dataset
+            shutil.copy(path, tmp_path / path.name)
     staff = tmp_path / "staff.csv"
     staff.write_text(staff.read_text("utf-8") + "extra,x,admin,env:X,reuse_unchanged,src,,surplus\n", "utf-8")
     with pytest.raises(dd.DatasetError, match="wrong number of fields"):
@@ -276,7 +278,8 @@ def test_valid_urdu_alias_is_accepted(data):
 
 def test_valid_urdu_alias_survives_the_csv_file(tmp_path):
     for path in dd.DEMO_DIR.iterdir():
-        shutil.copy(path, tmp_path / path.name)
+        if path.is_file():  # demo/media/ (Task 4.4) is not part of the dataset
+            shutil.copy(path, tmp_path / path.name)
     aliases = tmp_path / "location_aliases.csv"
     line = ",".join(urdu_alias().values())
     aliases.write_text(aliases.read_text("utf-8") + line + "\n", "utf-8")

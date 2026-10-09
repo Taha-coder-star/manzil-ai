@@ -9,3 +9,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+# Task 4.4: demo images, review sheets and transfer bundles stay outside Git
+demo/media/**/*.jpg
+demo/media/**/*.jpeg
+demo/media/**/*.png
+demo/media/**/*.webp
+*.zip
+# Manual demo originals and local preparation outputs (also excluded by .dockerignore)
+/.local/demo-media/
