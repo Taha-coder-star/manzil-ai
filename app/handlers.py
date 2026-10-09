@@ -1,5 +1,6 @@
 """Worker job handlers (Task 3.2): process_message (echo bot) and reconcile_status;
-Task 4.1 adds fetch_media (app.media), enqueued here for staff photos.
+Task 4.1 adds fetch_media (app.media), enqueued here for staff photos; Task 4.2
+adds media_link_fallback, enqueued by reconcile_status for a failed image by ID.
 
 Both are idempotent: the inbound message insert dedupes on its WAMID, replies
 dedupe on "echo:{wamid}:{seq}" (app.outbound), and status updates only move
@@ -144,31 +145,37 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
             return presigned_demo_image(settings)
 
     privacy_url = f"https://{settings.site_address}/privacy" if settings.site_address else None
+    if storage is None and settings.s3_bucket:
+        storage = media.S3Storage(
+            settings.s3_bucket, settings.s3_region, settings.s3_endpoint_url
+        )
 
     def process(conn, job):
         process_message(
-            conn, job, client_factory, privacy_url=privacy_url, image_link=image_link
+            conn, job, client_factory, privacy_url=privacy_url, image_link=image_link,
+            storage=storage,
         )
 
     handlers["process_message"] = process
 
     public_base = media.public_base_url(settings)
-    if storage is None and settings.s3_bucket:
-        storage = media.S3Storage(
-            settings.s3_bucket, settings.s3_region, settings.s3_endpoint_url
-        )
     if storage is None or public_base is None:
-        logger.error("Media bucket or public URL not configured; fetch_media jobs stay pending")
+        logger.error("Media bucket or public URL not configured; media jobs stay pending")
         return handlers
 
     def fetch(conn, job):
         media.fetch_media(conn, job, client_factory, storage, public_base)
 
+    def fallback(conn, job):
+        media.link_fallback(conn, job, client_factory, storage)
+
     handlers[media.JOB_TYPE] = fetch
+    handlers[media.FALLBACK_JOB_TYPE] = fallback
     return handlers
 
 
-def process_message(conn, job, client_factory, *, privacy_url=None, image_link=None):
+def process_message(conn, job, client_factory, *, privacy_url=None, image_link=None,
+                    storage=None):
     conversation_id, message, phone_number_id = record_inbound(conn, job)
     wamid, sender = message["id"], message["from"]
     with closing(client_factory(phone_number_id)) as client:
@@ -177,6 +184,11 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
         except whatsapp.SendError as exc:
             # Blue ticks are cosmetic; never block the reply on them.
             logger.warning("Mark-read failed: %s", exc.code)
+
+        photo = echo.photo_command(message)
+        if photo is not None:
+            _demo_photo(conn, client, storage, job, conversation_id, sender, wamid, photo)
+            return
 
         for seq, payload in enumerate(
             echo.reply(message, privacy_url=privacy_url, image_link=image_link)
@@ -188,6 +200,37 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
                 )
             except whatsapp.PermanentSendError as exc:
                 raise PermanentJobError(exc.code) from None
+
+
+def _demo_photo(conn, client, storage, job, conversation_id, sender, wamid, variant):
+    """Echo-bot check for Task 4.2: send the staff sender's newest stored photo back
+    (cached ID on repeat; "badid" forces a refused ID, so the link fallback runs)."""
+    reply = None
+    if storage is None:
+        reply = "Photo demo is not configured (no bucket)."
+    else:
+        staff_id, photo_id = media.latest_staff_photo(conn, job.agency_id, sender)
+        if staff_id is None:
+            reply = "Photo demo is for staff numbers only."
+        elif photo_id is None:
+            reply = "No stored photo yet: send a photo first."
+    try:
+        if reply is not None:
+            outbound.send_message(
+                conn, client, job.agency_id, conversation_id, sender,
+                whatsapp.text(reply), f"echo:{wamid}:0",
+            )
+            return
+        if variant == "badid":
+            media.force_invalid_cached_id(conn, job.agency_id, photo_id)
+        result = media.send_image(
+            conn, client, storage, job.agency_id, conversation_id, sender,
+            ("inbound_media", photo_id), f"echo:{wamid}:0",
+            caption=f"Your latest photo (DEMO) {variant or ''}".strip(),
+        )
+        logger.info("Demo photo sent via %s: %s", result.via, result.status)
+    except whatsapp.PermanentSendError as exc:
+        raise PermanentJobError(exc.code) from None
 
 
 def reconcile_status(conn, job):
@@ -228,7 +271,7 @@ def reconcile_status(conn, job):
                           < array_position(%(order)s, %(state)s)
                   )
               )
-            RETURNING id
+            RETURNING id, media_source, media_source_id, payload
             """,
             {
                 "state": state, "wamid": wamid, "error_code": error_code,
@@ -238,6 +281,8 @@ def reconcile_status(conn, job):
             },
         ).fetchone()
         if updated is not None:
+            if state == "failed":
+                media.on_failed_status(conn, *updated)
             return
         known = conn.execute(
             "SELECT 1 FROM outbound_message WHERE provider_message_id = %s", (wamid,)

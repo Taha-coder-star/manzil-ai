@@ -262,16 +262,37 @@ class FakeStorage:
     def delete(self, key):
         self.objects.pop(key, None)
 
+    def get(self, key):
+        return self.objects[key][0]
+
+    def presigned_url(self, key, seconds):
+        return f"https://demo-bucket.s3.amazonaws.com/{key}?X-Amz-Expires={seconds}"
+
 
 class FakeChannel:
-    """Messages are only logged; media come from a dict of media ID -> bytes."""
+    """Records sends and uploads; inbound media come from a dict of media ID -> bytes.
+    Image IDs in refuse_ids are rejected at send time, like an invalid ID."""
 
     def __init__(self):
         self.files = {}
         self.media_errors = []
+        self.sent = []
+        self.uploads = []
+        self.upload_errors = []
+        self.refuse_ids = set()
 
     def send(self, to, payload, *, reply_to=None):
-        return f"wamid.OUT{uuid.uuid4().hex}"
+        image = payload.get("image") or {}
+        if image.get("id") in self.refuse_ids:
+            raise whatsapp.PermanentSendError("http_400_meta_131009")
+        self.sent.append(payload)
+        return f"wamid.OUT{len(self.sent)}"
+
+    def upload_media(self, data, mime_type, filename="image.jpg"):
+        if self.upload_errors:
+            raise self.upload_errors.pop(0)
+        self.uploads.append(data)
+        return f"9{len(self.uploads):015d}"
 
     def mark_read(self, wamid, *, typing=False):
         pass

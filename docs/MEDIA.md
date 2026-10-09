@@ -1,4 +1,4 @@
-# Inbound media (Task 4.1, component C5)
+# Media (Tasks 4.1 inbound and 4.2 outbound, component C5)
 
 Sources: RFC section 11 (media storage boundary), R4/R9 D14 (media storage and re-send), D11 1.3
 (property_media), Red-Team R-36 (originals down-scaled on ingest). Migration 008, `app/media.py`,
@@ -85,10 +85,34 @@ The bucket is private. For "card URL opens publicly":
 Check: `curl -sI https://manzil-demo-media-284460774230.s3.us-east-1.amazonaws.com/card/<agency>/<token>.jpg`
 returns 200, and the same request for a `tenant/...` key returns 403.
 
-## Not in 4.1
+## Outbound images (Task 4.2, migration 009)
 
-- Outbound image sends, the `wa_media_id` upload cache and the link fallback: Task 4.2 (property_media
-  `wa_media_id` / `wa_media_expires_at` exist from 008).
+`media.send_image(conn, client, storage, agency, conversation, recipient, (table, id), dedupe_key)` sends one
+stored image. The source is a `property_media` row (listing photos, D9 "More photos") or a stored / duplicate
+`inbound_media` row (staff photos, before they are attached). A duplicate resolves to its stored copy, which
+owns the objects and the cache.
+
+1. **Cache** (D14 point 4): the `wa` derivative is uploaded once (`POST /<phone_number_id>/media`) and its ID is
+   cached on the source row with `expires = upload + 30 days`. It is reused while more than 5 days remain, so it
+   is re-uploaded lazily after ~25 days. Columns: `property_media.wa_media_id / wa_media_expires_at` (008, D11),
+   `inbound_media.wa_upload_id / wa_upload_expires_at` (009; `inbound_media.wa_media_id` is the inbound ID).
+   IDs are scoped to the agency's one business number (D3).
+2. **Send** through `app.outbound.send_message` (dedupe, send-time gate R-28, 24 h window): no parallel sender.
+   The outbound row records `media_source` / `media_source_id` (009).
+3. **Fallback to the link** (presigned GET of the private `wa.jpg`, 1 hour), sent with dedupe key
+   `<key>:link`:
+   - the upload fails, or Meta refuses the ID at send time (any `PermanentSendError`): the cached ID is
+     cleared, so the next send uploads afresh;
+   - Meta accepts the message but its status webhook says `failed`: `reconcile_status` clears the ID and
+     enqueues one `media_link_fallback` job, which resends by link. A failed link send is not retried.
+   - Not when the send was cancelled by the control gate or is outside the 24 h window.
+4. Images are sent one per call; callers send the next only after this returns (D14 point 5).
+
+Echo-bot check (temporary, staff only): `#demo photo` sends the sender's newest stored photo back (uploaded the
+first time, the cached ID after that); `#demo photo badid` first caches an ID Meta refuses, so the link
+fallback runs. Customers get "Photo demo is for staff numbers only."
+
+## Not in 4.1 / 4.2
 - Attaching staged photos to a listing (`property_media` rows, `source_inbound_media_id`): Task 9.2.
 - Customer voice audio (`tenant/<id>/audio/`, short retention): Task 10.x (C4), which reuses
   `WhatsAppClient.fetch_media`.
