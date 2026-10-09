@@ -2,7 +2,7 @@
 
 - Webhook routing uses the demo env map (Task 2.4). A DB/platform resolver is needed before onboarding several agencies; replace EnvSenderResolver only.
 - Worker tenant discovery uses the env sender map (Task 3.1); it moves with the webhook resolver when a DB/platform resolver replaces EnvSenderResolver.
-- Migrations 001-007 are applied on RDS. 001-006 per Taha's handoff (release manzil-ai:2c447d3, snapshot manzil-pre-task34-2026-10-08 before 006); 007 applied by the owner on 2026-10-08 (`1 applied, 6 skipped`, repeat `0 applied, 7 skipped`, /health 200, echo received). 001/002 keep their CRLF checksums.
+- Migrations 001-010 are applied on RDS (008 / 009 / 010 by the owner on 2026-10-09 / 10, each after a named snapshot). Earlier history: 001-006 per Taha's handoff (release manzil-ai:2c447d3, snapshot manzil-pre-task34-2026-10-08 before 006); 007 applied by the owner on 2026-10-08 (`1 applied, 6 skipped`, repeat `0 applied, 7 skipped`, /health 200, echo received). 001/002 keep their CRLF checksums.
 - Worker has no lease heartbeat: a job running longer than 300 s with no conversation key could be re-run by the reaper. Fine for the demo (status jobs are fast and idempotent).
 - GEMINI_API_KEY and ELEVENLABS_API_KEY were missing on the server in the last reported check; partner delivery is pending. Do not claim installation or retesting.
 - Meta system-user token was regenerated on 2026-10-08 (after the exposure) with no expiry. A non-expiring token must be rotated immediately if ever exposed (revoke all, then generate).
