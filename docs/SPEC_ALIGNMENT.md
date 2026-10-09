@@ -10,7 +10,7 @@ values (owner decision), so `ON_HOLD` here means `on_hold` in SQL.
 | Part | Scope | Status |
 |---|---|---|
 | A (section 1) | Task 3.4: migration 006, conversation state / handoff schema | **Complete locally on feature/task-3-4-conversation-state** (verified; awaiting commit approval) |
-| B (section 2) | Inventory gaps in applied migration 005 against D11 / R17 | **Not part of Task 3.4.** Separate follow-up task and PR (new forward migration) before the Task 4.3 seed. Not started |
+| B (section 2) | Inventory gaps in applied migration 005 against D11 / R17 | **Migration 007** (`007_inventory_d11.sql`, branch feature/task-3-3-d11-alignment): G1-G15, G18, G19 done; G16 with Task 4.1, G17 with 7.4 / 9.2 |
 
 ## 1. Part A: Migration 006 (Task 3.4), complete
 
@@ -78,7 +78,12 @@ neighbours; composite tenant FKs; FORCE RLS; append-only property_event with und
 draft per staff + listing (R-14); minimum-to-save rule on active rows (R-07); area conversions
 (225 / 4500); integer PKR, monthly rent; v_public_listing ACTIVE-only allowlist with security_invoker.
 
-### Follow-up task (separate branch and PR before Task 4.3; not started)
+### Follow-up task: done in migration 007 (see docs/INVENTORY_SCHEMA.md, Migration 007)
+
+G13 split (owner decision 2026-10-08): fields search filters or ranks on are typed columns; display-only
+facts are allowlisted public_features keys. G16 (media) and G17 (drafts) remain with their tasks.
+
+Original scope:
 
 A forward migration (numbered after 006, e.g. `007_inventory_d11.sql`) before Task 4.3: ZONE level + location code /
 level_label / centroid / city_code / commercial flag; alias kind + weight; neighbour weight; property

@@ -22,6 +22,10 @@ PUBLIC_COLUMNS = [
     "location_id", "project_id", "price_pkr", "area_value", "area_unit", "area_sqft",
     "bedrooms", "bathrooms", "construction_status", "latitude", "longitude",
     "public_features", "cover_media_id", "version", "updated_at",
+    # Appended by 007 (D11 alignment).
+    "size_nominal_sqyd", "covered_area_sqft", "portion_level", "furnishing", "facing",
+    "is_corner", "features", "year_built", "possession_status", "expected_possession",
+    "installment_available", "is_tenanted", "investment_tags", "last_confirmed_at",
 ]
 PRIVILEGES = ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER")
 EXPECTED_PRIVILEGES = {
@@ -421,7 +425,8 @@ def test_every_tenant_reference_is_scoped_by_agency(inv, admin):
         (list(TENANT_TABLES),),
     ).fetchall()
     tenant_parents = [fk for fk in foreign_keys if fk[2] not in SHARED_TABLES + ("agency",)]
-    assert len(tenant_parents) == 12
+    # 005: 12; 007: property.assigned_broker_id, property_event.source_message_id.
+    assert len(tenant_parents) == 14
     for name, _, _, columns, referenced in tenant_parents:
         assert (columns[0], referenced[0]) == ("agency_id", "agency_id"), name
 
@@ -495,9 +500,12 @@ def test_incomplete_property_cannot_be_activated(inv):
     (500, "sq_yd", 4500), (1200, "sq_ft", 1200), (10, "marla", 2250), (1, "kanal", 4500),
 ])
 def test_area_sqft_conversion(inv, value, unit, sqft):
+    # Since 007, marla / kanal sizes carry the agency's marla basis (default 225).
+    basis = 225 if unit in ("marla", "kanal") else None
     with tenant_transaction(inv.conn, inv.a.agency):
         pid = insert(inv.conn, "property", **active_property(
             inv.a.agency, inv.geo.ph6, area_value=value, area_unit=unit,
+            area_marla_sqft=basis,
         ))
         assert inv.conn.execute(
             "SELECT area_sqft FROM property WHERE id = %s", (pid,)
