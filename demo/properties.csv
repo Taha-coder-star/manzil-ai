@@ -1,0 +1,31 @@
+listing_code,status,purpose,property_type,category,location_key,project_key,price_pkr,area_value,area_unit,size_nominal_sqyd,bedrooms,bathrooms,construction_status,portion_level,furnishing,facing,is_corner,features,possession_status,expected_possession,installment_available,is_tenanted,investment_tags,pf_parking_spaces,pf_floor_no,pf_rent_advance_months,pf_current_rent_pkr,pf_installment_months,source_type,internal_notes,is_demo,source,override,derived
+DH6-101,active,sale,house,residential,dha-ph6,,78000000,500,sq_yd,500,4,5,ready,,,west_open,,,,,,,,2,,,,,owner_direct,,true,D11 p11,,category;size_nominal_sqyd;price_pkr
+DH6-102,active,sale,house,residential,dha-ph6,,80000000,500,sq_yd,500,5,6,ready,,,,true,basement,,,,,,,,,,,,,true,D11 p11,,category;size_nominal_sqyd;price_pkr
+DH6-103,active,sale,house,residential,dha-ph6,,95000000,500,sq_yd,500,5,6,ready,,,park_facing,,,,,,,,,,,,,,,true,D11 p11,,category;size_nominal_sqyd;price_pkr
+DH6-104,active,sale,house,residential,dha-ph6,,180000000,1000,sq_yd,1000,6,7,ready,,,,,annex;lawn,,,,,,,,,,,,,true,D11 p11,,category;size_nominal_sqyd;price_pkr
+DH6-105,sold,sale,house,residential,dha-ph6,,72000000,500,sq_yd,500,4,5,ready,,,,,,,,,,,,,,,,,,true,D11 p12,,category;size_nominal_sqyd;price_pkr
+DH6-106,reserved,sale,house,residential,dha-ph6,,79000000,500,sq_yd,500,4,5,ready,,,,,,,,,,,,,,,,,Token received,true,D11 p12,,category;size_nominal_sqyd;price_pkr
+DH6-107,active,rent,portion,residential,dha-ph6,,250000,500,sq_yd,,3,3,ready,upper,,,,,,,,,,,,3,,,,,true,D11 p12,,category;price_pkr
+DH6-108,active,rent,office,commercial,dha-ph6-bukhari,,500000,1200,sq_ft,,,,ready,,,,,lift;generator_backup,,,,,,,,,,,,,true,D11 p12,,category;price_pkr;features (generator -> generator_backup)
+DH7-101,active,sale,house,residential,dha-ph7,,75000000,500,sq_yd,500,4,5,ready,,,west_open,,,,,,,,,,,,,,,true,D11 p12,,category;size_nominal_sqyd;price_pkr
+DH8-101,active,sale,house,residential,dha-ph8,,74000000,500,sq_yd,500,4,5,ready,,,,,,,,,,,,,,,,,,true,D11 p12 (build READY); Demo Scope p5 (changed row),Demo Scope p5: DH8-101 changed from D11 p12 (300 sq yd / 5.5 crore / notable 'New build') to 500 sq yd / 4/5 / 7.4 crore / ACTIVE,category;size_nominal_sqyd;price_pkr
+DH8-102,active,sale,house,residential,dha-ph8,,69000000,500,sq_yd,500,3,4,,,,,,,,,,,,,,,,,,,true,Demo Scope p5 (new row),Demo Scope p5: D2X-101 (D11 p12) replaced by DH8-102; total stays 30,category;size_nominal_sqyd;price_pkr
+DH5-101,active,sale,apartment,residential,dha-ph5-badar,,32000000,2000,sq_ft,,3,3,ready,,,,,lift,,,,,,,4,,,,,,true,D11 p12,,category;price_pkr;pf_floor_no (4th floor)
+CLF-101,active,rent,shop,commercial,clf-b5,,300000,400,sq_ft,,,,ready,,,road_facing,,,,,,,,,,,,,,,true,D11 p12,,category;price_pkr
+CLF-102,active,sale,shop,commercial,clf-b2,,18000000,250,sq_ft,,,,ready,,,,,,,,,true,,,,,120000,,,,true,D11 p12,,category;price_pkr;pf_current_rent_pkr (1.2 lakh/month)
+CLF-103,active,sale,apartment,residential,clf-b2,,65000000,2400,sq_ft,,3,4,ready,,,sea_facing,,,,,,,,,,,,,,,true,D11 p12,,category;price_pkr
+CLF-104,rented,rent,shop,commercial,clf-b8,,450000,600,sq_ft,,,,ready,,,,,,,,,,,,,,,,,,true,D11 p12,,category;price_pkr
+SHF-101,active,rent,office,commercial,shf,,450000,1500,sq_ft,,,,ready,,furnished,,,,,,,,,,,,,,,,true,D11 p12,,category;price_pkr
+PEC-101,active,rent,office,commercial,pec-b6,,550000,2000,sq_ft,,,,ready,,,,,,,,,,,2,,,,,,,true,D11 p12,,category;price_pkr
+BTK-101,active,sale,house,residential,btk-p10,,11000000,125,sq_yd,125,3,3,ready,,,,,,possession,,,,,,,,,,,,true,D11 p13,,category;size_nominal_sqyd;price_pkr
+BTK-102,active,sale,house,residential,btk-p27,,19000000,235,sq_yd,235,3,4,ready,,,,true,,,,,,,,,,,,,,true,D11 p13,,category;size_nominal_sqyd;price_pkr
+BTK-103,active,sale,house,residential,btk-p1,,32000000,272,sq_yd,250,4,5,ready,,,,,main_boulevard,,,,,,,,,,,,,true,D11 p13 (250 sq yd nominal / 272 actual),,category;price_pkr
+BTK-104,active,sale,house,residential,btk-p31,,29000000,272,sq_yd,250,4,4,ready,,,park_facing,,,,,,,,,,,,,,,true,D11 p13 (250 sq yd nominal / 272 actual),,category;price_pkr
+BTK-105,active,rent,apartment,residential,btk-heights,,45000,1100,sq_ft,,2,2,ready,,furnished,,,,,,,,,,,,,,,,true,D11 p13,,category;price_pkr
+BTK-106,active,sale,plot,,btk-sports-city,,16000000,500,sq_yd,500,,,,,,,,,file,,,,,,,,,,,,true,D11 p13,,size_nominal_sqyd;price_pkr
+DHC-101,active,sale,plot,,dhc-s8,,12000000,500,sq_yd,500,,,,,,,,,on_ground,,true,,,,,,,,,,true,D11 p13,,size_nominal_sqyd;price_pkr
+PRJ-101,active,sale,apartment,residential,dha-ph8,PRJ-P1,24000000,1350,sq_ft,,2,2,under_construction,,,,,,,2028-12-01,true,,,,,,,36,,,true,D11 p13 (30% down / 36 installments / possession Dec 2028),,category;location_key (project location);price_pkr
+PRJ-102,active,sale,apartment,residential,dha-ph8,PRJ-P1,34000000,1900,sq_ft,,3,3,under_construction,,,,,,,2028-12-01,true,,,,,,,36,,,true,D11 p13 ('same project' / 'same plan'),,category;location_key (project location);price_pkr;expected_possession;installment_available;pf_installment_months
+PRJ-103,active,sale,shop,commercial,gli-b13,PRJ-P2,9500000,300,sq_ft,,,,off_plan,,,,,,,,true,,rental_income,,,,,24,,,true,D11 p13 (25% down / rental-income tag); D11 p14 PRJ-P2 plan,,category;location_key (project location);price_pkr;installment_available;pf_installment_months
+GLI-101,active,sale,house,residential,gli-b6,,36000000,240,sq_yd,240,4,4,ready,,,west_open,,,,,,,,,,,,,,,true,D11 p13,,category;size_nominal_sqyd;price_pkr
+NNZ-101,active,rent,portion,residential,nnz-bh,,85000,400,sq_yd,,3,3,ready,ground,,,,gas_connection;water_kwsb,,,,,,,,,,,,,true,D11 p14,,category;price_pkr

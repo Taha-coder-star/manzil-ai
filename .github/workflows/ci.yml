@@ -65,6 +65,9 @@ jobs:
           docker run --rm --entrypoint python manzil-ai:ci \
             -c "from pathlib import Path; root = Path('/app/migrations'); assert all((root / name).is_file() for name in ['001_schema_v1.sql', '002_tenant_rls.sql']); print('Schema and RLS SQL are included')"
 
+      - name: Verify the demo dataset is included and valid
+        run: docker run --rm --entrypoint python manzil-ai:ci -m app.demo_dataset
+
       - name: Verify both container roles
         shell: bash
         run: |

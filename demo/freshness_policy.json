@@ -1,0 +1,13 @@
+{
+  "status": "adopted",
+  "authority": "Owner decision 2026-10-09. Not source-backed: D11 p11 says the demo shows the >30-day staleness check on one listing but does not name it.",
+  "applies": "insertion",
+  "default_confirmed_days_ago": 0,
+  "listings": {
+    "DH6-104": {
+      "confirmed_days_ago": 35,
+      "reason": "DHA Phase 6 house, so it fits the scenario story and the staff disambiguation list (Demo Scope p7, step 4c), but it is outside every scripted customer result set, so freshness ranking cannot change a scenario. 35 days is over the 30-day ask and under the 45-day auto-hold (D11 p11)."
+    }
+  },
+  "rerun": "Set last_confirmed_at only when a listing is inserted. A rerun never changes last_confirmed_at on an existing listing."
+}

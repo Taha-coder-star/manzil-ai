@@ -1,0 +1,4 @@
+key,name,role,phone_ref,if_exists,source,derived
+admin,Admin (DEMO),admin,env:DEMO_ADMIN_PHONE,reuse_unchanged,D11 p5/p11 (role ADMIN); Demo Scope p5 (1 ADMIN),name;role (ADMIN -> admin)
+agent,Staff (DEMO),agent,env:DEMO_STAFF_PHONE,reuse_unchanged,D11 p5/p11 (role STAFF); Demo Scope p5 (1 STAFF; staff test phone),name;role (STAFF -> agent)
+broker,Ahmed (DEMO),broker,env:DEMO_BROKER_PHONE,reuse_unchanged,Demo Scope p5 (1 BROKER 'Ahmed (DEMO)'; broker test phone),role (BROKER -> broker)

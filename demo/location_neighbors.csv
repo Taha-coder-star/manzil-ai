@@ -1,0 +1,4 @@
+location_a_key,location_b_key,weight,source
+dha-ph5,dha-ph6,1,R17 p3 §2.1 step 7 ("Ph 5 ↔ 6"); weight = schema default (no source weight)
+dha-ph6,dha-ph7,1,R17 p3 §2.1 step 7 ("DHA 6 ↔ 7 ↔ 8"); Demo Scope p6 scenario 2 (Phase 7 offered as neighbour); weight = schema default
+dha-ph7,dha-ph8,1,R17 p3 §2.1 step 7 ("DHA 6 ↔ 7 ↔ 8"); weight = schema default

@@ -1,0 +1,53 @@
+key,parent_key,level,name,display_name,code,level_label,city_code,is_commercial_zone,source,derived
+khi,,city,Karachi,Karachi,,,KHI,false,D11 p1 (Karachi-only); D11 p5 (city_default KHI),display_name
+dha,khi,area,DHA Defence,DHA Defence,,,,false,D11 p6 gazetteer,display_name
+dha-ph1,dha,sub_area,Phase 1,DHA Phase 1,DH1,phase,,false,D11 p6 gazetteer (Phase 1; code range DH1…DH8),display_name;code
+dha-ph2,dha,sub_area,Phase 2,DHA Phase 2,DH2,phase,,false,D11 p6 gazetteer (Phase 2; code range DH1…DH8),display_name;code
+dha-ph2x,dha,sub_area,Phase 2 Ext,DHA Phase 2 Ext,D2X,phase,,false,D11 p6 gazetteer (2 Ext; code D2X); D11 p7 alias table,display_name
+dha-ph4,dha,sub_area,Phase 4,DHA Phase 4,DH4,phase,,false,D11 p6 gazetteer (Phase 4; code range DH1…DH8),display_name;code
+dha-ph5,dha,sub_area,Phase 5,DHA Phase 5,DH5,phase,,false,D11 p6 gazetteer (Phase 5; code range DH1…DH8),display_name;code
+dha-ph6,dha,sub_area,Phase 6,DHA Phase 6,DH6,phase,,false,D11 p6 gazetteer (Phase 6; code range DH1…DH8); D11 p7 alias table,display_name;code
+dha-ph7,dha,sub_area,Phase 7,DHA Phase 7,DH7,phase,,false,D11 p6 gazetteer (Phase 7; code range DH1…DH8),display_name;code
+dha-ph7x,dha,sub_area,Phase 7 Ext,DHA Phase 7 Ext,D7X,phase,,false,D11 p6 gazetteer (7 Ext; code D7X),display_name
+dha-ph8,dha,sub_area,Phase 8,DHA Phase 8,DH8,phase,,false,D11 p6 gazetteer (Phase 8; code range DH1…DH8),display_name;code
+dha-ph5-badar,dha-ph5,zone,Badar Commercial,Badar Commercial,,zone,,true,D11 p6 gazetteer (Ph 5 zones); D11 p12 DH5-101,display_name
+dha-ph5-tauheed,dha-ph5,zone,Tauheed Commercial,Tauheed Commercial,,zone,,true,D11 p6 gazetteer (Ph 5 zones),display_name
+dha-ph5-zamzama,dha-ph5,zone,Zamzama Commercial,Zamzama Commercial,,zone,,true,D11 p6 gazetteer (Ph 5 zones),display_name
+dha-ph5-khadda,dha-ph5,zone,Khadda Market,Khadda Market,,zone,,true,D11 p6 gazetteer (Ph 5 zones),display_name
+dha-ph6-bukhari,dha-ph6,zone,Bukhari Commercial,Bukhari Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones); D11 p7 alias table; D11 p12 DH6-108,display_name
+dha-ph6-ittehad,dha-ph6,zone,Ittehad Commercial,Ittehad Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones),display_name
+dha-ph6-muslim,dha-ph6,zone,Muslim Commercial,Muslim Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones),display_name
+dha-ph6-nishat,dha-ph6,zone,Nishat Commercial,Nishat Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones),display_name
+dha-ph6-shahbaz,dha-ph6,zone,Shahbaz Commercial,Shahbaz Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones),display_name
+dha-ph6-sehar,dha-ph6,zone,Sehar Commercial,Sehar Commercial,,zone,,true,D11 p6 gazetteer (Ph 6 zones),display_name
+dhc,khi,area,DHA City Karachi,DHA City Karachi,DHC,,,false,D11 p6 gazetteer; D11 p7 alias table,display_name
+dhc-s8,dhc,sub_area,Sector 8,DHA City Karachi Sector 8,,sector,,false,D11 p6 gazetteer (demo sectors 8 and 13); D11 p13 DHC-101,display_name
+dhc-s13,dhc,sub_area,Sector 13,DHA City Karachi Sector 13,,sector,,false,D11 p6 gazetteer (demo sectors 8 and 13),display_name
+clf,khi,area,Clifton,Clifton,CLF,,,false,D11 p1; D11 p6 gazetteer,display_name
+clf-b1,clf,sub_area,Block 1,Clifton Block 1,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+clf-b2,clf,sub_area,Block 2,Clifton Block 2,,block,,false,D11 p6 gazetteer (Block 1–9); D11 p12 CLF-102/103,display_name
+clf-b3,clf,sub_area,Block 3,Clifton Block 3,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+clf-b4,clf,sub_area,Block 4,Clifton Block 4,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+clf-b5,clf,sub_area,Block 5,Clifton Block 5,,block,,false,D11 p6 gazetteer (Block 1–9); D11 p7 alias table; D11 p12 CLF-101,display_name
+clf-b6,clf,sub_area,Block 6,Clifton Block 6,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+clf-b7,clf,sub_area,Block 7,Clifton Block 7,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+clf-b8,clf,sub_area,Block 8,Clifton Block 8,,block,,false,D11 p6 gazetteer (Block 1–9); D11 p12 CLF-104,display_name
+clf-b9,clf,sub_area,Block 9,Clifton Block 9,,block,,false,D11 p6 gazetteer (Block 1–9),display_name
+btk,khi,area,Bahria Town Karachi,Bahria Town Karachi,BTK,,,false,D11 p6 gazetteer; D11 p7 alias table,display_name
+btk-p1,btk,sub_area,Precinct 1,Bahria Precinct 1,,precinct,,false,D11 p6 gazetteer (demo precincts 1/10/27/31); D11 p13 BTK-103,display_name
+btk-p10,btk,sub_area,Precinct 10,Bahria Precinct 10,,precinct,,false,D11 p6 gazetteer (demo precincts 1/10/27/31); D11 p13 BTK-101,display_name
+btk-p27,btk,sub_area,Precinct 27,Bahria Precinct 27,,precinct,,false,D11 p6 gazetteer (demo precincts 1/10/27/31); D11 p7 alias table; D11 p13 BTK-102,display_name
+btk-p31,btk,sub_area,Precinct 31,Bahria Precinct 31,,precinct,,false,D11 p6 gazetteer (demo precincts 1/10/27/31); D11 p13 BTK-104,display_name
+btk-heights,btk,sub_area,Bahria Heights,Bahria Heights,,,,false,D11 p6 gazetteer (named sub-area); D11 p13 BTK-105,display_name
+btk-sports-city,btk,sub_area,Bahria Sports City,Bahria Sports City,,,,false,D11 p6 gazetteer (named sub-area); D11 p13 BTK-106,display_name
+gli,khi,area,Gulshan-e-Iqbal,Gulshan-e-Iqbal,GLI,,,false,D11 p6 gazetteer,display_name
+gli-b6,gli,sub_area,Block 6,Gulshan-e-Iqbal Block 6,,block,,false,D11 p6 gazetteer (demo blocks 6 and 13); D11 p13 GLI-101,display_name
+gli-b13,gli,sub_area,Block 13,Gulshan-e-Iqbal Block 13,,block,,false,D11 p6 gazetteer (demo blocks 6 and 13); D11 p7 alias table; D11 p14 PRJ-P2,display_name
+pec,khi,area,PECHS,PECHS,PEC,,,false,D11 p6 gazetteer,display_name
+pec-b2,pec,sub_area,Block 2,PECHS Block 2,,block,,false,D11 p6 gazetteer (Block 2 and 6),display_name
+pec-b6,pec,sub_area,Block 6,PECHS Block 6,,block,,false,D11 p6 gazetteer (Block 2 and 6); D11 p12 PEC-101; Demo Scope p6,display_name
+pec-tariq-road,pec,zone,Tariq Road,Tariq Road,,zone,,false,D11 p6 gazetteer (Tariq Road zone under PECHS),display_name
+nnz,khi,area,North Nazimabad,North Nazimabad,NNZ,,,false,D11 p6 gazetteer,display_name
+nnz-bh,nnz,sub_area,Block H,North Nazimabad Block H,,block,,false,D11 p6 gazetteer (demo blocks H and L); D11 p14 NNZ-101,display_name
+nnz-bl,nnz,sub_area,Block L,North Nazimabad Block L,,block,,false,D11 p6 gazetteer (demo blocks H and L),display_name
+shf,khi,area,Shahrah-e-Faisal,Shahrah-e-Faisal,SHF,corridor,,false,D11 p6 gazetteer (corridor treated as AREA); Demo Scope p6,display_name;level_label
