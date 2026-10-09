@@ -1,0 +1,86 @@
+location_key,alias,context_key,kind,weight,source,derived
+dha-ph6,dha 6,,common,1,D11 p7 §3.3,
+dha-ph6,dha phase 6,,common,1,D11 p7 §3.3,
+dha-ph6,defence 6,,common,1,D11 p7 §3.3,
+dha-ph6,defence phase vi,,common,1,D11 p7 §3.3,
+dha-ph6,phase 6 dha,,common,1,D11 p7 §3.3,
+dha-ph6,dha ph6,,common,1,D11 p7 §3.3,
+dha-ph6,dha chay,,common,1,D11 p7 §3.3,
+dha-ph6,d6,,common,1,D11 p7 §3.3,
+dha-ph6,p6,dha,common,1,R17 p4 §3.2 (context alias: p6 -> DHA Phase 6 when the context is DHA),
+dha-ph6,phase 6,dha,common,1,R17 p4 §3.2 (context alias: phase 6 -> DHA Phase 6 when the context is DHA),
+dha-ph2x,dha 2 ext,,common,1,D11 p7 §3.3,
+dha-ph2x,phase 2 extension,,common,1,D11 p7 §3.3,
+dha-ph2x,2 ext,,common,1,D11 p7 §3.3,
+dha-ph2x,do extension,,common,1,D11 p7 §3.3,
+dhc,dha city,,common,1,D11 p7 §3.3,
+dhc,dck,,common,1,D11 p7 §3.3,
+dhc,dha city karachi,,common,1,D11 p7 §3.3,
+dhc,superhighway dha,,common,1,D11 p7 §3.3,
+clf-b5,clifton 5,,common,1,D11 p7 §3.3,
+clf-b5,block 5 clifton,,common,1,D11 p7 §3.3,
+clf-b5,kliftan 5,,common,1,D11 p7 §3.3,
+clf,klifton,,common,1,"R17 p5 §3.4 (""Klifton"" auto-resolves to Clifton)",
+btk,bahria,,common,1,D11 p7 §3.3,
+btk,bahria town,,common,1,D11 p7 §3.3,
+btk,btk,,common,1,D11 p7 §3.3,
+btk,bahria karachi,,common,1,D11 p7 §3.3,
+btk,bahria town karachi,,common,1,D11 p7 §3.3,
+btk-p27,p27,,common,1,D11 p7 §3.3,
+btk-p27,precinct 27,,common,1,D11 p7 §3.3,
+btk-p27,bahria 27,,common,1,D11 p7 §3.3,
+dha-ph6-bukhari,bukhari,,common,1,D11 p7 §3.3,
+dha-ph6-bukhari,bukhari comm,,common,1,D11 p7 §3.3,
+dha-ph6-bukhari,bukhari commercial,,common,1,D11 p7 §3.3,
+dha-ph6-bukhari,ph 6 bukhari,,common,1,D11 p7 §3.3,
+gli-b13,gulshan 13,,common,1,D11 p7 §3.3,
+gli-b13,gulshan block 13,,common,1,D11 p7 §3.3,
+gli-b13,gulshan-e-iqbal 13,,common,1,D11 p7 §3.3,
+khi,karachi,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha,dha defence,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph1,phase 1,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph2,phase 2,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph2x,phase 2 ext,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph4,phase 4,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph5,phase 5,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6,phase 6,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph7,phase 7,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph7x,phase 7 ext,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph8,phase 8,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph5-badar,badar commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph5-tauheed,tauheed commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph5-zamzama,zamzama commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph5-khadda,khadda market,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6-ittehad,ittehad commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6-muslim,muslim commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6-nishat,nishat commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6-shahbaz,shahbaz commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dha-ph6-sehar,sehar commercial,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dhc-s8,sector 8,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+dhc-s13,sector 13,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf,clifton,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b1,block 1,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b2,block 2,clf,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b3,block 3,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b4,block 4,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b5,block 5,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b6,block 6,clf,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b7,block 7,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b8,block 8,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+clf-b9,block 9,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-p1,precinct 1,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-p10,precinct 10,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-p31,precinct 31,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-heights,bahria heights,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-sports-city,bahria sports city,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+gli,gulshan-e-iqbal,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+gli-b6,block 6,gli,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+gli-b13,block 13,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+pec,pechs,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+pec-b2,block 2,pec,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+pec-b6,block 6,pec,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+pec-tariq-road,tariq road,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+nnz,north nazimabad,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+nnz-bh,block h,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+nnz-bl,block l,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+shf,shahrah-e-faisal,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)

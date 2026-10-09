@@ -10,6 +10,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
 COPY migrations ./migrations
+# Fictional demo dataset read by the seed loader (python -m app.seed); data only.
+COPY demo ./demo
 
 RUN useradd --create-home appuser
 USER appuser
