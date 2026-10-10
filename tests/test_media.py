@@ -155,7 +155,7 @@ def test_stageable_messages():
     assert media.is_stageable("image", None)
     assert media.is_stageable("document", "image/jpeg")
     assert not media.is_stageable("document", "application/pdf")
-    assert not media.is_stageable("audio", "audio/ogg")
+    assert not media.is_stageable("audio", "audio/ogg")  # app.audio stages audio
     assert not media.is_stageable("sticker", "image/webp")
 
 

@@ -2,7 +2,8 @@
 adds fetch_media (app.media), enqueued here for staff photos; Task 4.2 adds
 media_link_fallback, enqueued by reconcile_status for a failed image by ID;
 Task 5.2 adds carousel_fallback (app.cards), enqueued by reconcile_status for an
-accepted carousel that failed before delivery.
+accepted carousel that failed before delivery. Task 5.3 adds fetch_audio
+(app.audio), enqueued here for every inbound audio message.
 Task 5.1: process_message runs one coalesced turn (app.orchestrator) instead of
 the echo bot. Task 5.2: staff "#demo carousel | cards | card | fallback …"
 (app.cards), and inbound messages keep the WAMID they quote (context_wamid).
@@ -17,7 +18,7 @@ import logging
 from contextlib import closing
 from datetime import UTC, datetime
 
-from app import cards, echo, media, orchestrator, outbound, whatsapp
+from app import audio, cards, echo, media, orchestrator, outbound, whatsapp
 from app.db import tenant_transaction
 from app.queue import PermanentJobError
 
@@ -140,13 +141,18 @@ def record_event(conn, agency_id, inbound_event_id):
             media.stage_inbound_media(
                 conn, conversation_id, row[0], sender, media_id, inbound_event_id
             )
+        if media_id and audio.is_stageable(message_type):
+            audio.stage_inbound_audio(
+                conn, conversation_id, row[0], media_id, message["audio"].get("voice"),
+                inbound_event_id,
+            )
     return conversation_id, message, phone_number_id
 
 
 def make_handlers(settings, *, client_factory=None, image_link=None, storage=None):
     """Build the job handlers. process_message is only registered when sending is
     configured, so its jobs wait (pending) instead of failing without a token;
-    fetch_media also needs the bucket and its public URL."""
+    fetch_media also needs the bucket and its public URL; fetch_audio the bucket."""
 
     handlers = {"reconcile_status": reconcile_status}
     if client_factory is None:
@@ -181,6 +187,12 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         cards.carousel_fallback(conn, job, client_factory)
 
     handlers[cards.FALLBACK_JOB_TYPE] = carousel_fallback
+
+    if storage is not None:
+        def fetch_voice(conn, job):
+            audio.fetch_audio(conn, job, client_factory, storage)
+
+        handlers[audio.JOB_TYPE] = fetch_voice
 
     public_base = media.public_base_url(settings)
     if storage is None or public_base is None:
