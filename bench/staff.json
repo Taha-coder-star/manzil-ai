@@ -1,0 +1,601 @@
+[
+  {
+    "id": "ST-01",
+    "set": "staff",
+    "category": "new_full",
+    "language": "en",
+    "input": "New house DHA Phase 6, 500 yard, 4 bed 5 bath, demand 8 crore, available, owner direct",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "New house DHA Phase 6, 500 yard, 4 bed 5 bath, demand 8 crore, available, owner direct"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "house",
+        "location_key": "dha-ph6",
+        "price_pkr": 80000000,
+        "area_value": 500,
+        "area_unit": "sq_yd",
+        "size_nominal_sqyd": 500,
+        "bedrooms": 4,
+        "bathrooms": 5,
+        "source_type": "owner_direct"
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": [],
+      "expected_code": "DH6-109",
+      "photos": 3
+    }
+  },
+  {
+    "id": "ST-02",
+    "set": "staff",
+    "category": "new_full",
+    "language": "roman_urdu",
+    "input": "Bahria precinct 10 mein 125 gaz ka ghar sale ke liye, 3 bed 3 bath, 1 crore 5 lakh demand",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Bahria precinct 10 mein 125 gaz ka ghar sale ke liye, 3 bed 3 bath, 1 crore 5 lakh demand"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "house",
+        "location_key": "btk-p10",
+        "price_pkr": 10500000,
+        "area_value": 125,
+        "area_unit": "sq_yd",
+        "size_nominal_sqyd": 125,
+        "bedrooms": 3,
+        "bathrooms": 3
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": [
+        "BTK-101"
+      ]
+    }
+  },
+  {
+    "id": "ST-03",
+    "set": "staff",
+    "category": "new_full",
+    "language": "mixed",
+    "input": "Rent: PECHS block 2 office 1800 sqft, 5 lakh monthly, 2 parking",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Rent: PECHS block 2 office 1800 sqft, 5 lakh monthly, 2 parking"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "rent",
+        "property_type": "office",
+        "location_key": "pec-b2",
+        "price_pkr": 500000,
+        "area_value": 1800,
+        "area_unit": "sq_ft",
+        "parking_spaces": 2
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-04",
+    "set": "staff",
+    "category": "new_full",
+    "language": "en",
+    "input": "Shop for rent in Clifton block 5, 350 sq ft, 2.5 lakh per month",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Shop for rent in Clifton block 5, 350 sq ft, 2.5 lakh per month"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "rent",
+        "property_type": "shop",
+        "location_key": "clf-b5",
+        "price_pkr": 250000,
+        "area_value": 350,
+        "area_unit": "sq_ft"
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-05",
+    "set": "staff",
+    "category": "new_full",
+    "language": "roman_urdu",
+    "input": "Gulshan block 13 mein 2 bed flat sale pe, 950 sq ft, 85 lakh",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Gulshan block 13 mein 2 bed flat sale pe, 950 sq ft, 85 lakh"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "apartment",
+        "location_key": "gli-b13",
+        "price_pkr": 8500000,
+        "area_value": 950,
+        "area_unit": "sq_ft",
+        "bedrooms": 2
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-06",
+    "set": "staff",
+    "category": "new_full",
+    "language": "mixed",
+    "input": "DHA City sector 13 mein 500 yd plot for sale, 1 crore 30 lakh",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "DHA City sector 13 mein 500 yd plot for sale, 1 crore 30 lakh"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "plot",
+        "location_key": "dhc-s13",
+        "price_pkr": 13000000,
+        "area_value": 500,
+        "area_unit": "sq_yd",
+        "size_nominal_sqyd": 500
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-07",
+    "set": "staff",
+    "category": "new_missing",
+    "language": "roman_urdu",
+    "input": "Phase 7 mein ghar hai sale ka, 500 gaz",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Phase 7 mein ghar hai sale ka, 500 gaz"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "house",
+        "location_key": "dha-ph7",
+        "area_value": 500,
+        "area_unit": "sq_yd",
+        "size_nominal_sqyd": 500
+      },
+      "missing": [
+        "bedrooms",
+        "price_pkr"
+      ],
+      "save_allowed": false,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-08",
+    "set": "staff",
+    "category": "new_missing",
+    "language": "en",
+    "input": "Office for rent on Shahrah-e-Faisal, 3 lakh monthly",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Office for rent on Shahrah-e-Faisal, 3 lakh monthly"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "rent",
+        "property_type": "office",
+        "location_key": "shf",
+        "price_pkr": 300000
+      },
+      "missing": [
+        "area_value"
+      ],
+      "save_allowed": false,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-09",
+    "set": "staff",
+    "category": "new_missing",
+    "language": "mixed",
+    "input": "3 bed flat, 1800 sq ft, 4.5 crore",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "3 bed flat, 1800 sq ft, 4.5 crore"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "apartment",
+        "price_pkr": 45000000,
+        "area_value": 1800,
+        "area_unit": "sq_ft",
+        "bedrooms": 3
+      },
+      "missing": [
+        "location_key"
+      ],
+      "save_allowed": false,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-10",
+    "set": "staff",
+    "category": "update_by_id",
+    "language": "en",
+    "input": "#DH6-102 price 7.8 crore",
+    "expected_tools": [
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "DH6-102",
+          "changes": {
+            "price_pkr": 78000000
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "DH6-102",
+      "changes": {
+        "price_pkr": 78000000
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-11",
+    "set": "staff",
+    "category": "update_by_id",
+    "language": "roman_urdu",
+    "input": "DH8-102 sold ho gaya",
+    "expected_tools": [
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "DH8-102",
+          "changes": {
+            "status": "sold"
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "DH8-102",
+      "changes": {
+        "status": "sold"
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-12",
+    "set": "staff",
+    "category": "update_by_id",
+    "language": "roman_urdu",
+    "input": "BTK-105 ka rent 48k kar do",
+    "expected_tools": [
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "BTK-105",
+          "changes": {
+            "price_pkr": 48000
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "BTK-105",
+      "changes": {
+        "price_pkr": 48000
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-13",
+    "set": "staff",
+    "category": "update_by_id",
+    "language": "en",
+    "input": "#CLF-103 reserved",
+    "expected_tools": [
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "CLF-103",
+          "changes": {
+            "status": "reserved"
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "CLF-103",
+      "changes": {
+        "status": "reserved"
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-14",
+    "set": "staff",
+    "category": "update_single_match",
+    "language": "roman_urdu",
+    "input": "North Nazimabad wala portion rent ho gaya",
+    "expected_tools": [
+      {
+        "name": "find_listings",
+        "args": {
+          "description": "North Nazimabad wala portion"
+        }
+      },
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "NNZ-101",
+          "changes": {
+            "status": "rented"
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "NNZ-101",
+      "changes": {
+        "status": "rented"
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-15",
+    "set": "staff",
+    "category": "update_single_match",
+    "language": "roman_urdu",
+    "input": "Sports City wala plot ab 1.5 crore ka hai",
+    "expected_tools": [
+      {
+        "name": "find_listings",
+        "args": {
+          "description": "Sports City wala plot"
+        }
+      },
+      {
+        "name": "propose_update",
+        "args": {
+          "target": "BTK-106",
+          "changes": {
+            "price_pkr": 15000000
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "update",
+      "listing": "BTK-106",
+      "changes": {
+        "price_pkr": 15000000
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-16",
+    "set": "staff",
+    "category": "update_multiple_matches",
+    "language": "roman_urdu",
+    "input": "DHA 6 wala ghar sold",
+    "expected_tools": [
+      {
+        "name": "find_listings",
+        "args": {
+          "description": "DHA 6 wala ghar"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "disambiguate",
+      "candidates": [
+        "DH6-101",
+        "DH6-102",
+        "DH6-103",
+        "DH6-104"
+      ],
+      "allowed": [
+        "DH6-106",
+        "DH6-109"
+      ],
+      "changes": {
+        "status": "sold"
+      },
+      "confirm_required": true,
+      "note": "Scenario 4c: the list includes DH6-109 once ST-01 is saved; only the chosen one is marked."
+    }
+  },
+  {
+    "id": "ST-17",
+    "set": "staff",
+    "category": "update_multiple_matches",
+    "language": "roman_urdu",
+    "input": "Bahria wale 250 gaz ghar ka price 3 crore kar do",
+    "expected_tools": [
+      {
+        "name": "find_listings",
+        "args": {
+          "description": "Bahria wale 250 gaz ghar"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "disambiguate",
+      "candidates": [
+        "BTK-103",
+        "BTK-104"
+      ],
+      "allowed": [],
+      "changes": {
+        "price_pkr": 30000000
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-18",
+    "set": "staff",
+    "category": "update_multiple_matches",
+    "language": "mixed",
+    "input": "Phase 8 project wale flat ki price 2.6 crore",
+    "expected_tools": [
+      {
+        "name": "find_listings",
+        "args": {
+          "description": "Phase 8 project wale flat"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "disambiguate",
+      "candidates": [
+        "PRJ-101",
+        "PRJ-102"
+      ],
+      "allowed": [],
+      "changes": {
+        "price_pkr": 26000000
+      },
+      "confirm_required": true
+    }
+  },
+  {
+    "id": "ST-19",
+    "set": "staff",
+    "category": "bahria_marla",
+    "language": "roman_urdu",
+    "input": "Bahria precinct 10 mein 250 gaz villa sale pe, asal 272 gaz, 4 bed 4 bath, 3.1 crore",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Bahria precinct 10 mein 250 gaz villa sale pe, asal 272 gaz, 4 bed 4 bath, 3.1 crore"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "house",
+        "location_key": "btk-p10",
+        "price_pkr": 31000000,
+        "area_value": 272,
+        "area_unit": "sq_yd",
+        "size_nominal_sqyd": 250,
+        "bedrooms": 4,
+        "bathrooms": 4
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  },
+  {
+    "id": "ST-20",
+    "set": "staff",
+    "category": "bahria_marla",
+    "language": "mixed",
+    "input": "Gulshan block 6 mein 10 marla ghar for sale, 3 bed 3 bath, 2.2 crore",
+    "expected_tools": [
+      {
+        "name": "draft_listing",
+        "args": {
+          "raw_text": "Gulshan block 6 mein 10 marla ghar for sale, 3 bed 3 bath, 2.2 crore"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "draft",
+      "fields": {
+        "purpose": "sale",
+        "property_type": "house",
+        "location_key": "gli-b6",
+        "price_pkr": 22000000,
+        "area_value": 10,
+        "area_unit": "marla",
+        "size_nominal_sqyd": 250,
+        "bedrooms": 3,
+        "bathrooms": 3
+      },
+      "missing": [],
+      "save_allowed": true,
+      "duplicate_of": []
+    }
+  }
+]

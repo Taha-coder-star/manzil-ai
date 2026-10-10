@@ -1,0 +1,122 @@
+[
+  {
+    "id": "VC-01",
+    "set": "control",
+    "category": "silent",
+    "language": null,
+    "script": null,
+    "gold_transcript": {
+      "roman": "",
+      "native": ""
+    },
+    "recording": {
+      "speaker": "S1",
+      "phone": "android_low",
+      "noise": "quiet",
+      "target_seconds": 5
+    },
+    "note": "Silence: hold the phone still, say nothing.",
+    "gold_extraction": {},
+    "expected_tools": [],
+    "expected_outcome": {
+      "type": "fallback",
+      "note": "Graceful fallback; zero hallucinated requirements (R16 4.2)."
+    }
+  },
+  {
+    "id": "VC-02",
+    "set": "control",
+    "category": "near_silent",
+    "language": null,
+    "script": null,
+    "gold_transcript": {
+      "roman": "",
+      "native": ""
+    },
+    "recording": {
+      "speaker": "S2",
+      "phone": "android_mid",
+      "noise": "moderate",
+      "target_seconds": 8
+    },
+    "note": "Room tone only (fan / distant traffic), no speech.",
+    "gold_extraction": {},
+    "expected_tools": [],
+    "expected_outcome": {
+      "type": "fallback",
+      "note": "Graceful fallback; zero hallucinated requirements (R16 4.2)."
+    }
+  },
+  {
+    "id": "VC-03",
+    "set": "control",
+    "category": "music",
+    "language": null,
+    "script": null,
+    "gold_transcript": {
+      "roman": "",
+      "native": ""
+    },
+    "recording": {
+      "speaker": "S3",
+      "phone": "iphone",
+      "noise": "moderate",
+      "target_seconds": 15
+    },
+    "note": "Instrumental music played near the phone, no lyrics.",
+    "gold_extraction": {},
+    "expected_tools": [],
+    "expected_outcome": {
+      "type": "fallback",
+      "note": "Graceful fallback; zero hallucinated requirements (R16 4.2)."
+    }
+  },
+  {
+    "id": "VC-04",
+    "set": "control",
+    "category": "other_language",
+    "language": "pa",
+    "script": "Sat Sri Akal ji, tusi kiwen o? Mainu kal milna ae.",
+    "gold_transcript": {
+      "roman": "Sat Sri Akal ji, tusi kiwen o? Mainu kal milna ae.",
+      "native": "Sat Sri Akal ji, tusi kiwen o? Mainu kal milna ae."
+    },
+    "recording": {
+      "speaker": "S4",
+      "phone": "android_low",
+      "noise": "quiet",
+      "target_seconds": 6
+    },
+    "note": "Punjabi small talk with no property details.",
+    "gold_extraction": {},
+    "expected_tools": [],
+    "expected_outcome": {
+      "type": "fallback",
+      "note": "Graceful fallback; zero hallucinated requirements (R16 4.2)."
+    }
+  },
+  {
+    "id": "VC-05",
+    "set": "control",
+    "category": "over_120_s",
+    "language": null,
+    "script": null,
+    "gold_transcript": {
+      "roman": "",
+      "native": ""
+    },
+    "recording": {
+      "speaker": "S5",
+      "phone": "android_mid",
+      "noise": "quiet",
+      "target_seconds": 130
+    },
+    "note": "Read any long fictional listing description for over 2 minutes.",
+    "gold_extraction": {},
+    "expected_tools": [],
+    "expected_outcome": {
+      "type": "truncated",
+      "note": "Graceful fallback; zero hallucinated requirements (R16 4.2)."
+    }
+  }
+]
