@@ -1,34 +1,41 @@
 # Task 5.2 carousel: status and production runbook
 
 Design and rules: docs/DECISIONS.md (Task 5.2 entries), docs/STATE_SCHEMA.md (migration 011),
-app/cards.py. This file separates what was verified locally from what is still pending in
-production. docs/PROJECT_STATE.md and docs/TASK_LOG.md are not updated by Task 5.2: on `main` they
+app/cards.py. This file records what was verified locally, what is done in production and what is
+still pending. docs/PROJECT_STATE.md and docs/TASK_LOG.md are not updated by Task 5.2: on `main` they
 currently start with pasted chat text and need their own clean-up first.
 
 ## 1. Status (2026-10-10)
 
-### Verified locally (worktree, branch feature/task-5-2-carousel, uncommitted)
+### Verified locally (PR #22, merged as `ffeb311`)
 
 - Full suite in Docker (manzil-ai:test, Python 3.12) against the disposable PostgreSQL 18.6
-  container, `REQUIRE_DATABASE_TESTS=1`, worktree mounted by its absolute path:
-  - before the final-review fixes: **1067 passed, 0 skipped, 0 failed**;
-  - after them (stable turn plan, carousel_fallback job, docs): **1076 passed, 0 skipped,
-    0 failed** (the count matches `pytest --collect-only` of the worktree).
-- Ruff, `git diff --check` and Gitleaks 8.24.2 (changed and new files) clean.
-- Migration 011 applied only to disposable test schemas. Migrations 001-010 are byte-identical
-  to `origin/main`.
-- All WhatsApp sends in tests go to a fake client. No Meta, S3, AWS or RDS call was made.
+  container, `REQUIRE_DATABASE_TESTS=1`, worktree mounted by its absolute path: 1067 passed
+  before the final-review fixes, **1076 passed, 0 skipped, 0 failed** after them (the count
+  matches `pytest --collect-only`). CI green on push and pull request.
+- Ruff, `git diff --check` and Gitleaks 8.24.2 clean.
 
-### Pending (each needs the owner's explicit approval)
+### Production (owner-run 2026-10-10; outputs reviewed in the Claude session)
 
-| Step | State |
+| Step | Result |
 |---|---|
-| Commit, PR, review, merge | not started |
-| RDS snapshot, then migration 011 on RDS (section 3) | **not applied**; RDS has 001-010 |
-| Release image with Task 5.2 code; web / worker replaced | not built, not deployed |
-| Pilot cover rows: DH6-101 and PRJ-103 each have `cover_media_id` set, the cover row has `card_image_key` and `public_url_card`, 4 media rows each | reported by the owner after the Task 4.4 load; **not verified** |
-| Anonymous checks: both cover card URLs answer `200 image/jpeg`; the 16 private copies answer 4xx (docs/DEMO_MEDIA_RUNBOOK.md) | **not done / not recorded** |
-| Device test on Android, iPhone, WhatsApp Web (section 4) | **not done** (gate M1(e)) |
+| RDS snapshot | `manzil-pre-011-2026-10-10` available (created 16:25 UTC) |
+| Release | `manzil-ai:5.2-ffeb311` (`sha256:7edcb465...`), a layer on `manzil-ai:5.1-5cb438b` (`sha256:f4225785...`) adding `app/`, `demo/` and migration 011; image migrations 001-010 byte-identical to the running image, 011 = `46feecf7...e237`; runs as appuser. Rollback image `manzil-ai:pre-5.2` |
+| Migration 011 on RDS | `1 applied, 10 skipped`; repeat `0 applied, 11 skipped` |
+| web / worker | both running the release image; `/health` 200; no errors in the logs; staff `#demo buttons` and `#demo fallback off` answered |
+| Pilot cover rows | DH6-101 and PRJ-103: active, cover set with a card derivative, 4 media rows each |
+| Anonymous card URLs | both covers `200 image/jpeg` |
+| Device test, first client (type not recorded) | `#demo carousel` rendered as swipeable cards with images. Taps arrived as `type: button` with `button.payload` = our id (e.g. `photos:DH6-101`), which 5.2 did not read: the stub fell back to the generic staff reply. Fixed by the follow-up (tap ids from `button.payload`) |
+
+### Still pending
+
+- Deploy the button-tap fix, then repeat the tap check.
+- Name the first client and test the other two (Android, iPhone, WhatsApp Web / Desktop): render,
+  taps, crop, DEMO mark, `#demo card`, `#demo cards`, fallback on a client that does not render
+  (gate M1(e)).
+- Task 4.4 private-copy check (16 x 4xx expected), then delete `s3://<media bucket>/staging/task52/`
+  (and `staging/task44/`); keep `manzil-ai:pre-5.2` until the device test passes; decide when to
+  drop the snapshot.
 
 ## 2. Send outcomes (what the code does)
 
@@ -87,8 +94,8 @@ On each client (Android, iPhone, WhatsApp Web / Desktop), from an allowlisted st
 1. `#demo fallback off`, then `#demo carousel`: record rendered / not rendered, crop of the
    1.91:1 card image, and that the DEMO mark is visible.
 2. Tap More photos and Visit / Details on each card: the stub names the right action and listing.
-   Record the webhook's interactive type for a carousel tap (not documented by Meta; the code
-   reads `interactive.<type>.id`).
+   A carousel tap arrives as `type: button` with `button.payload` = the id (seen 2026-10-10; not
+   in Meta's carousel docs); reply-button and list taps arrive as `interactive`.
 3. `#demo card`: one image card with three buttons.
 4. `#demo cards`: summary text plus one image card per listing.
 5. On a client that does not render the carousel: `#demo fallback on`, then `#demo carousel`

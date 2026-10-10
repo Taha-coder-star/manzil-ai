@@ -334,9 +334,14 @@ def text(wamid, body, *, sender=ADMIN):
 
 
 def tap(wamid, reply_id, *, kind="button_reply", sender=CUSTOMER, context="wamid.OUT1"):
-    return {"from": sender, "id": wamid, "timestamp": str(int(time.time())),
-            "context": {"from": "15550009999", "id": context},
-            "type": "interactive",
+    """A tap webhook. kind "button" is a carousel quick reply, in the shape a real
+    device delivered on 2026-10-10 (Meta's carousel docs do not show it)."""
+    message = {"from": sender, "id": wamid, "timestamp": str(int(time.time())),
+               "context": {"from": "15550009999", "id": context}}
+    if kind == "button":
+        return {**message, "type": "button",
+                "button": {"text": "More photos", "payload": reply_id}}
+    return {**message, "type": "interactive",
             "interactive": {"type": kind, kind: {"id": reply_id, "title": "More photos"}}}
 
 
@@ -684,6 +689,8 @@ def test_the_fallback_job_goes_through_the_send_time_gate(demo):
     ("visit:PRJ-103", "button_reply", "Visit / Details for PRJ-103 (stub)"),
     ("similar:DH6-101", "button_reply", "Similar listings for DH6-101 (stub)"),
     ("listing:DH6-104", "list_reply", "Details for DH6-104 (stub)"),
+    ("photos:DH6-101", "button", "More photos for DH6-101 (stub)"),
+    ("visit:PRJ-103", "button", "Visit / Details for PRJ-103 (stub)"),
 ])
 def test_a_card_tap_gets_a_stub_naming_the_action(demo, reply_id, kind, expected):
     demo.deliver(tap("wamid.T1", reply_id, kind=kind))
@@ -692,16 +699,29 @@ def test_a_card_tap_gets_a_stub_naming_the_action(demo, reply_id, kind, expected
     assert body(payload) == f"{expected} · coming in a later task"
     assert demo.query("SELECT message_type, text_body, context_wamid FROM message "
                       "WHERE provider_message_id = 'wamid.T1'") == [
-        ("interactive", "More photos", "wamid.OUT1"),
+        ("button" if kind == "button" else "interactive", "More photos", "wamid.OUT1"),
     ]
+
+
+def test_a_tap_on_a_sent_carousel_card_names_that_card(demo):
+    demo.deliver(text("wamid.S1", "#demo carousel"))
+    [(_, carousel)] = demo.client.sent
+    deck = carousel["interactive"]["action"]["cards"]
+    reply_id = deck[1]["action"]["buttons"][0]["quick_reply"]["id"]
+    assert reply_id == "photos:PRJ-103"
+    demo.deliver(tap("wamid.T1", reply_id, kind="button", sender=ADMIN))
+    assert body(demo.client.sent[-1][1]) == (
+        "More photos for PRJ-103 (stub) · coming in a later task"
+    )
 
 
 @pytest.mark.parametrize("reply_id", [
     "photos:<b>DH6-101</b>", "photos:dh6-101", "photos:DH6-101\n", "delete:DH6-101",
     "demo_btn_1", "",
 ])
-def test_other_tap_ids_are_never_echoed(demo, reply_id):
-    demo.deliver(tap("wamid.T1", reply_id, sender=AGENT))
+@pytest.mark.parametrize("kind", ["button_reply", "button"])
+def test_other_tap_ids_are_never_echoed(demo, reply_id, kind):
+    demo.deliver(tap("wamid.T1", reply_id, kind=kind, sender=AGENT))
     assert demo.client.sent == [(AGENT, whatsapp.text(
         "Staff mode (stub) · 1 message in this turn"
     ))]

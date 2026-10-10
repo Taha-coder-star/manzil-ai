@@ -64,7 +64,7 @@ class TurnMessage:
     text: str | None
     media_id: str | None
     provider_timestamp: datetime | None
-    reply_id: str | None = None  # id of a tapped button / list row (interactive only)
+    reply_id: str | None = None  # id of a tapped button, list row or carousel quick reply
 
 
 @dataclass(frozen=True)
@@ -127,13 +127,17 @@ def pending_sibling_events(conn, job):
         )]
 
 
-# The message log keeps a tap's title only; its id comes from the stored webhook event
-# (message.interactive.<interactive type>.id: button_reply, list_reply, ...).
+# The message log keeps a tap's title only; its id comes from the stored webhook event:
+# message.interactive.<interactive type>.id for reply buttons and list rows
+# (button_reply, list_reply), and message.button.payload for a carousel quick reply
+# (type "button"; seen on a device 2026-10-10, not in Meta's carousel docs).
 _MESSAGE_COLUMNS = (
     "m.id, m.provider_message_id, m.message_type, m.text_body, m.media_id, "
     "m.provider_timestamp, "
-    "CASE WHEN m.message_type = 'interactive' THEN e.payload #>> ARRAY["
-    "'message', 'interactive', e.payload #>> '{message,interactive,type}', 'id'] END"
+    "CASE m.message_type "
+    "WHEN 'interactive' THEN e.payload #>> ARRAY["
+    "'message', 'interactive', e.payload #>> '{message,interactive,type}', 'id'] "
+    "WHEN 'button' THEN e.payload #>> '{message,button,payload}' END"
 )
 _MESSAGE_COLUMN_COUNT = 7
 # WhatsApp timestamps have one-second resolution: receive time, then WAMID, break ties.
