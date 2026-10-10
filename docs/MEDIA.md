@@ -121,7 +121,7 @@ fallback runs. Customers get "Photo demo is for staff numbers only."
 
 ## Inbound audio (Task 5.3, migration 012)
 
-Sources: RFC voice data flow step 2 ("download within 5 min… store the audio under restricted retention"),
+Sources: RFC voice data flow step 2 ("download within 5 min... store the audio under restricted retention"),
 Execution Plan gate M1(c), R16 section 4 (benchmark voice notes "pulled through the real webhook / media
 path"). `app/audio.py`.
 
@@ -140,3 +140,12 @@ path"). `app/audio.py`.
 Not here: the < 1 s / > 120 s pre-checks, silence detection and STT (C4, Task 6.3, which reads the stored
 object or fetches in-turn); the retention purge (C14). Only `fetch_audio` needs the bucket; it is
 registered even without a public media URL.
+
+Production (2026-10-11, owner-run): RDS snapshot `manzil-pre-012-2026-10-11`; release image
+`manzil-ai:5.3-deb94ba` = `manzil-ai:5.2-8f54bae` + `app/audio.py`, `app/bench_manifest.py`,
+`app/handlers.py` and migration 012 (file hashes checked inside the image; 001-011 byte-identical to the
+running image; runs as appuser), tagged `manzil-ai:latest` (rollback `manzil-ai:pre-5.3`). Migration 012:
+`1 applied, 11 skipped`, repeat `0 applied, 12 skipped`. Live check (gate M1(c)): a team-phone voice note
+got the stub reply and was stored (`audio/ogg`, `is_voice` true, 6.48 s, 14,698 bytes) under
+`tenant/<agency>/audio/<id>.ogg`; an anonymous GET of that object returned 403. `app.bench_manifest`
+listed it with no phone number. Note: `--since` is compared with WhatsApp time in UTC (Karachi is UTC+5).
