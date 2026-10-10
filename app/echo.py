@@ -5,14 +5,40 @@ turn. A staff / admin turn whose last message is "#demo <type>" still gets a
 fictional sample of each outbound message type, so rendering can be checked on
 real phones; customers never reach these. "#demo photo [badid]" (app.handlers)
 sends the sender's own latest staff photo back through the Task 4.2 media cache.
+Task 5.2 (app.handlers, app.cards): "#demo carousel | cards | card" send the
+seeded demo listings as result cards, and "#demo fallback on | off | status"
+sets or shows the sender's own carousel fallback flag. Every reply goes to the
+sender; no command takes a phone number or any other argument.
 All sample content is fictional.
 """
 
 from app import whatsapp
 
-DEMO_TYPES = ("buttons", "list", "location", "cta", "image", "photo")
+DEMO_TYPES = (
+    "buttons", "list", "location", "cta", "image", "photo", "carousel", "cards", "card",
+    "fallback on|off|status",
+)
 PHOTO_VARIANTS = ("", "badid")
 DEMO_IMAGE_CAPTION = "Sample image (DEMO)"
+# The Task 4.4 pilot listings with loaded images (fixed; never taken from the message).
+DEMO_LISTINGS = ("DH6-101", "PRJ-103")
+CARDS_COMMANDS = ("carousel", "cards", "card")
+FALLBACK_OPTIONS = ("on", "off", "status")
+
+
+def cards_command(message):
+    """(kind, option) for "#demo carousel | cards | card" (option None) or
+    "#demo fallback on | off | status", else None. Exact words only."""
+    if message.get("type") != "text":
+        return None
+    words = ((message.get("text") or {}).get("body") or "").strip().lower().split()
+    if words[:1] != ["#demo"]:
+        return None
+    if len(words) == 2 and words[1] in CARDS_COMMANDS:
+        return words[1], None
+    if len(words) == 3 and words[1] == "fallback" and words[2] in FALLBACK_OPTIONS:
+        return "fallback", words[2]
+    return None
 
 
 def photo_command(message):

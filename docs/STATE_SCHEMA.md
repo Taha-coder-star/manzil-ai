@@ -42,6 +42,20 @@ Lowercase CHECK vocabularies, NULL for unknown, application-maintained `updated_
 | control_state | TEXT NOT NULL DEFAULT 'ai_active' | `ai_active`, `handoff_pending`, `human_owned`, `closed` |
 | preferred_language | TEXT NULL | `english`, `roman_urdu`, `urdu`; NULL = unknown |
 | last_modality | TEXT NULL | `text`, `voice`; NULL = unknown |
+| carousel_fallback | BOOLEAN NOT NULL DEFAULT false | Task 5.2, migration 011: results go out as individual cards, not a carousel |
+| carousel_fallback_set_at | TIMESTAMPTZ NULL | last change of the flag (either direction) |
+| carousel_fallback_set_by | UUID NULL | staff member who changed it; composite FK `(agency_id, carousel_fallback_set_by)` -> staff |
+
+**Carousel fallback (Task 5.2, migration 011).** A conversation is one row per `(agency_id,
+customer_wa_id)` for the contact's whole life: 001's UNIQUE key, ingestion only upserts
+(app/handlers.py), and `closed` is a control_state of the same row. So the flag is per contact,
+survives a closed conversation and covers all of the contact's devices (phone and WhatsApp Web share
+it). Typed columns follow preferred_language / last_modality rather than a key in `conversation.state`
+(owner decision 2026-10-10). CHECK `conversation_carousel_fallback_set_check`: a set flag, or a
+recorded setter, has a change time. The runtime keeps its table-level grants (002); FORCE RLS is
+unchanged. Only staff `#demo fallback on|off` writes it in 5.2, and only on the sender's own
+conversation; a client that fails to render a carousel sends no signal, so nothing sets it
+automatically.
 
 `mode` (`ai`, `human`, `paused`) and `ai_muted_until` are unchanged, and **the send gate in
 app/outbound.py still reads `mode`**. control_state is the foundation for Task 11.2.
@@ -91,6 +105,9 @@ modality is derived so rows written by the unchanged `record_inbound` are labell
 `DEFAULT 'text'` would mislabel voice notes. Generated columns are explicitly STORED (PostgreSQL 18
 defaults to VIRTUAL). Other new columns are NULL until their owning task writes them; nothing is
 partially backfilled, so old and new rows stay consistent.
+
+context_wamid is written for inbound messages from Task 5.2 (app/handlers.py, a non-blank
+`context.id`: a swipe-reply or a button tap); rows stored earlier keep NULL.
 
 ### agency
 
@@ -300,5 +317,11 @@ Component C3 (RFC flow steps 2-3, Red-Team R-01). Code: `app/orchestrator.py`, c
   messages and dedupe keys, so nothing is consumed or sent twice.
 - Turn contract for responders (`orchestrator.Turn`): agency / conversation / turn ids, sender
   WhatsApp id, sender_role, route, staff_id, control_state and mode snapshots, and the ordered
-  messages (id, WAMID, type, text, media id, WhatsApp timestamp).
+  messages (id, WAMID, type, text, media id, WhatsApp timestamp, and from Task 5.2 the tapped
+  reply id of an interactive message, read from the stored webhook event because the message log
+  keeps only the title).
+- `reply_plan` (migration 011, Task 5.2): JSONB array, NULL until planned. The staff card commands
+  store their payloads here once, before the first send; a retried or resumed turn sends exactly
+  this list under the same `turn:{id}:{seq}` keys (docs/DECISIONS.md). Grants and RLS are the 010
+  ones.
 

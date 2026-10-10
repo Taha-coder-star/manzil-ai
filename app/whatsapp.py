@@ -34,6 +34,16 @@ ROW_TITLE_MAX = 24
 ROW_DESCRIPTION_MAX = 72
 SECTION_TITLE_MAX = 24
 CTA_DISPLAY_TEXT_MAX = 20
+# Interactive media carousel (Meta docs read 2026-10-10; docs/DECISIONS.md).
+CAROUSEL_CARDS_MIN = 2
+CAROUSEL_CARDS_MAX = 10
+CARD_BODY_MAX = 160
+CARD_BODY_LINE_BREAKS_MAX = 2
+# Meta states no maximum for quick replies per card; its examples use two (D9 uses two).
+CAROUSEL_BUTTONS_MAX = 2
+# Meta's request syntax fixes every card's type as "cta_url", quick-reply cards included
+# (and its quick-reply example uses it); the field is not described. Device test confirms.
+CAROUSEL_CARD_TYPE = "cta_url"
 
 # Meta error codes that are throttling or temporary: retrying can succeed.
 RETRYABLE_META_CODES = frozenset({1, 2, 4, 80007, 130429, 131056})
@@ -185,6 +195,53 @@ def list_message(body, button, sections, *, header=None, footer=None):
         "action": {"button": button, "sections": built},
     }
     return {"type": "interactive", "interactive": _decorate(interactive, header, footer)}
+
+
+def carousel(body, cards):
+    """Interactive media carousel (D9). cards: [(image_link, card_body_or_None,
+    [(id, title), ...]), ...] with quick-reply buttons.
+
+    Card headers are public https image links only (Meta documents no media-ID
+    form); every card has the same number of buttons; the message itself takes
+    no header or footer.
+    """
+    _check_text(body, "body", INTERACTIVE_BODY_MAX)
+    cards = [(link, card_body, list(buttons)) for link, card_body, buttons in cards]
+    if not CAROUSEL_CARDS_MIN <= len(cards) <= CAROUSEL_CARDS_MAX:
+        raise ValueError(f"a carousel needs {CAROUSEL_CARDS_MIN}-{CAROUSEL_CARDS_MAX} cards")
+    counts = {len(buttons) for _, _, buttons in cards}
+    if len(counts) != 1:
+        raise ValueError("every carousel card needs the same number of buttons")
+    if not 1 <= counts.pop() <= CAROUSEL_BUTTONS_MAX:
+        raise ValueError(f"carousel cards need 1-{CAROUSEL_BUTTONS_MAX} buttons")
+    ids = [button_id for _, _, buttons in cards for button_id, _ in buttons]
+    if len(set(ids)) != len(ids):
+        raise ValueError("button ids must be unique")
+    built = []
+    for index, (link, card_body, buttons) in enumerate(cards):
+        _check_https(link, "card image link")
+        card = {
+            "card_index": index,
+            "type": CAROUSEL_CARD_TYPE,
+            "header": {"type": "image", "image": {"link": link}},
+        }
+        if card_body is not None:
+            _check_text(card_body, "card body", CARD_BODY_MAX)
+            if card_body.count("\n") > CARD_BODY_LINE_BREAKS_MAX:
+                raise ValueError(
+                    f"card body allows at most {CARD_BODY_LINE_BREAKS_MAX} line breaks"
+                )
+            card["body"] = {"text": card_body}
+        for button_id, title in buttons:
+            _check_text(button_id, "button id", BUTTON_ID_MAX)
+            _check_text(title, "button title", BUTTON_TITLE_MAX)
+        card["action"] = {"buttons": [
+            {"type": "quick_reply", "quick_reply": {"id": button_id, "title": title}}
+            for button_id, title in buttons
+        ]}
+        built.append(card)
+    interactive = {"type": "carousel", "body": {"text": body}, "action": {"cards": built}}
+    return {"type": "interactive", "interactive": interactive}
 
 
 def image(*, media_id=None, link=None, caption=None):

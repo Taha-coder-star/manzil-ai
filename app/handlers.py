@@ -1,8 +1,11 @@
 """Worker job handlers (Task 3.2): process_message and reconcile_status; Task 4.1
 adds fetch_media (app.media), enqueued here for staff photos; Task 4.2 adds
-media_link_fallback, enqueued by reconcile_status for a failed image by ID.
+media_link_fallback, enqueued by reconcile_status for a failed image by ID;
+Task 5.2 adds carousel_fallback (app.cards), enqueued by reconcile_status for an
+accepted carousel that failed before delivery.
 Task 5.1: process_message runs one coalesced turn (app.orchestrator) instead of
-the echo bot.
+the echo bot. Task 5.2: staff "#demo carousel | cards | card | fallback …"
+(app.cards), and inbound messages keep the WAMID they quote (context_wamid).
 
 All are idempotent: the inbound message insert dedupes on its WAMID, replies
 dedupe on "turn:{turn_id}:{seq}" (app.outbound), and status updates only move
@@ -14,7 +17,7 @@ import logging
 from contextlib import closing
 from datetime import UTC, datetime
 
-from app import echo, media, orchestrator, outbound, whatsapp
+from app import cards, echo, media, orchestrator, outbound, whatsapp
 from app.db import tenant_transaction
 from app.queue import PermanentJobError
 
@@ -52,6 +55,13 @@ def _inbound_fields(message):
     media_id = content.get("id") if kind in MEDIA_TYPES else None
     mime_type = content.get("mime_type") if kind in MEDIA_TYPES else None
     return kind, text_body, media_id, mime_type
+
+
+def _context_wamid(message):
+    """The WAMID this message quotes or answers (a swipe-reply or a button tap)."""
+    context = message.get("context")
+    quoted = context.get("id") if isinstance(context, dict) else None
+    return quoted if isinstance(quoted, str) and quoted.strip() else None
 
 
 def _timestamp(value):
@@ -109,17 +119,18 @@ def record_event(conn, agency_id, inbound_event_id):
             """
             INSERT INTO message (
                 agency_id, conversation_id, inbound_event_id, provider_message_id,
-                direction, message_type, text_body, media_id, provider_timestamp
+                direction, message_type, text_body, media_id, provider_timestamp,
+                context_wamid
             )
             VALUES (
                 current_agency_id(), %s, %s, %s, 'inbound', %s, %s, %s,
-                to_timestamp(%s::bigint)
+                to_timestamp(%s::bigint), %s
             )
             ON CONFLICT (agency_id, provider_message_id) DO NOTHING
             RETURNING id
             """,
             (conversation_id, inbound_event_id, wamid, message_type, text_body,
-             media_id, sent_at),
+             media_id, sent_at, _context_wamid(message)),
         ).fetchone()
         if row is None:  # a replayed job: the message is already logged
             row = conn.execute(
@@ -166,6 +177,11 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
 
     handlers["process_message"] = process
 
+    def carousel_fallback(conn, job):
+        cards.carousel_fallback(conn, job, client_factory)
+
+    handlers[cards.FALLBACK_JOB_TYPE] = carousel_fallback
+
     public_base = media.public_base_url(settings)
     if storage is None or public_base is None:
         logger.error("Media bucket or public URL not configured; media jobs stay pending")
@@ -199,6 +215,10 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
             photo = echo.photo_command(command)
             if photo is not None:
                 _demo_photo(conn, client, storage, turn, dedupe_prefix, photo)
+                return
+            listing_command = echo.cards_command(command)
+            if listing_command is not None:
+                _demo_cards(conn, client, turn, dedupe_prefix, *listing_command)
                 return
             for seq, payload in enumerate(
                 echo.reply(command, privacy_url=privacy_url, image_link=image_link)
@@ -240,6 +260,49 @@ def _demo_photo(conn, client, storage, turn, dedupe_prefix, variant):
     logger.info("Demo photo sent via %s: %s", result.via, result.status)
 
 
+def _demo_cards(conn, client, turn, dedupe_prefix, kind, option):
+    """Staff Task 5.2 device checks. Recipient and conversation are always the sender's
+    own (turn.sender_wa_id, turn.conversation_id); the listings are the fixed
+    echo.DEMO_LISTINGS; the flag changed is the sender's own conversation's.
+    "carousel" honours the flag, "cards" always sends individual cards and "card"
+    sends the single-result card. Send errors propagate to app.orchestrator."""
+    target = (conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id)
+    if kind == "fallback":
+        if option != "status":
+            cards.set_fallback(conn, turn.agency_id, turn.conversation_id, option == "on",
+                               turn.staff_id)
+        enabled, set_at = cards.fallback_status(conn, turn.agency_id, turn.conversation_id)
+        reply = (
+            "Carousel fallback is ON for this number: results come as individual cards."
+            if enabled else
+            "Carousel fallback is OFF for this number: results come as a carousel."
+        )
+        if set_at is not None:
+            reply += f" (changed {set_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC)"
+        outbound.send_message(*target, whatsapp.text(reply), f"{dedupe_prefix}:0")
+        logger.info("Demo fallback %s: %s", option, "on" if enabled else "off")
+        return
+
+    def build():
+        codes = echo.DEMO_LISTINGS[:1] if kind == "card" else echo.DEMO_LISTINGS
+        listings = cards.load_listings(conn, turn.agency_id, codes)
+        found = {listing.code for listing in listings}
+        missing = [code for code in codes if code not in found]
+        note = (
+            f"DEMO: not a public listing of this agency: {', '.join(missing)}."
+            if missing else None
+        )
+        if not listings:
+            return [whatsapp.text(note)]
+        return cards.plan_results(conn, turn.agency_id, turn.conversation_id, listings,
+                                  note=note, force_fallback=kind == "cards")
+
+    # Fixed on the turn before the first send, so a retry cannot change format or order.
+    payloads = cards.fixed_plan(conn, turn.agency_id, turn.id, build)
+    status = cards.send_plan(*target, payloads, dedupe_prefix)
+    logger.info("Demo %s: %d messages planned, %s", kind, len(payloads), status)
+
+
 def reconcile_status(conn, job):
     """Apply one statuses webhook to its outbound_message, forward-only."""
     with tenant_transaction(conn, job.agency_id):
@@ -278,7 +341,8 @@ def reconcile_status(conn, job):
                           < array_position(%(order)s, %(state)s)
                   )
               )
-            RETURNING id, media_source, media_source_id, payload
+            RETURNING id, media_source, media_source_id, payload, recipient_wa_id,
+                delivered_at IS NOT NULL
             """,
             {
                 "state": state, "wamid": wamid, "error_code": error_code,
@@ -289,7 +353,10 @@ def reconcile_status(conn, job):
         ).fetchone()
         if updated is not None:
             if state == "failed":
-                media.on_failed_status(conn, *updated)
+                outbound_id, table, source_id, payload, recipient, delivered = updated
+                media.on_failed_status(conn, outbound_id, table, source_id, payload)
+                cards.on_failed_status(conn, outbound_id, recipient, payload,
+                                       delivered=delivered)
             return
         known = conn.execute(
             "SELECT 1 FROM outbound_message WHERE provider_message_id = %s", (wamid,)
