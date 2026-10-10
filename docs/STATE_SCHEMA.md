@@ -318,7 +318,8 @@ Component C3 (RFC flow steps 2-3, Red-Team R-01). Code: `app/orchestrator.py`, c
 - Turn contract for responders (`orchestrator.Turn`): agency / conversation / turn ids, sender
   WhatsApp id, sender_role, route, staff_id, control_state and mode snapshots, and the ordered
   messages (id, WAMID, type, text, media id, WhatsApp timestamp, and from Task 5.2 the tapped
-  reply id of an interactive message, read from the stored webhook event because the message log
+  reply id of an interactive message (`interactive.<type>.id`) or of a carousel quick reply
+  (`button.payload`), read from the stored webhook event because the message log
   keeps only the title).
 - `reply_plan` (migration 011, Task 5.2): JSONB array, NULL until planned. The staff card commands
   store their payloads here once, before the first send; a retried or resumed turn sends exactly
