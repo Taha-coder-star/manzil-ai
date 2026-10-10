@@ -1,15 +1,15 @@
-"""Temporary echo bot (Task 3.2): proves the send / status path end to end.
+"""'#demo …' samples for staff device checks (Task 3.2; kept by Task 5.1).
 
-Removed when the conversation orchestrator (C3) replaces process_message.
-"#demo <type>" sends a fictional sample of each outbound message type so the
-rendering can be checked on real phones. All sample content is fictional.
-"#demo photo [badid]" (staff only, app.handlers) sends the sender's own latest
-staff photo back through the Task 4.2 media cache.
+The plain echo replies are gone: the orchestrator (app.orchestrator) answers every
+turn. A staff / admin turn whose last message is "#demo <type>" still gets a
+fictional sample of each outbound message type, so rendering can be checked on
+real phones; customers never reach these. "#demo photo [badid]" (app.handlers)
+sends the sender's own latest staff photo back through the Task 4.2 media cache.
+All sample content is fictional.
 """
 
 from app import whatsapp
 
-ECHO_PREFIX = "Echo: "
 DEMO_TYPES = ("buttons", "list", "location", "cta", "image", "photo")
 PHOTO_VARIANTS = ("", "badid")
 DEMO_IMAGE_CAPTION = "Sample image (DEMO)"
@@ -26,28 +26,23 @@ def photo_command(message):
     return variant if variant in PHOTO_VARIANTS else None
 
 
+def is_demo(body):
+    """True for a "#demo …" command."""
+    return body.strip().lower().startswith("#demo")
+
+
 def reply(message, *, privacy_url=None, image_link=None):
-    """Return the payloads answering one inbound message (possibly none).
+    """The payloads answering one "#demo …" text message (none for anything else).
 
     privacy_url: public https URL used by the CTA sample.
     image_link: callable returning a public https image URL, or None.
     """
-    kind = message.get("type")
-    if kind == "reaction":
+    if message.get("type") != "text":
         return []
-    if kind == "text":
-        body = (message.get("text") or {}).get("body") or ""
-        command = body.strip().lower()
-        if command.startswith("#demo"):
-            return [_demo(command.removeprefix("#demo").strip(), privacy_url, image_link)]
-        return [whatsapp.text(_truncate(ECHO_PREFIX + body, whatsapp.TEXT_MAX))]
-    if kind == "interactive":
-        interactive = message.get("interactive") or {}
-        picked = interactive.get(interactive.get("type")) or {}
-        return [whatsapp.text(
-            _truncate(f"You picked {picked.get('id')} · {picked.get('title')}", whatsapp.TEXT_MAX)
-        )]
-    return [whatsapp.text(f"Received a message of type {kind or 'unknown'}")]
+    body = (message.get("text") or {}).get("body") or ""
+    if not is_demo(body):
+        return []
+    return [_demo(body.strip().lower().removeprefix("#demo").strip(), privacy_url, image_link)]
 
 
 def _demo(kind, privacy_url, image_link):
@@ -89,7 +84,3 @@ def _demo(kind, privacy_url, image_link):
             return whatsapp.text("Image demo is not configured (no bucket).")
         return whatsapp.image(link=link, caption=DEMO_IMAGE_CAPTION)
     return whatsapp.text("Try: #demo " + " | ".join(DEMO_TYPES))
-
-
-def _truncate(value, limit):
-    return value if len(value) <= limit else value[: limit - 1] + "…"

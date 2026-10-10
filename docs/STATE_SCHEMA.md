@@ -275,3 +275,30 @@ CHECK, partial unique index and same-conversation FK; slot and op validation; le
 holding-reply once; broker Called / outcome; several properties per lead; the unchanged webhook -> record_inbound path with the new columns.
 tests/test_migrations.py upgrades schema v1 with ai/human/paused conversations and messages;
 tests/test_rls_migration.py repeats the 005 -> 006 upgrade as a non-superuser owner under FORCE RLS.
+
+## Conversation turns (Task 5.1, migration 010)
+
+Component C3 (RFC flow steps 2-3, Red-Team R-01). Code: `app/orchestrator.py`, called by the
+`process_message` handler (`app/handlers.py`).
+
+| Object | Purpose | Runtime (manzil_app) privileges | RLS |
+|---|---|---|---|
+| conversation_turn | one coalesced turn: routing + control snapshot, status open -> replied / gated | SELECT, INSERT, UPDATE | ENABLE + FORCE, tenant_isolation |
+| message.turn_id | the turn that consumed an inbound message (NULL = not in a turn) | (message grants) | (message) |
+
+- Keys: `UNIQUE (agency_id, id)` and `(agency_id, conversation_id, id)`; message.turn_id is a
+  composite FK `(agency_id, conversation_id, turn_id)`, so a message can only join a turn of its own
+  conversation and tenant. trigger_job_id -> job, staff_id -> staff, both agency-scoped.
+- One open turn per conversation (partial unique index). CHECKs: route matches sender_role
+  (customer -> customer, broker -> broker, admin / agent -> staff); staff_id is NULL exactly for
+  customers; completed_at is set exactly when status is not open; turn_id only on inbound messages.
+- Lifecycle per job: record the trigger and every pending sibling message; in one transaction
+  (conversation row FOR UPDATE) resume an open turn or assemble a new one from eligible messages
+  (turn_id NULL and job = trigger or pending), point them at it and mark absorbed sibling jobs
+  succeeded / 'coalesced'; gate; send with dedupe keys turn:{turn_id}:{seq}; close the turn. A
+  crash before close leaves the turn open and the retry (or the next job) resumes it with the same
+  messages and dedupe keys, so nothing is consumed or sent twice.
+- Turn contract for responders (`orchestrator.Turn`): agency / conversation / turn ids, sender
+  WhatsApp id, sender_role, route, staff_id, control_state and mode snapshots, and the ordered
+  messages (id, WAMID, type, text, media id, WhatsApp timestamp).
+
