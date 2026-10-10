@@ -28,7 +28,9 @@ Sources: RFC section 11 (media storage boundary), R4/R9 D14 (media storage and r
    - `original`: long edge <= 2,560 px (R-36); JPEG q92, or PNG for PNG input;
    - `wa`: JPEG, 8-bit RGB, long edge <= 1,600 px, < 5 MB (quality, then size, is lowered until it fits);
    - `card`: JPEG 1,200 x 628 (1.91:1), cropped and centred. The ratio is to be confirmed with the Day-5
-     carousel check on Android / iPhone / Web.
+     carousel check on Android / iPhone / Web. Task 5.2 (app/cards.py) uses a listing cover's
+     `public_url_card` as the carousel card header and as the image header of the single and
+     individual cards (link only; Meta documents no media-ID form for carousel headers).
 6. Upload, then the row becomes `stored` with keys, size, dimensions, `public_url_card`, `exif_stripped`.
 
 Outcomes: `stored` / `duplicate` (usable, CHECK-enforced keys + `exif_stripped`); `rejected` (not an image,

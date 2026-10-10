@@ -22,10 +22,15 @@ One process_message job runs one turn for its conversation:
    the dedupe key "turn:{turn_id}:{seq}", so a resumed turn never sends twice.
 6. The turn is closed ('replied') only after its sends are recorded.
 
+Task 5.2: a turn ending in a tap on a listing card (More photos, Visit / Details,
+Similar, an overflow-list row) gets a stub reply naming the action and listing;
+the real behaviour is Tasks 10.x / 11.x.
+
 Never log message text or phone numbers.
 """
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -42,6 +47,13 @@ COALESCED = "coalesced"
 ROUTES = {"admin": "staff", "agent": "staff", "broker": "broker"}
 # A resumed open turn plus the new turn of the job that found it.
 MAX_TURNS_PER_JOB = 2
+# Reply ids of the listing cards (app.cards). The id is client-supplied: only this exact
+# shape is ever echoed back.
+TAP_ID = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
+TAP_ACTIONS = {
+    "photos": "More photos", "visit": "Visit / Details", "similar": "Similar listings",
+    "listing": "Details",
+}
 
 
 @dataclass(frozen=True)
@@ -52,6 +64,7 @@ class TurnMessage:
     text: str | None
     media_id: str | None
     provider_timestamp: datetime | None
+    reply_id: str | None = None  # id of a tapped button / list row (interactive only)
 
 
 @dataclass(frozen=True)
@@ -114,10 +127,15 @@ def pending_sibling_events(conn, job):
         )]
 
 
+# The message log keeps a tap's title only; its id comes from the stored webhook event
+# (message.interactive.<interactive type>.id: button_reply, list_reply, ...).
 _MESSAGE_COLUMNS = (
     "m.id, m.provider_message_id, m.message_type, m.text_body, m.media_id, "
-    "m.provider_timestamp"
+    "m.provider_timestamp, "
+    "CASE WHEN m.message_type = 'interactive' THEN e.payload #>> ARRAY["
+    "'message', 'interactive', e.payload #>> '{message,interactive,type}', 'id'] END"
 )
+_MESSAGE_COLUMN_COUNT = 7
 # WhatsApp timestamps have one-second resolution: receive time, then WAMID, break ties.
 _ORDER = "m.provider_timestamp NULLS LAST, e.received_at, m.provider_message_id"
 
@@ -188,7 +206,8 @@ def assemble_turn(conn, job, sender):
             "UPDATE message SET turn_id = %s WHERE id = ANY(%s)",
             (turn_id, [row[0] for row in rows]),
         )
-        siblings = [row[6] for row in rows if row[6] != job.id]
+        siblings = [row[_MESSAGE_COLUMN_COUNT] for row in rows
+                    if row[_MESSAGE_COLUMN_COUNT] != job.id]
         if siblings:
             conn.execute(
                 """
@@ -201,7 +220,7 @@ def assemble_turn(conn, job, sender):
         logger.info("Turn %s assembled: %s route, %d messages", turn_id, route, len(rows))
         snapshot = (turn_id, sender_role, route, staff_id, control_state, mode)
         return _turn(job.agency_id, conversation_id, sender, snapshot,
-                     [row[:6] for row in rows]), False
+                     [row[:_MESSAGE_COLUMN_COUNT] for row in rows]), False
 
 
 def _turn(agency_id, conversation_id, sender, snapshot, rows):
@@ -237,6 +256,15 @@ def mode_reply(turn):
 
 
 RESPONDERS = {"customer": mode_reply, "staff": mode_reply, "broker": mode_reply}
+
+
+def tap_reply(turn):
+    """A stub for a turn ending in a tap on a listing card, else None (any route)."""
+    match = TAP_ID.fullmatch(turn.messages[-1].reply_id or "")
+    if match is None:
+        return None
+    action, code = match.groups()
+    return [whatsapp.text(f"{TAP_ACTIONS[action]} for {code} (stub) · coming in a later task")]
 
 
 def demo_command(turn):
@@ -282,7 +310,8 @@ def _answer(conn, client, turn, demo):
         if command is not None:
             demo(turn, command, f"turn:{turn.id}")
         else:
-            for seq, payload in enumerate(RESPONDERS[turn.route](turn)):
+            payloads = tap_reply(turn) or RESPONDERS[turn.route](turn)
+            for seq, payload in enumerate(payloads):
                 outbound.send_message(
                     conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
                     payload, f"turn:{turn.id}:{seq}",

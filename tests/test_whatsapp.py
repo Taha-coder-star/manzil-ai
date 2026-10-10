@@ -259,3 +259,123 @@ def test_demo_reply_ignores_other_message_types():
     assert echo.reply(tapped) == []
     assert echo.reply({"type": "reaction", "reaction": {"emoji": "👍"}}) == []
     assert echo.reply({"type": "audio", "audio": {"id": "1"}}) == []
+
+
+# --- Task 5.2: interactive media carousel --------------------------------------------
+
+def carousel_cards(count=2, buttons=2):
+    return [
+        (f"https://cdn.example/card/{n}.jpg", f"#{n + 1} DEMO-10{n}",
+         [(f"b{b}:{n}", f"Button {b}") for b in range(buttons)])
+        for n in range(count)
+    ]
+
+
+def test_carousel_shape():
+    payload = whatsapp.carousel("2 matching listings", [
+        ("https://cdn.example/card/a.jpg", "#1 DH6-101\nPKR 7.8 crore",
+         [("photos:DH6-101", "More photos"), ("visit:DH6-101", "Visit / Details")]),
+        ("https://cdn.example/card/b.jpg", None,
+         [("photos:PRJ-103", "More photos"), ("visit:PRJ-103", "Visit / Details")]),
+    ])
+    assert payload == {"type": "interactive", "interactive": {
+        "type": "carousel",
+        "body": {"text": "2 matching listings"},
+        "action": {"cards": [
+            {
+                "card_index": 0,
+                "type": "cta_url",
+                "header": {"type": "image", "image": {"link": "https://cdn.example/card/a.jpg"}},
+                "body": {"text": "#1 DH6-101\nPKR 7.8 crore"},
+                "action": {"buttons": [
+                    {"type": "quick_reply",
+                     "quick_reply": {"id": "photos:DH6-101", "title": "More photos"}},
+                    {"type": "quick_reply",
+                     "quick_reply": {"id": "visit:DH6-101", "title": "Visit / Details"}},
+                ]},
+            },
+            {
+                "card_index": 1,
+                "type": "cta_url",
+                "header": {"type": "image", "image": {"link": "https://cdn.example/card/b.jpg"}},
+                "action": {"buttons": [
+                    {"type": "quick_reply",
+                     "quick_reply": {"id": "photos:PRJ-103", "title": "More photos"}},
+                    {"type": "quick_reply",
+                     "quick_reply": {"id": "visit:PRJ-103", "title": "Visit / Details"}},
+                ]},
+            },
+        ]},
+    }}
+    assert whatsapp.summary(payload) == "2 matching listings"
+
+
+def test_carousel_accepts_the_limits():
+    whatsapp.carousel("x" * 1024, carousel_cards(10, buttons=1))
+    card = ("https://cdn.example/c.jpg", "x" * 156 + "\n\nxx", [("i" * 256, "t" * 20)])
+    other = ("https://cdn.example/d.jpg", None, [("j", "Ok")])
+    whatsapp.carousel("Body", [card, other])
+
+
+@pytest.mark.parametrize("cards", [
+    carousel_cards(1),
+    carousel_cards(11),
+    carousel_cards(2, buttons=0),
+    carousel_cards(2, buttons=3),
+    carousel_cards(1) + carousel_cards(1, buttons=1),  # button counts differ
+    [("http://cdn.example/a.jpg", None, [("a", "A")]), ("https://cdn.example/b.jpg", None,
+                                                       [("b", "B")])],
+    [("https://cdn.example/a.jpg", "x" * 161, [("a", "A")]),
+     ("https://cdn.example/b.jpg", None, [("b", "B")])],
+    [("https://cdn.example/a.jpg", "1\n2\n3\n4", [("a", "A")]),
+     ("https://cdn.example/b.jpg", None, [("b", "B")])],
+    [("https://cdn.example/a.jpg", None, [("same", "A")]),
+     ("https://cdn.example/b.jpg", None, [("same", "B")])],
+    [("https://cdn.example/a.jpg", None, [("a", "x" * 21)]),
+     ("https://cdn.example/b.jpg", None, [("b", "B")])],
+    [("https://cdn.example/a.jpg", None, [("a" * 257, "A")]),
+     ("https://cdn.example/b.jpg", None, [("b", "B")])],
+])
+def test_carousel_limits(cards):
+    with pytest.raises(ValueError):
+        whatsapp.carousel("Body", cards)
+
+
+def test_carousel_body_is_required_and_limited():
+    for body in ("", "x" * 1025):
+        with pytest.raises(ValueError):
+            whatsapp.carousel(body, carousel_cards())
+
+
+@pytest.mark.parametrize(("body", "expected"), [
+    ("#demo carousel", ("carousel", None)),
+    ("  #DEMO Cards ", ("cards", None)),
+    ("#demo card", ("card", None)),
+    ("#demo fallback on", ("fallback", "on")),
+    ("#demo fallback OFF", ("fallback", "off")),
+    ("#demo fallback status", ("fallback", "status")),
+    # No command takes a phone number or any other argument.
+    ("#demo carousel 923001234567", None),
+    ("#demo cards +92 300 1234567", None),
+    ("#demo fallback on 923001234567", None),
+    ("#demo fallback", None),
+    ("#demo fallback maybe", None),
+    ("#demo carousels", None),
+    ("demo carousel", None),
+    ("hi #demo carousel", None),
+])
+def test_cards_command_grammar(body, expected):
+    assert echo.cards_command(inbound_text(body)) == expected
+
+
+def test_cards_command_ignores_other_message_types():
+    tapped = {"type": "interactive", "interactive": {
+        "type": "button_reply", "button_reply": {"id": "#demo carousel", "title": "x"},
+    }}
+    assert echo.cards_command(tapped) is None
+
+
+def test_rejected_card_commands_get_the_help_text():
+    for command in ("#demo carousel 923001234567", "#demo fallback"):
+        reply = echo.reply(inbound_text(command))[0]
+        assert reply["text"]["body"].startswith("Try: #demo ") and "carousel" in reply["text"]["body"]
