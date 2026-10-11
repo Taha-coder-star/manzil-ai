@@ -1,4 +1,4 @@
-# Media (Tasks 4.1 inbound and 4.2 outbound, component C5)
+# Media (Tasks 4.1 inbound and 4.2 outbound, 5.3 inbound audio; component C5)
 
 Sources: RFC section 11 (media storage boundary), R4/R9 D14 (media storage and re-send), D11 1.3
 (property_media), Red-Team R-36 (originals down-scaled on ingest). Migration 008, `app/media.py`,
@@ -116,6 +116,36 @@ fallback runs. Customers get "Photo demo is for staff numbers only."
 
 ## Not in 4.1 / 4.2
 - Attaching staged photos to a listing (`property_media` rows, `source_inbound_media_id`): Task 9.2.
-- Customer voice audio (`tenant/<id>/audio/`, short retention): Task 10.x (C4), which reuses
-  `WhatsAppClient.fetch_media`.
+- Customer voice audio: storage moved to Task 5.3 (below); speech itself (pre-checks, STT) is C4, Task 6.3.
 - Lifecycle rules, per-listing photo cap, storage metering (R-36): production.
+
+## Inbound audio (Task 5.3, migration 012)
+
+Sources: RFC voice data flow step 2 ("download within 5 min... store the audio under restricted retention"),
+Execution Plan gate M1(c), R16 section 4 (benchmark voice notes "pulled through the real webhook / media
+path"). `app/audio.py`.
+
+1. `record_inbound` stages **every** inbound `audio` message, whoever sent it (customer, staff, broker):
+   one `inbound_audio` row per message (Meta's `voice` flag kept in `is_voice`) and a `fetch_audio` job
+   (dedupe `audio:<inbound_audio_id>`), in the same transaction as the message.
+2. `fetch_audio` downloads through `WhatsAppClient.fetch_media` (same URL re-query, Meta-host allowlist,
+   `sha256` check, 16 MB cap as images). Retries and dead-lettering follow `fetch_media`: a permanent
+   Graph error or a file that is not audio -> `rejected`; exhausted retries -> `failed`.
+3. The type comes from the magic bytes (Ogg, MP3, MP4/M4A, ADTS AAC, AMR); the declared MIME is not
+   trusted (clients vary). Ogg files get `duration_ms` from the last granule position minus Opus pre-skip.
+4. The bytes are stored **unchanged** at `tenant/<agency_id>/audio/<inbound_audio_id>.<ext>`: private
+   (only `card/` is public), no cache header. `content_sha256` and `byte_size` are recorded. No hash
+   dedupe: each voice note is its own record.
+
+Not here: the < 1 s / > 120 s pre-checks, silence detection and STT (C4, Task 6.3, which reads the stored
+object or fetches in-turn); the retention purge (C14). Only `fetch_audio` needs the bucket; it is
+registered even without a public media URL.
+
+Production (2026-10-11, owner-run): RDS snapshot `manzil-pre-012-2026-10-11`; release image
+`manzil-ai:5.3-deb94ba` = `manzil-ai:5.2-8f54bae` + `app/audio.py`, `app/bench_manifest.py`,
+`app/handlers.py` and migration 012 (file hashes checked inside the image; 001-011 byte-identical to the
+running image; runs as appuser), tagged `manzil-ai:latest` (rollback `manzil-ai:pre-5.3`). Migration 012:
+`1 applied, 11 skipped`, repeat `0 applied, 12 skipped`. Live check (gate M1(c)): a team-phone voice note
+got the stub reply and was stored (`audio/ogg`, `is_voice` true, 6.48 s, 14,698 bytes) under
+`tenant/<agency>/audio/<id>.ogg`; an anonymous GET of that object returned 403. `app.bench_manifest`
+listed it with no phone number. Note: `--since` is compared with WhatsApp time in UTC (Karachi is UTC+5).
