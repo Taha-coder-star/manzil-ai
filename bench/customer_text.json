@@ -1,0 +1,2376 @@
+[
+  {
+    "id": "CT-01",
+    "set": "customer_text",
+    "category": "english",
+    "language": "en",
+    "input": "office on rent in Karachi, around 5 lakh per month",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "on rent",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "office"
+        ],
+        "raw": "office"
+      },
+      "location": {
+        "value": [
+          "khi"
+        ],
+        "raw": "Karachi",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "around 5 lakh per month",
+        "min": 450000,
+        "max": 550000,
+        "mode": "around",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "on rent"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "office"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Karachi"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "around 5 lakh per month"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH6-108",
+        "PEC-101",
+        "SHF-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "office"
+        ],
+        "locations": [
+          "khi"
+        ],
+        "budget_min": 450000,
+        "budget_max": 550000,
+        "exclude": []
+      },
+      "note": "Demo Scope scenario 1."
+    }
+  },
+  {
+    "id": "CT-02",
+    "set": "customer_text",
+    "category": "english",
+    "language": "en",
+    "input": "Need a 3 bed apartment in Clifton under 7 crore",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "apartment"
+      },
+      "location": {
+        "value": [
+          "clf"
+        ],
+        "raw": "Clifton",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "under 7 crore",
+        "min": null,
+        "max": 70000000,
+        "mode": "max",
+        "period": "one_time"
+      },
+      "beds_min": {
+        "raw": "3 bed",
+        "value": 3
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "apartment"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Clifton"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "under 7 crore"
+            },
+            {
+              "slot": "beds_min",
+              "op": "set",
+              "raw_span": "3 bed"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "CLF-103"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "apartment"
+        ],
+        "locations": [
+          "clf"
+        ],
+        "budget_min": null,
+        "budget_max": 70000000,
+        "exclude": [],
+        "beds_min": 3
+      },
+      "note": "R16 4.1 example; purpose inferred from the amount."
+    }
+  },
+  {
+    "id": "CT-03",
+    "set": "customer_text",
+    "category": "english",
+    "language": "en",
+    "input": "Looking to buy a plot in DHA City, 500 yards, dedh crore tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": "buy",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "plot"
+        ],
+        "raw": "plot"
+      },
+      "location": {
+        "value": [
+          "dhc"
+        ],
+        "raw": "DHA City",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "500 yards",
+        "value": 500,
+        "unit": "sq_yd",
+        "sqft": 4500
+      },
+      "budget": {
+        "raw": "dedh crore tak",
+        "min": null,
+        "max": 15000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "buy"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "plot"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA City"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "500 yards"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "dedh crore tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DHC-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "plot"
+        ],
+        "locations": [
+          "dhc"
+        ],
+        "budget_min": null,
+        "budget_max": 15000000,
+        "exclude": [],
+        "size_sqyd": 500
+      },
+      "note": "DHA City Karachi is not under DHA Defence."
+    }
+  },
+  {
+    "id": "CT-04",
+    "set": "customer_text",
+    "category": "english",
+    "language": "en",
+    "input": "Any shops for rent in Clifton Block 5? Max 3.5 lakh a month",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "for rent",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "shop"
+        ],
+        "raw": "shops"
+      },
+      "location": {
+        "value": [
+          "clf-b5"
+        ],
+        "raw": "Clifton Block 5",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "Max 3.5 lakh a month",
+        "min": null,
+        "max": 350000,
+        "mode": "max",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "for rent"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "shops"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Clifton Block 5"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "Max 3.5 lakh a month"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "CLF-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "shop"
+        ],
+        "locations": [
+          "clf-b5"
+        ],
+        "budget_min": null,
+        "budget_max": 350000,
+        "exclude": []
+      }
+    }
+  },
+  {
+    "id": "CT-05",
+    "set": "customer_text",
+    "category": "english",
+    "language": "en",
+    "input": "2 bed flat on rent in Bahria Heights, up to 50k monthly",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "on rent",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "flat"
+      },
+      "location": {
+        "value": [
+          "btk-heights"
+        ],
+        "raw": "Bahria Heights",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "up to 50k monthly",
+        "min": null,
+        "max": 50000,
+        "mode": "max",
+        "period": "monthly"
+      },
+      "beds_min": {
+        "raw": "2 bed",
+        "value": 2
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "on rent"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "flat"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Bahria Heights"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "up to 50k monthly"
+            },
+            {
+              "slot": "beds_min",
+              "op": "set",
+              "raw_span": "2 bed"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "BTK-105"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "apartment"
+        ],
+        "locations": [
+          "btk-heights"
+        ],
+        "budget_min": null,
+        "budget_max": 50000,
+        "exclude": [],
+        "beds_min": 2
+      }
+    }
+  },
+  {
+    "id": "CT-06",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "DHA 6 mein 500 yard house, budget around 8 cr hai",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "house"
+      },
+      "location": {
+        "value": [
+          "dha-ph6"
+        ],
+        "raw": "DHA 6",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "500 yard",
+        "value": 500,
+        "unit": "sq_yd",
+        "sqft": 4500
+      },
+      "budget": {
+        "raw": "around 8 cr",
+        "min": 72000000,
+        "max": 88000000,
+        "mode": "around",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "house"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA 6"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "500 yard"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "around 8 cr"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH6-101",
+        "DH6-102"
+      ],
+      "allowed": [
+        "DH6-103",
+        "DH7-101"
+      ],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6"
+        ],
+        "budget_min": 72000000,
+        "budget_max": 88000000,
+        "exclude": [],
+        "size_sqyd": 500
+      },
+      "note": "R16 4.1 example. DH6-103 (budget +10%) and DH7-101 (neighbour) are ladder steps."
+    }
+  },
+  {
+    "id": "CT-07",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "Bahria mein 10 marla ka ghar lena hai",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": "lena hai",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "ghar"
+      },
+      "location": {
+        "value": [
+          "btk"
+        ],
+        "raw": "Bahria",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "10 marla",
+        "value": 10,
+        "unit": "marla",
+        "sqft": 2250
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "lena hai"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "ghar"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Bahria"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "10 marla"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "BTK-103",
+        "BTK-104"
+      ],
+      "allowed": [
+        "BTK-102"
+      ],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "btk"
+        ],
+        "budget_min": null,
+        "budget_max": null,
+        "exclude": [],
+        "size_sqyd": 250
+      },
+      "note": "10 marla = 2,250 sq ft = 250 sq yd nominal; BTK-102 (235) is inside +/-10% (docs/DEMO_DATASET.md). Bare 'Bahria' = Bahria Town Karachi, named in the reply."
+    }
+  },
+  {
+    "id": "CT-08",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "Gulshan 13 mein shop chahiye investment ke liye, sawa crore tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "shop"
+        ],
+        "raw": "shop"
+      },
+      "location": {
+        "value": [
+          "gli-b13"
+        ],
+        "raw": "Gulshan 13",
+        "status": "RESOLVED"
+      },
+      "investment": {
+        "value": true,
+        "raw": "investment ke liye"
+      },
+      "budget": {
+        "raw": "sawa crore tak",
+        "min": null,
+        "max": 12500000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "shop"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Gulshan 13"
+            },
+            {
+              "slot": "investment",
+              "op": "set",
+              "raw_span": "investment ke liye"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "sawa crore tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "PRJ-103"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "shop"
+        ],
+        "locations": [
+          "gli-b13"
+        ],
+        "budget_min": null,
+        "budget_max": 12500000,
+        "exclude": []
+      }
+    }
+  },
+  {
+    "id": "CT-09",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "North Nazimabad mein 400 ka portion kiraye pe chahiye, 90 hazar tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "kiraye pe",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "portion"
+        ],
+        "raw": "portion"
+      },
+      "location": {
+        "value": [
+          "nnz"
+        ],
+        "raw": "North Nazimabad",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "400 ka",
+        "value": 400,
+        "unit": "sq_yd",
+        "sqft": 3600
+      },
+      "budget": {
+        "raw": "90 hazar tak",
+        "min": null,
+        "max": 90000,
+        "mode": "max",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "kiraye pe"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "portion"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "North Nazimabad"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "400 ka"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "90 hazar tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "NNZ-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "portion"
+        ],
+        "locations": [
+          "nnz"
+        ],
+        "budget_min": null,
+        "budget_max": 90000,
+        "exclude": [],
+        "size_sqyd": 400
+      },
+      "note": "No unit: a portion <= 2,000 is sq yd (D11)."
+    }
+  },
+  {
+    "id": "CT-10",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "PECHS mein 2000 sq ft office rent pe, saade 5 lakh mahana",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "rent pe",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "office"
+        ],
+        "raw": "office"
+      },
+      "location": {
+        "value": [
+          "pec"
+        ],
+        "raw": "PECHS",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "2000 sq ft",
+        "value": 2000,
+        "unit": "sq_ft",
+        "sqft": 2000
+      },
+      "budget": {
+        "raw": "saade 5 lakh mahana",
+        "min": 495000,
+        "max": 605000,
+        "mode": "around",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "rent pe"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "office"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "PECHS"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "2000 sq ft"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "saade 5 lakh mahana"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "PEC-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "office"
+        ],
+        "locations": [
+          "pec"
+        ],
+        "budget_min": 495000,
+        "budget_max": 605000,
+        "exclude": [],
+        "size_sqft": 2000
+      },
+      "note": "A bare amount is treated as 'around' (+/-10%)."
+    }
+  },
+  {
+    "id": "CT-11",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "Defence phase 8 mein flat lena hai, dhai crore tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": "lena hai",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "flat"
+      },
+      "location": {
+        "value": [
+          "dha-ph8"
+        ],
+        "raw": "Defence phase 8",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "dhai crore tak",
+        "min": null,
+        "max": 25000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "lena hai"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "flat"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Defence phase 8"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "dhai crore tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "PRJ-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "apartment"
+        ],
+        "locations": [
+          "dha-ph8"
+        ],
+        "budget_min": null,
+        "budget_max": 25000000,
+        "exclude": []
+      }
+    }
+  },
+  {
+    "id": "CT-12",
+    "set": "customer_text",
+    "category": "roman_urdu",
+    "language": "roman_urdu",
+    "input": "Clifton mein dukaan chahiye khareedne ke liye, 2 crore tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": "khareedne",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "shop"
+        ],
+        "raw": "dukaan"
+      },
+      "location": {
+        "value": [
+          "clf"
+        ],
+        "raw": "Clifton",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "2 crore tak",
+        "min": null,
+        "max": 20000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "khareedne"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "dukaan"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Clifton"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "2 crore tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "CLF-102"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "shop"
+        ],
+        "locations": [
+          "clf"
+        ],
+        "budget_min": null,
+        "budget_max": 20000000,
+        "exclude": []
+      }
+    }
+  },
+  {
+    "id": "CT-13",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "ghar"
+      },
+      "location": {
+        "value": [
+          "dha-ph6"
+        ],
+        "raw": "DHA Phase 6",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "500 gaz",
+        "value": 500,
+        "unit": "sq_yd",
+        "sqft": 4500
+      },
+      "budget": {
+        "raw": "aath crore tak",
+        "min": null,
+        "max": 80000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "ghar"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA Phase 6"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "500 gaz"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "aath crore tak"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH6-101",
+        "DH6-102",
+        "DH7-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6"
+        ],
+        "budget_min": null,
+        "budget_max": 80000000,
+        "exclude": [],
+        "size_sqyd": 500
+      },
+      "note": "DH7-101 is the labelled neighbour step (Demo Scope scenario 2)."
+    }
+  },
+  {
+    "id": "CT-14",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "Need 2 kanal house in DHA 6, budget 18 crore",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "house"
+      },
+      "location": {
+        "value": [
+          "dha-ph6"
+        ],
+        "raw": "DHA 6",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "2 kanal",
+        "value": 2,
+        "unit": "kanal",
+        "sqft": 9000
+      },
+      "budget": {
+        "raw": "budget 18 crore",
+        "min": 162000000,
+        "max": 198000000,
+        "mode": "around",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "house"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA 6"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "2 kanal"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "budget 18 crore"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH6-104"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6"
+        ],
+        "budget_min": 162000000,
+        "budget_max": 198000000,
+        "exclude": [],
+        "size_sqyd": 1000
+      },
+      "note": "1 kanal = 500 sq yd."
+    }
+  },
+  {
+    "id": "CT-15",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "Office chahiye rent pe Shahrah-e-Faisal pe, 1500 sq ft, 4.5 lakh monthly",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "rent pe",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "office"
+        ],
+        "raw": "Office"
+      },
+      "location": {
+        "value": [
+          "shf"
+        ],
+        "raw": "Shahrah-e-Faisal",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "1500 sq ft",
+        "value": 1500,
+        "unit": "sq_ft",
+        "sqft": 1500
+      },
+      "budget": {
+        "raw": "4.5 lakh monthly",
+        "min": 405000,
+        "max": 495000,
+        "mode": "around",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "rent pe"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "Office"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Shahrah-e-Faisal"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "1500 sq ft"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "4.5 lakh monthly"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "SHF-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "office"
+        ],
+        "locations": [
+          "shf"
+        ],
+        "budget_min": 405000,
+        "budget_max": 495000,
+        "exclude": [],
+        "size_sqft": 1500
+      }
+    }
+  },
+  {
+    "id": "CT-16",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "Bahria Town mein 250 yards ka house, 3 crore max",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "house"
+      },
+      "location": {
+        "value": [
+          "btk"
+        ],
+        "raw": "Bahria Town",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "250 yards",
+        "value": 250,
+        "unit": "sq_yd",
+        "sqft": 2250
+      },
+      "budget": {
+        "raw": "3 crore max",
+        "min": null,
+        "max": 30000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "house"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Bahria Town"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "250 yards"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "3 crore max"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "BTK-104"
+      ],
+      "allowed": [
+        "BTK-102",
+        "BTK-103"
+      ],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "btk"
+        ],
+        "budget_min": null,
+        "budget_max": 30000000,
+        "exclude": [],
+        "size_sqyd": 250
+      },
+      "note": "Bahria nominal 250 = 272 actual; BTK-103 needs the budget step; BTK-102 (235) is in +/-10%."
+    }
+  },
+  {
+    "id": "CT-17",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "Clifton block 2 mein apartment for sale, 3 bedrooms, 7.8cr tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": "for sale",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "apartment"
+      },
+      "location": {
+        "value": [
+          "clf-b2"
+        ],
+        "raw": "Clifton block 2",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "7.8cr tak",
+        "min": null,
+        "max": 78000000,
+        "mode": "max",
+        "period": "one_time"
+      },
+      "beds_min": {
+        "raw": "3 bedrooms",
+        "value": 3
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "for sale"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "apartment"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Clifton block 2"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "7.8cr tak"
+            },
+            {
+              "slot": "beds_min",
+              "op": "set",
+              "raw_span": "3 bedrooms"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "CLF-103"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "apartment"
+        ],
+        "locations": [
+          "clf-b2"
+        ],
+        "budget_min": null,
+        "budget_max": 78000000,
+        "exclude": [],
+        "beds_min": 3
+      }
+    }
+  },
+  {
+    "id": "CT-18",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "DHA 5 mein 3 bed apartment chahiye, 80 lac tak",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "apartment"
+      },
+      "location": {
+        "value": [
+          "dha-ph5"
+        ],
+        "raw": "DHA 5",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "80 lac tak",
+        "min": null,
+        "max": 8000000,
+        "mode": "max",
+        "period": "one_time"
+      },
+      "beds_min": {
+        "raw": "3 bed",
+        "value": 3
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "apartment"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA 5"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "80 lac tak"
+            },
+            {
+              "slot": "beds_min",
+              "op": "set",
+              "raw_span": "3 bed"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "no_match",
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "apartment"
+        ],
+        "locations": [
+          "dha-ph5"
+        ],
+        "budget_min": null,
+        "budget_max": 8000000,
+        "exclude": [],
+        "beds_min": 3
+      },
+      "note": "DH5-101 is 3.2 crore; honest no-match + options (budget / nearby / agent)."
+    }
+  },
+  {
+    "id": "CT-19",
+    "set": "customer_text",
+    "category": "mixed",
+    "language": "mixed",
+    "input": "Bahria Sports City mein plot hai? 1.6 crore budget",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "plot"
+        ],
+        "raw": "plot"
+      },
+      "location": {
+        "value": [
+          "btk-sports-city"
+        ],
+        "raw": "Bahria Sports City",
+        "status": "RESOLVED"
+      },
+      "budget": {
+        "raw": "1.6 crore budget",
+        "min": 14400000,
+        "max": 17600000,
+        "mode": "around",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "plot"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Bahria Sports City"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "1.6 crore budget"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "BTK-106"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "plot"
+        ],
+        "locations": [
+          "btk-sports-city"
+        ],
+        "budget_min": 14400000,
+        "budget_max": 17600000,
+        "exclude": []
+      }
+    }
+  },
+  {
+    "id": "CT-20",
+    "set": "customer_text",
+    "category": "urdu_script",
+    "language": "urdu_script",
+    "input": "ڈی ایچ اے فیز 6 میں 500 گز کا گھر چاہیے، بجٹ 8 کروڑ تک",
+    "gold_extraction": {
+      "purpose": {
+        "value": "sale",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "گھر"
+      },
+      "location": {
+        "value": [
+          "dha-ph6"
+        ],
+        "raw": "ڈی ایچ اے فیز 6",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "500 گز",
+        "value": 500,
+        "unit": "sq_yd",
+        "sqft": 4500
+      },
+      "budget": {
+        "raw": "8 کروڑ تک",
+        "min": null,
+        "max": 80000000,
+        "mode": "max",
+        "period": "one_time"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "گھر"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "ڈی ایچ اے فیز 6"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "500 گز"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "8 کروڑ تک"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH6-101",
+        "DH6-102",
+        "DH7-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6"
+        ],
+        "budget_min": null,
+        "budget_max": 80000000,
+        "exclude": [],
+        "size_sqyd": 500
+      },
+      "note": "DH7-101 is the labelled neighbour step (Demo Scope scenario 2). Urdu-script aliases are a known gap (docs/DEMO_DATASET_GAPS.md)."
+    }
+  },
+  {
+    "id": "CT-21",
+    "set": "customer_text",
+    "category": "urdu_script",
+    "language": "urdu_script",
+    "input": "کلفٹن میں دکان کرائے پر چاہیے",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "کرائے پر",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "shop"
+        ],
+        "raw": "دکان"
+      },
+      "location": {
+        "value": [
+          "clf"
+        ],
+        "raw": "کلفٹن",
+        "status": "RESOLVED"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "کرائے پر"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "دکان"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "کلفٹن"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "CLF-101"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "rent",
+        "property_types": [
+          "shop"
+        ],
+        "locations": [
+          "clf"
+        ],
+        "budget_min": null,
+        "budget_max": null,
+        "exclude": []
+      },
+      "note": "CLF-104 is rented (hidden) and must never be shown."
+    }
+  },
+  {
+    "id": "CT-22",
+    "set": "customer_text",
+    "category": "incomplete",
+    "language": "roman_urdu",
+    "input": "ghar chahiye",
+    "gold_extraction": {
+      "property_types": {
+        "value": [
+          "house"
+        ],
+        "raw": "ghar"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "ghar"
+            }
+          ]
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "clarify",
+      "slots": [
+        "purpose",
+        "location"
+      ]
+    }
+  },
+  {
+    "id": "CT-23",
+    "set": "customer_text",
+    "category": "incomplete",
+    "language": "mixed",
+    "input": "5 lakh ka office",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": null,
+        "source": "inferred"
+      },
+      "property_types": {
+        "value": [
+          "office"
+        ],
+        "raw": "office"
+      },
+      "budget": {
+        "raw": "5 lakh",
+        "min": 450000,
+        "max": 550000,
+        "mode": "around",
+        "period": "monthly"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "office"
+            },
+            {
+              "slot": "budget",
+              "op": "set",
+              "raw_span": "5 lakh"
+            }
+          ]
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "clarify",
+      "slots": [
+        "location"
+      ],
+      "note": "Purpose inferred as rent from the amount and echoed to confirm."
+    }
+  },
+  {
+    "id": "CT-24",
+    "set": "customer_text",
+    "category": "incomplete",
+    "language": "roman_urdu",
+    "input": "DHA mein kuch dikhao",
+    "gold_extraction": {
+      "location": {
+        "value": [
+          "dha"
+        ],
+        "raw": "DHA",
+        "status": "RESOLVED"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "DHA"
+            }
+          ]
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "clarify",
+      "slots": [
+        "purpose",
+        "property_types"
+      ],
+      "note": "Search gate: needs purpose and one of type / budget / size."
+    }
+  },
+  {
+    "id": "CT-25",
+    "set": "customer_text",
+    "category": "ambiguous",
+    "language": "roman_urdu",
+    "input": "Block 6 mein office chahiye rent pe",
+    "gold_extraction": {
+      "purpose": {
+        "value": "rent",
+        "raw": "rent pe",
+        "source": "text"
+      },
+      "property_types": {
+        "value": [
+          "office"
+        ],
+        "raw": "office"
+      },
+      "location": {
+        "value": [],
+        "raw": "Block 6",
+        "status": "AMBIGUOUS",
+        "candidates": [
+          "clf-b6",
+          "gli-b6",
+          "pec-b6"
+        ]
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "purpose",
+              "op": "set",
+              "raw_span": "rent pe"
+            },
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "office"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Block 6"
+            }
+          ]
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "clarify",
+      "slots": [
+        "location"
+      ],
+      "candidates": [
+        "clf-b6",
+        "gli-b6",
+        "pec-b6"
+      ],
+      "note": "Ambiguous location: ask, never guess; no search."
+    }
+  },
+  {
+    "id": "CT-26",
+    "set": "customer_text",
+    "category": "ambiguous",
+    "language": "roman_urdu",
+    "input": "500 gaz flat chahiye Clifton mein",
+    "gold_extraction": {
+      "property_types": {
+        "value": [
+          "apartment"
+        ],
+        "raw": "flat"
+      },
+      "location": {
+        "value": [
+          "clf"
+        ],
+        "raw": "Clifton",
+        "status": "RESOLVED"
+      },
+      "size": {
+        "raw": "500 gaz",
+        "value": 500,
+        "unit": "sq_yd",
+        "sqft": 4500
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "property_types",
+              "op": "set",
+              "raw_span": "flat"
+            },
+            {
+              "slot": "location",
+              "op": "set",
+              "raw_span": "Clifton"
+            },
+            {
+              "slot": "size",
+              "op": "set",
+              "raw_span": "500 gaz"
+            }
+          ]
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "clarify",
+      "slots": [
+        "property_types",
+        "purpose"
+      ],
+      "note": "R17 edge 4: a flat in gaz -> ask the type or convert and echo (4,500 sq ft)."
+    }
+  },
+  {
+    "id": "CT-27",
+    "set": "customer_text",
+    "category": "follow_up",
+    "language": "roman_urdu",
+    "input": "Property 2 ki aur pictures",
+    "context": {
+      "after": "CT-13",
+      "shown": [
+        "DH6-101",
+        "DH6-102",
+        "DH7-101"
+      ]
+    },
+    "gold_extraction": {},
+    "expected_tools": [
+      {
+        "name": "send_property_photos",
+        "args": {
+          "ref": {
+            "position": 2
+          }
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "photos",
+      "listing": "DH6-102",
+      "note": "Scenario 3a: card #2's images, ID echoed."
+    }
+  },
+  {
+    "id": "CT-28",
+    "set": "customer_text",
+    "category": "follow_up",
+    "language": "roman_urdu",
+    "input": "Kuch sasta dikhao",
+    "context": {
+      "after": "CT-27",
+      "shown": [
+        "DH6-101",
+        "DH6-102",
+        "DH7-101"
+      ]
+    },
+    "gold_extraction": {
+      "budget": {
+        "raw": "Kuch sasta",
+        "op": "relative",
+        "relative": "cheaper"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "budget",
+              "op": "relative",
+              "raw_span": "Kuch sasta"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "no_match",
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6"
+        ],
+        "budget_min": null,
+        "budget_max": 72750000,
+        "exclude": [
+          "DH6-101",
+          "DH6-102",
+          "DH7-101"
+        ],
+        "size_sqyd": 500
+      },
+      "note": "Scenario 3b: max = 7.5 cr x 0.97; budget step skipped; shown excluded; DH6-105 (sold) and DH6-106 (reserved) never shown."
+    }
+  },
+  {
+    "id": "CT-29",
+    "set": "customer_text",
+    "category": "follow_up",
+    "language": "roman_urdu",
+    "input": "Phase 8 mein bhi dekho",
+    "context": {
+      "after": "CT-28",
+      "shown": [
+        "DH6-101",
+        "DH6-102",
+        "DH7-101"
+      ]
+    },
+    "gold_extraction": {
+      "location": {
+        "value": [
+          "dha-ph8"
+        ],
+        "raw": "Phase 8",
+        "status": "RESOLVED",
+        "op": "add"
+      }
+    },
+    "expected_tools": [
+      {
+        "name": "update_requirements",
+        "args": {
+          "patch": [
+            {
+              "slot": "location",
+              "op": "add",
+              "raw_span": "Phase 8"
+            }
+          ]
+        }
+      },
+      {
+        "name": "search_properties",
+        "args": {}
+      }
+    ],
+    "expected_outcome": {
+      "type": "results",
+      "ids": [
+        "DH8-101",
+        "DH8-102"
+      ],
+      "allowed": [],
+      "search": {
+        "purpose": "sale",
+        "property_types": [
+          "house"
+        ],
+        "locations": [
+          "dha-ph6",
+          "dha-ph8"
+        ],
+        "budget_min": null,
+        "budget_max": 72750000,
+        "exclude": [
+          "DH6-101",
+          "DH6-102",
+          "DH7-101"
+        ],
+        "size_sqyd": 500
+      },
+      "note": "Scenario 3c: DH8-102 6.9 cr in budget; DH8-101 7.4 cr 'budget se thoda upar'."
+    }
+  },
+  {
+    "id": "CT-30",
+    "set": "customer_text",
+    "category": "handoff",
+    "language": "roman_urdu",
+    "input": "Mujhe visit karni hai, kal shaam",
+    "context": {
+      "after": "CT-29",
+      "shown": [
+        "DH8-102",
+        "DH8-101"
+      ]
+    },
+    "gold_extraction": {},
+    "expected_tools": [
+      {
+        "name": "request_handoff",
+        "args": {
+          "reason": "visit"
+        }
+      }
+    ],
+    "expected_outcome": {
+      "type": "handoff",
+      "ask_property": true,
+      "note": "Scenario 5: several shown and no focus -> ask which property, then lead card."
+    }
+  }
+]
