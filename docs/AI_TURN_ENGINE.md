@@ -201,8 +201,9 @@ end-to-end guarantee.
 - Customer-visible text is only approved templates (`turn_engine.TEMPLATES`, Roman
   Urdu) plus notices from trusted tool results. Model prose is never sent; the adapter
   does not even return it. With several tool notices, one message joins them in order.
-- No text in the turn (voice before 6.3, a photo without caption): a template, no
-  provider call (voice / staff photo / generic).
+- No text in the turn (a photo without caption, voice with STT_PROVIDER=off or on a staff
+  turn): a template, no provider call (voice / staff photo / generic). Task 6.3: customer
+  voice notes are transcribed before the engine runs and arrive as text (docs/SPEECH.md).
 - `turn_engine.ground_reply(payloads, trusted_codes)` is the seam for the **Task 9.1**
   renderer + grounding validator (Execution Plan Day 10; the 5.3/5.4 handoff's "11.x" is
   wrong). In 6.1 it is defence in depth only: a listing-code shaped token not supplied by

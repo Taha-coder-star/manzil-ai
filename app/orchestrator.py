@@ -18,7 +18,11 @@ One process_message job runs one turn for its conversation:
    and mode = 'ai'; otherwise the turn is 'gated' and nothing is sent
    (forwarding to the broker is Task 11.x). The send-time gate in app.outbound
    still re-checks before every message (R-28).
-5. The reply: Task 6.1's AI turn engine (app.turn_engine) when AI_PROVIDER=gemini,
+5. Task 6.3: a customer turn with voice notes is transcribed first, inside this
+   serialised turn (app.speech, C4; Red-Team R-02), when STT_PROVIDER is set; a
+   transcribed note then counts as text. Notes that could not be used get an
+   approved notice (and a turn with nothing else gets only the notice).
+   The reply: Task 6.1's AI turn engine (app.turn_engine) when AI_PROVIDER=gemini,
    otherwise the route's stub responder. Sends use the dedupe key
    "turn:{turn_id}:{seq}", so a resumed turn never sends twice.
 6. The turn is closed ('replied') only after its sends are recorded. A turn whose
@@ -47,7 +51,7 @@ from uuid import UUID
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import echo, outbound, turn_engine, whatsapp
+from app import echo, outbound, speech, turn_engine, whatsapp
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.queue import PermanentJobError, error_code
@@ -102,6 +106,9 @@ class Turn:
     control_state: str
     conversation_mode: str
     messages: tuple[TurnMessage, ...]
+    # Task 6.3: the speech status of each voice note, in order (app.speech); empty
+    # when the turn was not transcribed.
+    voice: tuple[str, ...] = ()
 
     @property
     def ai_allowed(self):
@@ -319,8 +326,9 @@ def close_turn(conn, turn, status):
 def mode_reply(turn):
     count = len(turn.messages)
     noun = "message" if count == 1 else "messages"
+    voice = f" · voice: {', '.join(turn.voice)}" if turn.voice else ""
     return [whatsapp.text(
-        f"{turn.route.capitalize()} mode (stub) · {count} {noun} in this turn"
+        f"{turn.route.capitalize()} mode (stub) · {count} {noun} in this turn{voice}"
     )]
 
 
@@ -346,12 +354,13 @@ def demo_command(turn):
     return {"type": "text", "text": {"body": last.text}}
 
 
-def run_turns(conn, job, client, sender, *, demo=None, engine=None):
+def run_turns(conn, job, client, sender, *, demo=None, engine=None, speech_service=None):
     """Answer the conversation's pending turn for this job; an open turn a crashed
     attempt left behind is finished first, then the new messages form the next turn.
 
     demo(turn, message, dedupe_prefix) handles a staff '#demo …' turn (app.handlers).
     engine: the AI turn engine (app.turn_engine.TurnEngine), or None for the stubs.
+    speech_service: app.speech.SpeechService, or None (STT_PROVIDER=off).
 
     When this job will not retry (a permanent error or its last attempt), a failing
     turn is closed as 'failed'. If it was a resumed (older) turn, this job's own
@@ -382,7 +391,7 @@ def run_turns(conn, job, client, sender, *, demo=None, engine=None):
                 tell_customer(turn.id, turn.conversation_id)
             break
         try:
-            _answer(conn, client, job, turn, demo, engine)
+            _answer(conn, client, job, turn, demo, engine, speech_service)
         except Exception as exc:
             if not (isinstance(exc, PermanentJobError) or job.attempts >= job.max_attempts):
                 raise  # retried; the turn stays open and is resumed
@@ -551,15 +560,35 @@ def _interim(conn, client, turn):
     return notify
 
 
-def _answer(conn, client, job, turn, demo, engine=None):
+def _transcribes(turn, speech_service):
+    return (speech_service is not None and turn.route == "customer"
+            and any(message.type == "audio" for message in turn.messages))
+
+
+def _respond(conn, client, job, turn, engine):
+    """The engine's or the stub's payloads, plus the speech notices (Task 6.3)."""
+    notices = speech.notice_texts(turn.voice)
+    if notices and not any((message.text or "").strip() for message in turn.messages):
+        # Nothing usable is left: only the notice, no provider call.
+        return [whatsapp.text("\n\n".join(notices))]
+    payloads = (engine.respond(conn, job, turn, _interim(conn, client, turn))
+                if engine is not None else RESPONDERS[turn.route](turn))
+    if notices:
+        payloads = [*payloads, whatsapp.text("\n\n".join(notices))]
+    return payloads
+
+
+def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
     if not turn.ai_allowed:
         # Control-state gate stub: no AI output; forwarding is Task 11.x.
         close_turn(conn, turn, "gated")
         logger.info("Turn %s gated (%s / %s)", turn.id, turn.control_state,
                     turn.conversation_mode)
         return
+    transcribes = _transcribes(turn, speech_service)
     try:
-        client.mark_read(turn.messages[-1].wamid)
+        # A voice turn takes a few seconds of STT: show the typing indicator (VOICE A5).
+        client.mark_read(turn.messages[-1].wamid, typing=transcribes)
     except whatsapp.SendError as exc:
         # Blue ticks are cosmetic; never block the reply on them.
         logger.warning("Mark-read failed: %s", exc.code)
@@ -569,10 +598,11 @@ def _answer(conn, client, job, turn, demo, engine=None):
         if command is not None:
             demo(turn, command, f"turn:{turn.id}")
         else:
+            if transcribes:
+                turn = speech_service.transcribe_turn(conn, job, turn, client)
             payloads = tap_reply(turn)
             if payloads is None:
-                payloads = (engine.respond(conn, job, turn, _interim(conn, client, turn))
-                            if engine is not None else RESPONDERS[turn.route](turn))
+                payloads = _respond(conn, client, job, turn, engine)
             # Outbound transport time is outside the AI turn budget; logged separately.
             began = time.monotonic()
             for seq, payload in enumerate(payloads):

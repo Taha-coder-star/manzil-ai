@@ -30,9 +30,18 @@ class Settings:
     # Thinking level for every call; None (LLM_THINKING_LEVEL=off) leaves it out of the
     # request, a kill switch if a model rejects the field.
     llm_thinking_level: str | None = DEFAULT_THINKING_LEVEL
+    # Task 6.3 speech (C4). "off" leaves voice notes untranscribed (the 6.1 template
+    # asks the customer to type); "elevenlabs" must be selected explicitly. stt_fallback:
+    # "gemini" or "off"; unset = gemini when GEMINI_API_KEY and LLM_PRIMARY_MODEL are
+    # both set, else off.
+    stt_provider: str = "off"
+    elevenlabs_api_key: str | None = field(default=None, repr=False)
+    stt_fallback: str | None = None
 
 
 AI_PROVIDERS = ("stub", "gemini")
+STT_PROVIDERS = ("off", "elevenlabs")
+STT_FALLBACKS = ("gemini", "off")
 # A model ID becomes part of the request path, so only plain ID characters pass.
 MODEL_ID = re.compile(r"[a-z0-9][a-z0-9.-]{1,63}")
 
@@ -60,6 +69,13 @@ def check_ai_settings(settings):
                         ("LLM_FAILOVER_MODEL", settings.llm_failover_model)):
         if not MODEL_ID.fullmatch(value):
             raise ConfigurationError(f"{name} is not a valid model ID")
+    check_thinking_level(settings)
+
+
+def check_thinking_level(settings):
+    """LLM_THINKING_LEVEL (already normalised by thinking_level_setting) must be one of
+    THINKING_LEVELS or None ('off'). Shared by every Gemini consumer: the turn engine
+    and the STT fallback."""
     level = getattr(settings, "llm_thinking_level", DEFAULT_THINKING_LEVEL)
     if level is not None and level not in THINKING_LEVELS:
         raise ConfigurationError("LLM_THINKING_LEVEL must be one of: "
@@ -75,6 +91,42 @@ def thinking_level_setting():
     if not value:
         return DEFAULT_THINKING_LEVEL
     return None if value == THINKING_OFF else value
+
+
+def stt_fallback(settings):
+    """The effective STT fallback, "gemini" or "off" (Settings.stt_fallback)."""
+    value = getattr(settings, "stt_fallback", None)
+    if value:
+        return value
+    usable = (getattr(settings, "gemini_api_key", None)
+              and getattr(settings, "llm_primary_model", None))
+    return "gemini" if usable else "off"
+
+
+def check_stt_settings(settings):
+    """Raise ConfigurationError unless the speech settings are usable. An explicit
+    STT_PROVIDER or STT_FALLBACK never silently degrades when something is missing."""
+    provider = getattr(settings, "stt_provider", "off")
+    if provider not in STT_PROVIDERS:
+        raise ConfigurationError("STT_PROVIDER must be one of: " + ", ".join(STT_PROVIDERS))
+    fallback = getattr(settings, "stt_fallback", None)
+    if fallback is not None and fallback not in STT_FALLBACKS:
+        raise ConfigurationError("STT_FALLBACK must be one of: " + ", ".join(STT_FALLBACKS))
+    if provider == "off":
+        return
+    required = [("ELEVENLABS_API_KEY", getattr(settings, "elevenlabs_api_key", None)),
+                ("S3_BUCKET", getattr(settings, "s3_bucket", None))]
+    if fallback == "gemini":
+        required += [("GEMINI_API_KEY", getattr(settings, "gemini_api_key", None)),
+                     ("LLM_PRIMARY_MODEL", getattr(settings, "llm_primary_model", None))]
+    missing = [name for name, value in required if not value]
+    if missing:
+        raise ConfigurationError("STT_PROVIDER=elevenlabs requires " + ", ".join(missing))
+    if stt_fallback(settings) == "gemini":
+        if not MODEL_ID.fullmatch(settings.llm_primary_model):
+            raise ConfigurationError("LLM_PRIMARY_MODEL is not a valid model ID")
+        # The fallback sends LLM_THINKING_LEVEL (app.speech), even with AI_PROVIDER=stub.
+        check_thinking_level(settings)
 
 
 def _optional(name):
@@ -103,4 +155,7 @@ def load_settings():
         llm_primary_model=_optional("LLM_PRIMARY_MODEL"),
         llm_failover_model=_optional("LLM_FAILOVER_MODEL"),
         llm_thinking_level=thinking_level_setting(),
+        stt_provider=(_optional("STT_PROVIDER") or "off").lower(),
+        elevenlabs_api_key=_optional("ELEVENLABS_API_KEY"),
+        stt_fallback=(_optional("STT_FALLBACK") or "").lower() or None,
     )

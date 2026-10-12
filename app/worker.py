@@ -36,9 +36,10 @@ MAX_RECONNECT_DELAY_SECONDS = 30
 CONFIGURATION_EXIT_CODE = 78  # EX_CONFIG (sysexits.h)
 
 
-def check_schema(database_url, agency_id, *, ai):
+def check_schema(database_url, agency_id, *, ai, stt=False):
     """Before any job is claimed, on a runtime connection: migration 014 (always; the
-    turn lifecycle uses it) and, with ai, migration 013 (app.turn_engine)."""
+    turn lifecycle uses it) and, with ai or stt, migration 013 (usage_event detail,
+    written by app.turn_engine and app.speech)."""
     try:
         conn = psycopg.connect(database_url, autocommit=True,
                                connect_timeout=CONNECT_TIMEOUT_SECONDS)
@@ -46,7 +47,7 @@ def check_schema(database_url, agency_id, *, ai):
         raise ConfigurationError("Schema check failed: database unavailable") from None
     with conn:
         orchestrator.check_schema(conn, agency_id)
-        if ai:
+        if ai or stt:
             turn_engine.check_schema(conn, agency_id)
 
 
@@ -169,7 +170,8 @@ def run():
     try:
         handlers = make_handlers(settings)
         check_schema(settings.database_url, agency_ids[0],
-                     ai=settings.ai_provider == "gemini")
+                     ai=settings.ai_provider == "gemini",
+                     stt=getattr(settings, "stt_provider", "off") != "off")
     except ConfigurationError as exc:
         # AI settings or schema that cannot work: claim nothing and exit non-zero, so
         # the container is visibly not running (deploy/compose.yml restarts it under

@@ -226,7 +226,7 @@ def load_history(conn, turn):
         _set_timeout(conn)
         rows = conn.execute(
             """
-            SELECT m.direction, m.message_type, m.text_body
+            SELECT m.direction, m.message_type, COALESCE(m.text_body, m.transcript)
             FROM conversation_turn t
             JOIN message m ON m.agency_id = t.agency_id
                 AND m.conversation_id = t.conversation_id
