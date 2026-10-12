@@ -2,6 +2,8 @@ import os
 import re
 from dataclasses import dataclass, field
 
+from app.llm import DEFAULT_THINKING_LEVEL, THINKING_LEVELS
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -25,6 +27,9 @@ class Settings:
     gemini_api_key: str | None = field(default=None, repr=False)
     llm_primary_model: str | None = None
     llm_failover_model: str | None = None
+    # Thinking level for every call; None (LLM_THINKING_LEVEL=off) leaves it out of the
+    # request, a kill switch if a model rejects the field.
+    llm_thinking_level: str | None = DEFAULT_THINKING_LEVEL
 
 
 AI_PROVIDERS = ("stub", "gemini")
@@ -55,6 +60,21 @@ def check_ai_settings(settings):
                         ("LLM_FAILOVER_MODEL", settings.llm_failover_model)):
         if not MODEL_ID.fullmatch(value):
             raise ConfigurationError(f"{name} is not a valid model ID")
+    level = getattr(settings, "llm_thinking_level", DEFAULT_THINKING_LEVEL)
+    if level is not None and level not in THINKING_LEVELS:
+        raise ConfigurationError("LLM_THINKING_LEVEL must be one of: "
+                                 + ", ".join((*THINKING_LEVELS, THINKING_OFF)))
+
+
+THINKING_OFF = "off"
+
+
+def thinking_level_setting():
+    """LLM_THINKING_LEVEL: unset or empty -> the default (low); 'off' -> None."""
+    value = (os.environ.get("LLM_THINKING_LEVEL") or "").strip().lower()
+    if not value:
+        return DEFAULT_THINKING_LEVEL
+    return None if value == THINKING_OFF else value
 
 
 def _optional(name):
@@ -82,4 +102,5 @@ def load_settings():
         gemini_api_key=_optional("GEMINI_API_KEY"),
         llm_primary_model=_optional("LLM_PRIMARY_MODEL"),
         llm_failover_model=_optional("LLM_FAILOVER_MODEL"),
+        llm_thinking_level=thinking_level_setting(),
     )

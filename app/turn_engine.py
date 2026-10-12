@@ -47,6 +47,15 @@ provider call); a crash before it is stored runs the provider again on the retry
 attempt, not exactly once. A crash between a provider response and its usage row
 leaves that call unmetered.
 
+Interim + continuation (Red-Team R-17): when the turn budget runs out before the
+turn has an answer (an attempt cannot start, or an iteration ended in a timeout),
+the engine sends TEMPLATES["interim"] once through the notify callback (the
+orchestrator sends it under turn:{id}:interim, so a retried job never repeats
+it), grants CONTINUATION_BUDGET_SECONDS more and retries that iteration (same
+model if one has answered, else primary -> failover). A second exhaustion ends the
+turn with the failure template. Usage keys of attempts made after the interim end
+in ':c'. Refused, malformed and non-retryable (4xx) results never get an interim.
+
 Time: TURN_BUDGET_SECONDS limits when provider attempts may start and how long
 each may run (app.llm's deadline, with its connect-phase exception). It does not
 bound the database work: the history read, each usage INSERT and the plan read /
@@ -63,7 +72,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app import ai_tools, cards, whatsapp
+from app import ai_tools, cards, llm, whatsapp
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.llm import GeminiClient, ProviderError, Usage
@@ -75,6 +84,7 @@ STATEMENT_TIMEOUT = "5s"
 PROVIDER_NAME = "gemini"
 CALL_TIMEOUT_SECONDS = 8.0
 TURN_BUDGET_SECONDS = 15.0
+CONTINUATION_BUDGET_SECONDS = 15.0  # once per turn, after the interim message
 MIN_ATTEMPT_SECONDS = 1.0
 MAX_ITERATIONS = 3
 # Context limits (characters; roughly 4 per token for Roman Urdu / English).
@@ -89,11 +99,14 @@ OPERATIONS = {"customer": "L1", "staff": "L2"}  # RFC 9: L1 customer turn, L2 st
 # privilege errors (42). Everything else (08 connection, 57 timeout or cancel, 40,
 # 53, ...) goes to the job's bounded retries.
 PERSISTENT_SQLSTATE_CLASSES = ("22", "23", "42")
+# Iteration errors that mean "out of time" and earn the one continuation.
+CONTINUE_ERRORS = ("timeout", "budget_exhausted")
 
 # Approved reply templates (Roman Urdu). Truthful: stubs say nothing happened.
 TEMPLATES = {
     "failure": ("Maazrat, abhi aap ki request process nahi ho saki. "
                 "Thori dair baad dobara bhejein."),
+    "interim": "Ek minute, check kar raha hoon.",
     "refusal": ("Maazrat, is baat mein main madad nahi kar sakta. "
                 "Property ke baare mein apna sawal likh kar bhejein."),
     "customer_default": ("Shukriya! Property dhoondne ke liye apna area, budget aur "
@@ -161,6 +174,13 @@ SYSTEM_PROMPTS = {
 # Listing-code shaped tokens (demo/ codes such as DH6-101). Defence in depth only.
 LISTING_CODE = re.compile(r"\b[A-Z0-9]{2,4}-[0-9]{3}\b")
 _PLACEHOLDERS = {"audio": "[voice note, no transcript yet]", "image": "[photo]"}
+
+
+@dataclass
+class Budget:
+    """The turn's time: a deadline on the engine clock, extended at most once."""
+    deadline: float
+    extended: bool = False
 
 
 @dataclass(frozen=True)
@@ -275,18 +295,22 @@ def _function_response(call, result):
 
 class TurnEngine:
     def __init__(self, provider, primary_model, failover_model, *,
-                 provider_name=PROVIDER_NAME, clock=time.monotonic):
+                 provider_name=PROVIDER_NAME, clock=time.monotonic,
+                 thinking_level=llm.DEFAULT_THINKING_LEVEL):
         self.provider = provider
         self.primary_model = primary_model
         self.failover_model = failover_model
         self.provider_name = provider_name
+        self.thinking_level = thinking_level
         self._clock = clock
 
-    def respond(self, conn, job, turn):
+    def respond(self, conn, job, turn, notify=None):
+        """notify(payload) sends the interim message (app.orchestrator); without it
+        the turn gets no continuation."""
         return cards.fixed_plan(conn, turn.agency_id, turn.id,
-                                lambda: self.plan(conn, job, turn))
+                                lambda: self.plan(conn, job, turn, notify))
 
-    def plan(self, conn, job, turn):
+    def plan(self, conn, job, turn, notify=None):
         """Build the turn's payloads (provider calls happen here, outside any
         transaction)."""
         start = self._clock()
@@ -299,7 +323,8 @@ class TurnEngine:
         parts = ([{"text": history}] if history else []) + [{"text": block}]
         contents = [{"role": "user", "parts": parts}]
         context = ai_tools.ToolContext(turn.route, turn_text)
-        outcome = self._run(conn, job, turn, contents, context, start)
+        budget = Budget(start + TURN_BUDGET_SECONDS)
+        outcome = self._run(conn, job, turn, contents, context, budget, notify)
         payloads = ground_reply(render(turn.route, outcome))
         logger.info(
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
@@ -308,13 +333,18 @@ class TurnEngine:
         )
         return payloads
 
-    def _run(self, conn, job, turn, contents, context, start):
+    def _run(self, conn, job, turn, contents, context, budget, notify):
         active = None  # (model, label) once a model has answered in this turn
         notices, tools, calls = [], [], 0
-        for iteration in range(1, MAX_ITERATIONS + 1):
+        iteration = 0
+        while iteration < MAX_ITERATIONS:
+            iteration += 1
             response, active, error, made = self._call(
-                conn, job, turn, contents, start, iteration, active)
+                conn, job, turn, contents, budget, iteration, active, notify)
             calls += made
+            if error in CONTINUE_ERRORS and self._extend(turn, budget, notify):
+                iteration -= 1  # the same iteration again, in the continuation
+                continue
             if error is not None:
                 return Outcome("failed", error, tuple(notices), tuple(tools), calls)
             if response.kind == "refused":
@@ -337,32 +367,48 @@ class TurnEngine:
             ]
         return Outcome("done", "iteration_limit", tuple(notices), tuple(tools), calls)
 
-    def _call(self, conn, job, turn, contents, start, iteration, active):
+    def _extend(self, turn, budget, notify):
+        """Once per turn: send the interim message and grant the continuation."""
+        if budget.extended or notify is None:
+            return False
+        budget.extended = True
+        budget.deadline = self._clock() + CONTINUATION_BUDGET_SECONDS
+        notify(whatsapp.text(TEMPLATES["interim"]))
+        logger.info("AI turn %s: turn budget used; interim sent, continuing", turn.id)
+        return True
+
+    def _call(self, conn, job, turn, contents, budget, iteration, active, notify=None):
         """One iteration: (response, active, error, attempts made)."""
         attempts = ([active] if active is not None else
                     [(self.primary_model, "primary"), (self.failover_model, "failover")])
         error, made = "budget_exhausted", 0
         for model, label in attempts:
-            timeout = min(CALL_TIMEOUT_SECONDS, start + TURN_BUDGET_SECONDS - self._clock())
+            timeout = min(CALL_TIMEOUT_SECONDS, budget.deadline - self._clock())
+            if timeout < MIN_ATTEMPT_SECONDS and made > 0 and self._extend(
+                    turn, budget, notify):
+                # The failover's turn, but no time left: interim, then go on.
+                timeout = min(CALL_TIMEOUT_SECONDS, budget.deadline - self._clock())
             if timeout < MIN_ATTEMPT_SECONDS:
                 return None, active, "budget_exhausted" if made == 0 else error, made
             began = self._clock()
             made += 1
+            key_label = f"{label}:c" if budget.extended else label
             try:
                 response = self.provider.generate(
                     model, system=SYSTEM_PROMPTS[turn.route],
                     tools=ai_tools.declarations(turn.route), contents=contents,
-                    timeout_s=timeout,
+                    timeout_s=timeout, thinking_level=self.thinking_level,
                 )
             except ProviderError as exc:
-                self._meter(conn, job, turn, iteration, label, model, "failed", exc.code,
-                            Usage(), began)
+                self._meter(conn, job, turn, iteration, key_label, model, "failed",
+                            exc.code, Usage(), began)
                 if exc.failover and active is None and label == "primary":
                     error = exc.code
                     continue
                 return None, active, exc.code, made
-            self._meter(conn, job, turn, iteration, label, response.model_version or model,
-                        "succeeded", response.detail, response.usage, began)
+            self._meter(conn, job, turn, iteration, key_label,
+                        response.model_version or model, "succeeded", response.detail,
+                        response.usage, began)
             return response, (model, label), None, made
         return None, active, error, made
 
@@ -440,4 +486,5 @@ def build_engine(settings):
     return TurnEngine(
         GeminiClient(settings.gemini_api_key),
         settings.llm_primary_model, settings.llm_failover_model,
+        thinking_level=getattr(settings, "llm_thinking_level", llm.DEFAULT_THINKING_LEVEL),
     )

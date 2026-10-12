@@ -33,6 +33,11 @@ BACKOFF_CAP_SECONDS = 300
 # (such as the migration lock); the first key namespaces conversation locks.
 CONVERSATION_LOCK_NAMESPACE = 3101
 MAX_ERROR_CODE_LENGTH = 100
+# A process_message job that dies of a crash on its last attempt ran no failure
+# handling; the reaper queues this job so the customer still hears that the turn
+# failed (app.orchestrator.notify_failed_job; RFC 13 poison jobs).
+TURN_FAILED_NOTICE_JOB = "turn_failed_notice"
+_NOTICE_FOR = "process_message"
 
 _JOB_COLUMNS = (
     "id, agency_id, job_type, payload, conversation_key, attempts, max_attempts, "
@@ -222,7 +227,8 @@ def reap_expired(conn, agency_id):
 
     A job with a conversation key is only requeued if its conversation lock is
     free, which proves the owning connection has ended. Exhausted jobs go dead.
-    Returns the number of jobs reaped.
+    A process_message job that goes dead here also gets a turn_failed_notice job
+    (same conversation key). Returns the number of jobs reaped.
     """
     reaped = []
     locked_keys = []
@@ -231,12 +237,12 @@ def reap_expired(conn, agency_id):
             _set_timeout(conn)
             expired = conn.execute(
                 """
-                SELECT id, conversation_key FROM job
+                SELECT id, conversation_key, job_type FROM job
                 WHERE status = 'running' AND lease_expires_at < now()
                 FOR UPDATE SKIP LOCKED
                 """
             ).fetchall()
-            for job_id, key in expired:
+            for job_id, key, job_type in expired:
                 if key is not None:
                     if not try_lock_conversation(conn, agency_id, key):
                         continue
@@ -256,6 +262,9 @@ def reap_expired(conn, agency_id):
                     (job_id,),
                 ).fetchone()[0]
                 reaped.append((job_id, status))
+                if status == "dead" and job_type == _NOTICE_FOR:
+                    enqueue_job(conn, TURN_FAILED_NOTICE_JOB, f"turn-failed-notice:{job_id}",
+                                {"job_id": str(job_id)}, conversation_key=key)
     finally:
         # Released after the transaction ends: the row locks kept other
         # workers off these jobs until commit, and an aborted transaction

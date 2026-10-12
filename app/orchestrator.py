@@ -39,6 +39,7 @@ Never log message text or phone numbers.
 import logging
 import re
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
@@ -46,7 +47,7 @@ from uuid import UUID
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import echo, outbound, whatsapp
+from app import echo, outbound, turn_engine, whatsapp
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.queue import PermanentJobError, error_code
@@ -63,6 +64,10 @@ MAX_TURNS_PER_JOB = 2
 # 'failed' instead of resumed again; the same as the job default max_attempts.
 MAX_TURN_ATTEMPTS = 3
 TURN_FAILED = "turn_failed"
+# A failed turn tells the customer once (RFC 13: a poison job gets a safe fallback
+# reply): TEMPLATES["failure"] under turn:{id}:failed, through the send-time gate.
+FAILED_NOTICE_SUFFIX = "failed"
+INTERIM_SUFFIX = "interim"
 # Reply ids of the listing cards (app.cards). The id is client-supplied: only this exact
 # shape is ever echoed back.
 TAP_ID = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
@@ -160,9 +165,11 @@ _MESSAGE_COLUMN_COUNT = 7
 _ORDER = "m.provider_timestamp NULLS LAST, e.received_at, m.provider_message_id"
 
 
-def assemble_turn(conn, job, sender):
+def assemble_turn(conn, job, sender, abandoned=None):
     """Return (turn, resumed): the open turn left by a crashed attempt (resumed=True),
-    or a newly assembled one; (None, False) when nothing is pending."""
+    or a newly assembled one; (None, False) when nothing is pending. An open turn
+    given up at MAX_TURN_ATTEMPTS is closed as 'failed' and, when a list is passed,
+    added to abandoned as (turn_id, conversation_id) for the failure notice."""
     with tenant_transaction(conn, job.agency_id):
         _set_timeout(conn)
         conversation = conn.execute(
@@ -188,6 +195,8 @@ def assemble_turn(conn, job, sender):
             # the messages waiting behind it.
             _close_failed(conn, turn[0])
             logger.warning("Turn %s abandoned after %d attempts", turn[0], turn[6])
+            if abandoned is not None:
+                abandoned.append((turn[0], conversation_id))
             turn = None
         if turn is not None:
             # Counted before any work, in this committed transaction: a crash cannot
@@ -349,21 +358,38 @@ def run_turns(conn, job, client, sender, *, demo=None, engine=None):
     messages still get their turn before the failure is raised, so its dead job
     does not strand them; an error marked blocks_later_turns (a usage row that
     cannot be written) records them as a failed turn instead, with no provider call.
+    The customer of a failed turn gets one failure notice per job
+    (send_failure_notice), before any newer message is answered.
     """
     failure = None
+    told = []  # one failure notice per job, sent before newer messages are answered
+
+    def tell_customer(turn_id, conversation_id):
+        if not told:
+            told.append(turn_id)
+            send_failure_notice(conn, client, job.agency_id, conversation_id, sender,
+                                turn_id)
+
     for _ in range(MAX_TURNS_PER_JOB):
-        turn, resumed = assemble_turn(conn, job, sender)
+        abandoned = []
+        turn, resumed = assemble_turn(conn, job, sender, abandoned)
+        for turn_id, conversation_id in abandoned:
+            tell_customer(turn_id, conversation_id)
         if turn is None:
             break
         if failure is not None and getattr(failure, "blocks_later_turns", False):
-            fail_turn(conn, turn, failure)
+            if fail_turn(conn, turn, failure):
+                tell_customer(turn.id, turn.conversation_id)
             break
         try:
             _answer(conn, client, job, turn, demo, engine)
         except Exception as exc:
             if not (isinstance(exc, PermanentJobError) or job.attempts >= job.max_attempts):
                 raise  # retried; the turn stays open and is resumed
-            if not fail_turn(conn, turn, exc) or not resumed or failure is not None:
+            if not fail_turn(conn, turn, exc):
+                raise
+            tell_customer(turn.id, turn.conversation_id)
+            if not resumed or failure is not None:
                 raise
             failure = exc
             continue
@@ -371,6 +397,100 @@ def run_turns(conn, job, client, sender, *, demo=None, engine=None):
             break
     if failure is not None:
         raise failure
+
+
+def send_failure_notice(conn, client, agency_id, conversation_id, recipient, turn_id):
+    """Tell the customer that a failed turn was not processed: one approved template
+    under turn:{id}:failed (at most once, however often this runs), through the
+    send-time gate and the 24 h window. Only for a turn whose status is 'failed', and
+    skipped when part of its reply plan already went out. Best effort: a send or database error is logged, never raised,
+    so it cannot hide the failure being recorded. Returns the send status or a
+    reason."""
+    try:
+        with tenant_transaction(conn, agency_id):
+            _set_timeout(conn)
+            status = conn.execute(
+                "SELECT status FROM conversation_turn WHERE id = %s", (turn_id,)
+            ).fetchone()
+            if status is None or status[0] != "failed":
+                return "not_failed"  # e.g. replied before a permanent send error
+            partial = conn.execute(
+                """
+                SELECT 1 FROM outbound_message
+                WHERE conversation_id = %s AND dedupe_key ~ %s
+                  AND status IN ('sending', 'sent', 'unknown')
+                LIMIT 1
+                """,
+                (conversation_id, f"^turn:{re.escape(str(turn_id))}:[0-9]+$"),
+            ).fetchone()
+        if partial is not None:
+            logger.info("Turn %s failed after part of its reply was sent; no notice",
+                        turn_id)
+            return "partial_reply"
+        result = outbound.send_message(
+            conn, client, agency_id, conversation_id, recipient,
+            whatsapp.text(turn_engine.TEMPLATES["failure"]),
+            f"turn:{turn_id}:{FAILED_NOTICE_SUFFIX}",
+        )
+    except (whatsapp.SendError, psycopg.Error, LookupError) as exc:
+        if not conn.closed and conn.info.transaction_status != TransactionStatus.IDLE:
+            conn.rollback()
+        logger.warning("Failure notice for turn %s not sent (%s)", turn_id, error_code(exc))
+        return "error"
+    logger.info("Failure notice for turn %s: %s", turn_id, result.status)
+    return result.status
+
+
+def notify_failed_job(conn, job, client_factory):
+    """The turn_failed_notice job (queued by app.queue.reap_expired when a
+    process_message job dies of a crash on its last attempt, so no code of that job
+    ran): close the job's open turn as 'failed' unless another job of the
+    conversation will still resume it, then send the failure notice. Runs under the
+    conversation's lock (same conversation_key)."""
+    dead_job_id = job.payload.get("job_id")
+    with tenant_transaction(conn, job.agency_id):
+        _set_timeout(conn)
+        row = conn.execute(
+            """
+            SELECT m.conversation_id, m.turn_id, c.customer_wa_id, a.meta_phone_number_id
+            FROM job j
+            JOIN message m ON m.inbound_event_id = j.inbound_event_id
+                AND m.direction = 'inbound'
+            JOIN conversation c ON c.id = m.conversation_id
+            JOIN agency a ON a.id = j.agency_id
+            WHERE j.id = %s
+            """,
+            (dead_job_id,),
+        ).fetchone()
+        if row is None or row[1] is None:
+            # Never assembled into a turn: the existing dead-job limitation
+            # (docs/AI_TURN_ENGINE.md section 10).
+            logger.warning("Dead job %s has no turn; no failure notice", dead_job_id)
+            return
+        conversation_id, turn_id, recipient, phone_number_id = row
+        conn.execute("SELECT 1 FROM conversation WHERE id = %s FOR UPDATE",
+                     (conversation_id,))
+        status = conn.execute(
+            "SELECT status FROM conversation_turn WHERE id = %s", (turn_id,)
+        ).fetchone()[0]
+        if status == "open":
+            live = conn.execute(
+                """
+                SELECT 1 FROM job j JOIN message m ON m.inbound_event_id = j.inbound_event_id
+                WHERE j.job_type = %s AND j.status IN ('pending', 'running')
+                  AND m.conversation_id = %s
+                LIMIT 1
+                """,
+                (JOB_TYPE, conversation_id),
+            ).fetchone()
+            if live is not None:
+                return  # that job resumes the turn; its own failure path tells the customer
+            _close_failed(conn, turn_id)
+            logger.warning("Turn %s failed: its job died on its last attempt", turn_id)
+        elif status != "failed":
+            return  # replied or gated: nothing to tell
+    with closing(client_factory(phone_number_id)) as client:
+        send_failure_notice(conn, client, job.agency_id, conversation_id, recipient, turn_id)
 
 
 def _close_failed(conn, turn_id):
@@ -414,6 +534,23 @@ def fail_turn(conn, turn, error):
     return True
 
 
+def _interim(conn, client, turn):
+    """The engine's notify callback: the interim message (Red-Team R-17) under
+    turn:{id}:interim, so a retried job never sends it twice. Best effort: a send
+    error is logged and the turn goes on."""
+    def notify(payload):
+        try:
+            result = outbound.send_message(
+                conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+                payload, f"turn:{turn.id}:{INTERIM_SUFFIX}",
+            )
+        except whatsapp.SendError as exc:
+            logger.warning("Interim message for turn %s not sent (%s)", turn.id, exc.code)
+            return
+        logger.info("Interim message for turn %s: %s", turn.id, result.status)
+    return notify
+
+
 def _answer(conn, client, job, turn, demo, engine=None):
     if not turn.ai_allowed:
         # Control-state gate stub: no AI output; forwarding is Task 11.x.
@@ -434,8 +571,8 @@ def _answer(conn, client, job, turn, demo, engine=None):
         else:
             payloads = tap_reply(turn)
             if payloads is None:
-                payloads = (engine.respond(conn, job, turn) if engine is not None
-                            else RESPONDERS[turn.route](turn))
+                payloads = (engine.respond(conn, job, turn, _interim(conn, client, turn))
+                            if engine is not None else RESPONDERS[turn.route](turn))
             # Outbound transport time is outside the AI turn budget; logged separately.
             began = time.monotonic()
             for seq, payload in enumerate(payloads):

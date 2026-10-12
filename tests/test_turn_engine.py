@@ -319,14 +319,30 @@ def test_malformed_or_truncated_answers_run_no_tool(ai, monkeypatch, reason):
     assert ai.sent_texts() == [TEMPLATES["failure"]]
 
 
-def test_both_models_failing_send_one_failure_message(ai):
-    ai.script += [503, timeout_after(ai.clock, 7)]
+def test_both_models_failing_after_the_continuation_send_the_interim_then_the_failure(ai):
+    # The first pass ends in a timeout: interim, one continuation (primary, then
+    # failover again); it fails too, so the turn ends with the failure template.
+    ai.script += [503, timeout_after(ai.clock, 7), 503, 503]
     ai.deliver(text("flat"))
     ai.drain()
-    assert [r.model for r in ai.requests] == [PRIMARY, FAILOVER]
-    assert ai.sent_texts() == [TEMPLATES["failure"]]
-    assert [(r[3], r[4]) for r in ai.usage()] == [("failed", "http_503"), ("failed", "timeout")]
+    assert [r.model for r in ai.requests] == [PRIMARY, FAILOVER, PRIMARY, FAILOVER]
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["failure"]]
+    rows = ai.usage()
+    assert [(r[3], r[4]) for r in rows] == [
+        ("failed", "http_503"), ("failed", "timeout"), ("failed", "http_503"),
+        ("failed", "http_503")]
+    assert [r[0].split(":", 6)[6] for r in rows] == [
+        "primary", "failover", "primary:c", "failover:c"]
+    assert len({r[0] for r in rows}) == 4
     assert ai.query("SELECT status FROM conversation_turn") == [("replied",)]
+
+
+def test_fast_provider_errors_get_no_interim(ai):
+    ai.script += [503, 503]  # an outage, not the clock: no continuation
+    ai.deliver(text("flat"))
+    ai.drain()
+    assert len(ai.requests) == 2
+    assert ai.sent_texts() == [TEMPLATES["failure"]]
 
 
 @pytest.mark.parametrize("status", [400, 401, 403])
@@ -340,12 +356,14 @@ def test_request_errors_do_not_fail_over(ai, status):
 
 def test_no_failover_after_a_model_has_answered(ai):
     # The primary's parts (thought signatures) and the executed tool are never
-    # replayed to another model: the turn ends with the failure template.
-    ai.script += [tools_answer(tool("search_properties")), timeout_after(ai.clock, 8)]
+    # replayed to another model: the continuation retries the same model.
+    ai.script += [tools_answer(tool("search_properties")), timeout_after(ai.clock, 8),
+                  answer()]
     ai.deliver(text("ghar"))
     ai.drain()
-    assert [r.model for r in ai.requests] == [PRIMARY, PRIMARY]
-    assert ai.sent_texts() == [TEMPLATES["failure"]]
+    assert [r.model for r in ai.requests] == [PRIMARY, PRIMARY, PRIMARY]
+    assert ai.requests[1].raw == ai.requests[2].raw  # the same iteration, retried
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["search_unavailable"]]
 
 
 def test_after_failover_the_turn_stays_on_the_failover_model(ai):
@@ -374,7 +392,7 @@ class ScriptedProvider:
     def __init__(self, clock, steps):
         self.clock, self.steps, self.calls = clock, list(steps), []
 
-    def generate(self, model, *, system, tools, contents, timeout_s):
+    def generate(self, model, *, system, tools, contents, timeout_s, thinking_level=None):
         self.calls.append((model, timeout_s, copy.deepcopy(contents)))
         seconds, result = self.steps.pop(0)
         self.clock.now += seconds
@@ -395,24 +413,78 @@ def test_failover_gets_what_is_left_of_the_turn_budget(ai):
         (PRIMARY, 8.0), (FAILOVER, 7.0), (FAILOVER, 5.0)]
 
 
-def test_failover_is_skipped_without_enough_budget(ai):
-    ai.engine.provider = ScriptedProvider(ai.clock, [(14.5, ProviderError("timeout",
-                                                                          failover=True))])
-    ai.deliver(text("ghar"))
-    ai.drain()
-    assert len(ai.engine.provider.calls) == 1
-    assert ai.sent_texts() == [TEMPLATES["failure"]]
-
-
-def test_an_exhausted_turn_budget_ends_with_one_failure_message(ai):
+def test_without_budget_for_the_failover_the_interim_buys_a_continuation(ai):
     ai.engine.provider = ScriptedProvider(ai.clock, [
-        (7.5, tools_answer(tool("search_properties"))),
-        (7.5, tools_answer(tool("search_properties"))),
+        (14.5, ProviderError("timeout", failover=True)),
+        (1, answer()),
     ])
     ai.deliver(text("ghar"))
     ai.drain()
-    assert [t for _, t, _ in ai.engine.provider.calls] == [8.0, 7.5]
-    assert ai.sent_texts() == [TEMPLATES["failure"]]  # no third call: no time left
+    assert [(m, t) for m, t, _ in ai.engine.provider.calls] == [(PRIMARY, 8.0), (FAILOVER, 8.0)]
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["customer_default"]]
+    assert [row[0].rsplit(":", 2)[1:] for row in ai.usage()] == [
+        ["1", "primary"], ["failover", "c"]]
+
+
+def test_an_exhausted_turn_budget_sends_the_interim_and_continues(ai):
+    ai.engine.provider = ScriptedProvider(ai.clock, [
+        (7.5, tools_answer(tool("search_properties"))),
+        (7.5, tools_answer(tool("search_properties"))),
+        (1, answer()),
+    ])
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert [t for _, t, _ in ai.engine.provider.calls] == [8.0, 7.5, 8.0]
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["search_unavailable"]]
+
+
+def test_a_second_exhaustion_ends_with_the_failure_template(ai):
+    ai.engine.provider = ScriptedProvider(ai.clock, [
+        (14.5, ProviderError("timeout", failover=True)),
+        (8, ProviderError("timeout", failover=True)),
+    ])
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert len(ai.engine.provider.calls) == 2  # the continuation is granted once
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["failure"]]
+
+
+def test_a_retried_job_never_repeats_the_interim(ai, monkeypatch):
+    failures = [RuntimeError("crash before the plan is stored")]
+    original = turn_engine.ground_reply
+
+    def crash_once(payloads, *args):
+        if failures:
+            raise failures.pop()
+        return original(payloads, *args)
+
+    monkeypatch.setattr(turn_engine, "ground_reply", crash_once)
+    ai.engine.provider = ScriptedProvider(ai.clock, [
+        (14.5, ProviderError("timeout", failover=True)), (1, answer()),
+        (14.5, ProviderError("timeout", failover=True)), (1, answer()),
+    ])
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert len(ai.engine.provider.calls) == 4  # both attempts needed the continuation
+    assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["customer_default"]]
+    assert ai.query("SELECT count(*) FROM outbound_message WHERE dedupe_key LIKE %s",
+                    ("%:interim",)) == [(1,)]
+
+
+def test_the_send_gate_holds_back_the_interim_after_a_handoff(ai):
+    def handoff_then_time_out(request):
+        with tenant_transaction(ai.conn, ai.agency):
+            ai.conn.execute("UPDATE conversation SET mode = 'human', "
+                            "control_state = 'human_owned'")
+        ai.clock.now += 14.5
+        raise httpx.ReadTimeout("deadline")
+
+    ai.script += [handoff_then_time_out, answer()]
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert ai.client.sent == []
+    assert ai.query("SELECT dedupe_key LIKE '%%:interim', status FROM outbound_message "
+                    "ORDER BY created_at") == [(True, "cancelled"), (False, "cancelled")]
 
 
 # --- context ------------------------------------------------------------------------
@@ -520,12 +592,12 @@ def test_concurrent_builds_send_the_first_stored_plan(ai, monkeypatch):
     started = []
     original = TurnEngine.plan
 
-    def plan(self, conn, job, turn):
+    def plan(self, conn, job, turn, notify=None):
         if not started:
             started.append(turn.id)
             other_job = SimpleNamespace(id=job.id, attempts=job.attempts + 100)
             self.respond(second, other_job, turn)
-        return original(self, conn, job, turn)
+        return original(self, conn, job, turn, notify)
 
     monkeypatch.setattr(TurnEngine, "plan", plan)
     ai.script += [tools_answer(tool("search_properties")), answer(), answer()]
@@ -580,7 +652,7 @@ def test_transient_metering_failures_exhaust_retries_then_a_later_message_is_ans
     assert process_jobs(ai) == [("dead", 3, "QueryCanceled")]
     assert ai.query("SELECT status, completed_at IS NOT NULL FROM conversation_turn") == \
         [("failed", True)]
-    assert ai.sent_texts() == [] and ai.usage() == []
+    assert ai.sent_texts() == [TEMPLATES["failure"]] and ai.usage() == []
 
     ai.script.append(answer())
     ai.deliver(text("doosra"))
@@ -590,8 +662,8 @@ def test_transient_metering_failures_exhaust_retries_then_a_later_message_is_ans
     assert "pehla" not in current_block(ai.requests[-1])  # not resumed, not re-answered
     assert ai.query("SELECT status, message_count FROM conversation_turn "
                     "ORDER BY created_at") == [("failed", 1), ("replied", 1)]
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
-    assert ai.query("SELECT count(*) FROM outbound_message") == [(1,)]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
+    assert ai.query("SELECT count(*) FROM outbound_message") == [(2,)]
     assert len(ai.usage()) == 1
 
 
@@ -604,7 +676,7 @@ def test_a_persistent_metering_error_stops_the_turn_without_another_provider_cal
     assert len(ai.requests) == 1  # no failover, no retry: the metering would fail again
     assert process_jobs(ai) == [("dead", 1, "usage_event_23514")]
     assert ai.query("SELECT status FROM conversation_turn") == [("failed",)]
-    assert ai.sent_texts() == []
+    assert ai.sent_texts() == [TEMPLATES["failure"]]
 
     with psycopg.connect(ai.admin_url, autocommit=True) as admin:
         admin.execute("ALTER TABLE usage_event DROP CONSTRAINT reject_all")
@@ -613,8 +685,8 @@ def test_a_persistent_metering_error_stops_the_turn_without_another_provider_cal
     assert len(ai.requests) == 2
     assert ai.query("SELECT status FROM conversation_turn ORDER BY created_at") == \
         [("failed",), ("replied",)]
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
-    assert ai.query("SELECT count(*) FROM outbound_message") == [(1,)]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
+    assert ai.query("SELECT count(*) FROM outbound_message") == [(2,)]
 
 
 @pytest.mark.parametrize(("reply", "detail"), [
@@ -940,8 +1012,28 @@ def test_a_turn_whose_attempts_all_crash_does_not_block_later_messages(ai):
     assert "pehla" not in current_block(ai.requests[3])
     assert turns(ai) == [("failed", 3, 1), ("replied", 1, 1)]
     assert process_jobs(ai) == [("dead", 3, "lease_expired"), ("succeeded", 1, None)]
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
-    assert ai.query("SELECT count(*) FROM outbound_message") == [(1,)]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
+    assert ai.query("SELECT count(*) FROM outbound_message") == [(2,)]
+
+
+def test_a_job_dying_on_its_last_attempt_still_tells_the_customer(ai):
+    # No newer message: the reaper's turn_failed_notice job closes the turn and sends
+    # the failure notice, once.
+    ai.script += [crash, crash, crash]
+    ai.deliver(text("pehla"))
+    for _ in range(3):
+        crash_and_reap(ai)
+    ai.drain()
+    ai.drain()
+    assert turns(ai) == [("failed", 3, 1)]
+    assert ai.sent_texts() == [TEMPLATES["failure"]]
+    assert ai.query("SELECT status FROM job WHERE job_type = %s",
+                    (queue.TURN_FAILED_NOTICE_JOB,)) == [("succeeded",)]
+    # Replaying the notice job sends nothing new.
+    ai.query("UPDATE job SET status = 'pending', completed_at = NULL WHERE job_type = %s "
+             "RETURNING id", (queue.TURN_FAILED_NOTICE_JOB,))
+    ai.drain()
+    assert ai.sent_texts() == [TEMPLATES["failure"]]
 
 
 def test_crashes_spread_over_jobs_are_bounded_per_turn(ai):
@@ -962,7 +1054,7 @@ def test_crashes_spread_over_jobs_are_bounded_per_turn(ai):
     assert turns(ai) == [("failed", 3, 1), ("replied", 1, 1)]
     # The old turn's own job is dead-lettered with it, not left to report success.
     assert process_jobs(ai) == [("dead", 1, "turn_failed"), ("succeeded", 3, None)]
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
 
 
 def test_a_newer_job_failing_its_last_attempt_on_an_older_turn_still_answers_its_own(ai):
@@ -979,8 +1071,8 @@ def test_a_newer_job_failing_its_last_attempt_on_an_older_turn_still_answers_its
     assert turns(ai) == [("failed", 2, 1), ("replied", 1, 1)]
     # The newer job records the failure it hit; the old job is dead with its turn.
     assert process_jobs(ai) == [("dead", 1, "turn_failed"), ("dead", 1, "RuntimeError")]
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
-    assert ai.query("SELECT count(*) FROM outbound_message") == [(1,)]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
+    assert ai.query("SELECT count(*) FROM outbound_message") == [(2,)]
 
 
 def test_a_persistent_metering_error_on_an_older_turn_records_newer_messages_as_failed(ai):
@@ -995,7 +1087,7 @@ def test_a_persistent_metering_error_on_an_older_turn_records_newer_messages_as_
     assert len(ai.requests) == 2  # the old turn's resume; the newer turn makes no call
     assert turns(ai) == [("failed", 2, 1), ("failed", 1, 1)]  # recorded, not stranded
     assert [row[2] for row in process_jobs(ai)] == ["turn_failed", "usage_event_23514"]
-    assert ai.sent_texts() == []
+    assert ai.sent_texts() == [TEMPLATES["failure"]]  # one notice for both turns
 
     with psycopg.connect(ai.admin_url, autocommit=True) as admin:
         admin.execute("ALTER TABLE usage_event DROP CONSTRAINT reject_all")
@@ -1004,7 +1096,7 @@ def test_a_persistent_metering_error_on_an_older_turn_records_newer_messages_as_
     assert len(ai.requests) == 3
     assert "teesra" in current_block(ai.requests[2])
     assert "doosra" not in current_block(ai.requests[2])
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
 
 
 def test_failed_turns_are_terminal_and_their_messages_never_reassembled(ai):
@@ -1020,6 +1112,70 @@ def test_failed_turns_are_terminal_and_their_messages_never_reassembled(ai):
     ai.drain()
     assert turns(ai) == [("failed", 3, 1), ("replied", 1, 1)]
     assert len(ai.requests) == 4
-    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
+    assert ai.sent_texts() == [TEMPLATES["failure"], TEMPLATES["customer_default"]]
     assert ai.query("SELECT count(*) FROM message WHERE turn_id IS NULL "
                     "AND direction = 'inbound'") == [(0,)]
+
+
+# --- failure notices: never after takeover, never after a partial reply --------------
+
+def test_the_failure_notice_respects_the_send_gate(ai):
+    with psycopg.connect(ai.admin_url, autocommit=True) as admin:
+        admin.execute("ALTER TABLE usage_event ADD CONSTRAINT reject_all CHECK (false) NOT VALID")
+
+    def handoff_then_answer(request):
+        with tenant_transaction(ai.conn, ai.agency):
+            ai.conn.execute("UPDATE conversation SET mode = 'human', "
+                            "control_state = 'human_owned'")
+        return httpx.Response(200, json=answer())
+
+    ai.script.append(handoff_then_answer)
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert ai.query("SELECT status FROM conversation_turn") == [("failed",)]
+    assert ai.client.sent == []
+    assert ai.query("SELECT status, last_error_code FROM outbound_message") == [
+        ("cancelled", "control_gate")]
+
+
+def test_no_failure_notice_after_part_of_the_reply_was_sent(ai):
+    ai.script.append(answer())
+    ai.deliver(text("ghar"))
+    ai.drain()
+    [(turn_id, conversation_id)] = ai.query("SELECT id, conversation_id FROM conversation_turn")
+    ai.query("UPDATE conversation_turn SET status = 'failed' WHERE id = %s RETURNING id",
+             (turn_id,))
+    status = orchestrator.send_failure_notice(ai.conn, ai.client, ai.agency, conversation_id,
+                                              CUSTOMER, turn_id)
+    assert status == "partial_reply"
+    assert ai.sent_texts() == [TEMPLATES["customer_default"]]
+
+
+def test_the_thinking_level_is_sent_and_can_be_switched_off(ai):
+    ai.script += [answer(), answer()]
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert ai.requests[0].body["generationConfig"] == {
+        "thinkingConfig": {"thinkingLevel": "low"}}
+    ai.engine.thinking_level = None
+    ai.deliver(text("flat", sender=CUSTOMER_2))
+    ai.drain()
+    assert "generationConfig" not in ai.requests[1].body
+    assert prefix(ai.requests[0]) == prefix(ai.requests[1])
+
+
+@pytest.mark.parametrize(("value", "expected"), [
+    (None, "low"), ("", "low"), ("minimal", "minimal"), ("HIGH", "high"), ("off", None)])
+def test_thinking_level_setting(monkeypatch, value, expected):
+    if value is None:
+        monkeypatch.delenv("LLM_THINKING_LEVEL", raising=False)
+    else:
+        monkeypatch.setenv("LLM_THINKING_LEVEL", value)
+    assert config.thinking_level_setting() == expected
+
+
+def test_an_unknown_thinking_level_fails_clearly():
+    with pytest.raises(config.ConfigurationError, match="LLM_THINKING_LEVEL must be one of"):
+        config.check_ai_settings(settings(llm_thinking_level="extreme"))
+    assert turn_engine.build_engine(settings(llm_thinking_level="minimal")).thinking_level \
+        == "minimal"
