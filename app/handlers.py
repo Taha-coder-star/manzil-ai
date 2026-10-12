@@ -18,8 +18,18 @@ import logging
 from contextlib import closing
 from datetime import UTC, datetime
 
-from app import audio, cards, echo, media, orchestrator, outbound, turn_engine, whatsapp
-from app.config import check_ai_settings
+from app import (
+    audio,
+    cards,
+    echo,
+    media,
+    orchestrator,
+    outbound,
+    speech,
+    turn_engine,
+    whatsapp,
+)
+from app.config import check_ai_settings, check_stt_settings
 from app.db import tenant_transaction
 from app.queue import TURN_FAILED_NOTICE_JOB, PermanentJobError
 
@@ -151,15 +161,18 @@ def record_event(conn, agency_id, inbound_event_id):
 
 
 def make_handlers(settings, *, client_factory=None, image_link=None, storage=None,
-                  engine=None):
+                  engine=None, speech_service=None):
     """Build the job handlers. process_message is only registered when sending is
     configured, so its jobs wait (pending) instead of failing without a token;
     fetch_media also needs the bucket and its public URL; fetch_audio the bucket.
     Task 6.1: AI_PROVIDER=gemini replies through the AI turn engine (engine is for
     tests); unusable AI settings raise app.config.ConfigurationError, never a
-    silent fallback to the stubs."""
+    silent fallback to the stubs. Task 6.3: STT_PROVIDER=elevenlabs transcribes
+    customer voice notes in the turn (speech_service is for tests); unusable speech
+    settings raise ConfigurationError the same way."""
 
     check_ai_settings(settings)
+    check_stt_settings(settings)
     if engine is None:
         engine = turn_engine.build_engine(settings)
     handlers = {"reconcile_status": reconcile_status}
@@ -183,10 +196,13 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
             settings.s3_bucket, settings.s3_region, settings.s3_endpoint_url
         )
 
+    if speech_service is None and storage is not None:
+        speech_service = speech.build_speech(settings, storage)
+
     def process(conn, job):
         process_message(
             conn, job, client_factory, privacy_url=privacy_url, image_link=image_link,
-            storage=storage, engine=engine,
+            storage=storage, engine=engine, speech_service=speech_service,
         )
 
     handlers["process_message"] = process
@@ -224,7 +240,7 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
 
 
 def process_message(conn, job, client_factory, *, privacy_url=None, image_link=None,
-                    storage=None, engine=None):
+                    storage=None, engine=None, speech_service=None):
     """One coalesced turn (app.orchestrator): record this message and every pending
     sibling of the conversation, then answer them together."""
     _, message, phone_number_id = record_inbound(conn, job)
@@ -253,7 +269,8 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
                     payload, f"{dedupe_prefix}:{seq}",
                 )
 
-        orchestrator.run_turns(conn, job, client, sender, demo=demo, engine=engine)
+        orchestrator.run_turns(conn, job, client, sender, demo=demo, engine=engine,
+                               speech_service=speech_service)
 
 
 def _demo_photo(conn, client, storage, turn, dedupe_prefix, variant):

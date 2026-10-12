@@ -21,11 +21,15 @@ connect_tcp.complete). They are bounded only by the resolver and by the connect
 timeout, min(CONNECT_TIMEOUT_SECONDS, deadline), per resolved address; when they
 take longer than the deadline, the call ends that much later.
 
+Task 6.3: GeminiClient.transcribe is the STT fallback (one inline audio part,
+structured JSON output, no tools); post_with_deadline is shared with app.stt.
+
 The API key goes in the x-goog-api-key header, never in the URL. Errors carry only
 a sanitised code (status, exception class, finish reason), never a response body.
 Never log prompts, message text, tool arguments or the key.
 """
 
+import base64
 import json
 import re
 import socket
@@ -62,6 +66,28 @@ MALFORMED_REASONS = frozenset({
 _SCHEMA_KEYS = ("description", "enum", "minimum", "maximum", "minItems", "maxItems")
 _CODE = re.compile(r"[^a-z0-9_]+")
 _MODEL_VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
+# Task 6.3 transcription (STT fallback): a small thinking budget for latency (Gemini 3
+# defaults to high; CLAUDE.md section 1).
+TRANSCRIBE_THINKING_LEVEL = "low"
+TRANSCRIBE_INSTRUCTION = (
+    "You transcribe one WhatsApp voice note from a customer of a real-estate agency in "
+    "Karachi, Pakistan. Write exactly what is said, word for word, in the script it is "
+    "spoken in (Roman Urdu or Urdu script for Urdu, English for English; mixed speech "
+    "stays mixed). Never translate, summarise, correct or complete it, and never add "
+    "words that are not spoken. Keep numbers, prices, sizes and place names as spoken. "
+    "If there is no clear human speech (silence, noise, music), set speech_present to "
+    "false and transcript to an empty string. language: the main spoken language as an "
+    "ISO 639-1 code (ur, en, hi, ...), or an empty string."
+)
+TRANSCRIBE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "speech_present": {"type": "BOOLEAN"},
+        "transcript": {"type": "STRING"},
+        "language": {"type": "STRING"},
+    },
+    "required": ["speech_present", "transcript", "language"],
+}
 
 
 class ProviderError(Exception):
@@ -236,6 +262,76 @@ def build_body(system, tools, contents, thinking_level=None):
     return body
 
 
+@dataclass(frozen=True)
+class Transcription:
+    """A Gemini transcription (Task 6.3). The transcript is untrusted user content:
+    never logged."""
+
+    speech_present: bool
+    transcript: str
+    language: str | None
+    usage: Usage = field(default_factory=Usage)
+    model_version: str | None = None
+
+
+def build_transcribe_body(data, mime_type, thinking_level=TRANSCRIBE_THINKING_LEVEL):
+    """generateContent body for one inline audio part (Gemini audio understanding)."""
+    config = {
+        "temperature": 0,
+        "responseMimeType": "application/json",
+        "responseSchema": TRANSCRIBE_SCHEMA,
+    }
+    if thinking_level:
+        config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    return {
+        "systemInstruction": {"parts": [{"text": TRANSCRIBE_INSTRUCTION}]},
+        "contents": [{"role": "user", "parts": [
+            {"inlineData": {"mimeType": mime_type,
+                            "data": base64.b64encode(data).decode("ascii")}},
+            {"text": "Transcribe this voice note."},
+        ]}],
+        "generationConfig": config,
+    }
+
+
+def parse_transcription(data):
+    """A Transcription from a generateContent body; ProviderError when it is unusable
+    (refused, truncated, not the requested JSON)."""
+    if not isinstance(data, dict):
+        raise ProviderError("malformed:not_an_object", failover=False)
+    usage = parse_usage(data.get("usageMetadata"))
+    version = data.get("modelVersion")
+    version = version if isinstance(version, str) and _MODEL_VERSION.fullmatch(version) else None
+    feedback = data.get("promptFeedback")
+    if isinstance(feedback, dict) and feedback.get("blockReason"):
+        raise ProviderError(code(feedback["blockReason"], "blocked:"), failover=False)
+    candidates = data.get("candidates")
+    if not isinstance(candidates, list) or not candidates or not isinstance(candidates[0], dict):
+        raise ProviderError("malformed:no_candidate", failover=False)
+    candidate = candidates[0]
+    reason = candidate.get("finishReason")
+    if reason != "STOP":
+        prefix = "refused:" if reason in REFUSAL_REASONS else "finish:"
+        raise ProviderError(code(reason or "missing", prefix), failover=False)
+    content = candidate.get("content")
+    parts = content.get("parts") if isinstance(content, dict) else None
+    if not isinstance(parts, list):
+        raise ProviderError("malformed:no_parts", failover=False)
+    text = "".join(part["text"] for part in parts if isinstance(part, dict)
+                   and isinstance(part.get("text"), str) and not part.get("thought"))
+    try:
+        result = json.loads(text)
+    except (ValueError, RecursionError):
+        raise ProviderError("malformed:not_json", failover=False) from None
+    if (not isinstance(result, dict) or not isinstance(result.get("speech_present"), bool)
+            or not isinstance(result.get("transcript"), str)):
+        raise ProviderError("malformed:transcription", failover=False)
+    language = result.get("language")
+    language = language.strip().lower() if isinstance(language, str) else ""
+    return Transcription(result["speech_present"], result["transcript"].strip(),
+                         language or None, usage, version)
+
+
 def _shutdown(sock):
     try:
         sock.shutdown(socket.SHUT_RDWR)
@@ -345,38 +441,62 @@ class GeminiClient:
 
     def _post(self, url, body, timeout_s):
         headers = {"x-goog-api-key": self._api_key, "content-type": "application/json"}
-        timeout = _timeout(timeout_s)
-        watchdog = _Watchdog(timeout_s)
-        completed = False
+        return post_with_deadline(self._http, url, timeout_s, headers=headers, content=body)
+
+    def transcribe(self, model, data, mime_type, *, timeout_s,
+                   thinking_level=TRANSCRIBE_THINKING_LEVEL):
+        """Task 6.3 STT fallback: one audio transcription attempt (structured output,
+        no tools). Returns a Transcription; raises ProviderError."""
+        if timeout_s <= 0:
+            raise ProviderError("deadline", failover=False)
+        body = json.dumps(build_transcribe_body(data, mime_type, thinking_level)).encode()
+        status, raw = self._post(f"{self._base_url}/models/{model}:generateContent",
+                                 body, timeout_s)
+        if status != 200:
+            raise ProviderError(f"http_{status}", failover=False)
         try:
-            with self._http.stream(
-                "POST", url, content=body, headers=headers, timeout=timeout,
-                extensions={"trace": watchdog.trace},
-            ) as response:
-                raw = bytearray()
-                for chunk in response.iter_bytes():
-                    raw += chunk
-                    if len(raw) > MAX_RESPONSE_BYTES:
-                        raise ProviderError("response_too_large", failover=False)
-                # A body cut short by the watchdog can look complete (EOF): the
-                # deadline decides, even if the last byte arrived just in time.
-                completed = not watchdog.fired
-                status = response.status_code
-        except httpx.TimeoutException:
+            payload = json.loads(raw)
+        except (ValueError, RecursionError):
+            raise ProviderError("invalid_json", failover=False) from None
+        return parse_transcription(payload)
+
+
+def post_with_deadline(http, url, timeout_s, *, headers, content=None, files=None,
+                       data=None, max_bytes=MAX_RESPONSE_BYTES):
+    """POST under the watchdog deadline (module docstring); (status, body bytes).
+    Shared by the Gemini and STT clients (app.stt). Raises ProviderError."""
+    timeout = _timeout(timeout_s)
+    watchdog = _Watchdog(timeout_s)
+    completed = False
+    try:
+        with http.stream(
+            "POST", url, content=content, files=files, data=data, headers=headers,
+            timeout=timeout, extensions={"trace": watchdog.trace},
+        ) as response:
+            raw = bytearray()
+            for chunk in response.iter_bytes():
+                raw += chunk
+                if len(raw) > max_bytes:
+                    raise ProviderError("response_too_large", failover=False)
+            # A body cut short by the watchdog can look complete (EOF): the
+            # deadline decides, even if the last byte arrived just in time.
+            completed = not watchdog.fired
+            status = response.status_code
+    except httpx.TimeoutException:
+        raise ProviderError("timeout", failover=True) from None
+    except httpx.TransportError as exc:
+        if watchdog.fired:
             raise ProviderError("timeout", failover=True) from None
-        except httpx.TransportError as exc:
-            if watchdog.fired:
-                raise ProviderError("timeout", failover=True) from None
-            raise ProviderError(code(type(exc).__name__, "transport:"), failover=True) from None
-        except httpx.RequestError as exc:
-            # The other request errors (DecodingError, TooManyRedirects): no usable
-            # body. Programming errors (httpx.StreamError, InvalidURL, TypeError, ...)
-            # are not RequestErrors and still propagate.
-            if watchdog.fired:
-                raise ProviderError("timeout", failover=True) from None
-            raise ProviderError(code(type(exc).__name__, "request:"), failover=False) from None
-        finally:
-            watchdog.stop()
-        if not completed:
-            raise ProviderError("timeout", failover=True)
-        return status, bytes(raw)
+        raise ProviderError(code(type(exc).__name__, "transport:"), failover=True) from None
+    except httpx.RequestError as exc:
+        # The other request errors (DecodingError, TooManyRedirects): no usable
+        # body. Programming errors (httpx.StreamError, InvalidURL, TypeError, ...)
+        # are not RequestErrors and still propagate.
+        if watchdog.fired:
+            raise ProviderError("timeout", failover=True) from None
+        raise ProviderError(code(type(exc).__name__, "request:"), failover=False) from None
+    finally:
+        watchdog.stop()
+    if not completed:
+        raise ProviderError("timeout", failover=True)
+    return status, bytes(raw)

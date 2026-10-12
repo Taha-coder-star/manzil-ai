@@ -116,7 +116,8 @@ fallback runs. Customers get "Photo demo is for staff numbers only."
 
 ## Not in 4.1 / 4.2
 - Attaching staged photos to a listing (`property_media` rows, `source_inbound_media_id`): Task 9.2.
-- Customer voice audio: storage moved to Task 5.3 (below); speech itself (pre-checks, STT) is C4, Task 6.3.
+- Customer voice audio: storage moved to Task 5.3 (below); speech itself (pre-checks, STT) is C4, Task 6.3
+  (docs/SPEECH.md).
 - Lifecycle rules, per-listing photo cap, storage metering (R-36): production.
 
 ## Inbound audio (Task 5.3, migration 012)
@@ -137,8 +138,8 @@ path"). `app/audio.py`.
    (only `card/` is public), no cache header. `content_sha256` and `byte_size` are recorded. No hash
    dedupe: each voice note is its own record.
 
-Not here: the < 1 s / > 120 s pre-checks, silence detection and STT (C4, Task 6.3, which reads the stored
-object or fetches in-turn); the retention purge (C14). Only `fetch_audio` needs the bucket; it is
+Not here: the < 1 s / > 120 s pre-checks, silence detection and STT (C4, Task 6.3, docs/SPEECH.md, which
+reads the stored object or downloads in-turn through `audio.ensure_stored`); the retention purge (C14). Only `fetch_audio` needs the bucket; it is
 registered even without a public media URL.
 
 Production (2026-10-11, owner-run): RDS snapshot `manzil-pre-012-2026-10-11`; release image
