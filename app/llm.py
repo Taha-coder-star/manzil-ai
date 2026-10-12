@@ -37,6 +37,11 @@ import httpx
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 CONNECT_TIMEOUT_SECONDS = 3.0
 MAX_RESPONSE_BYTES = 1_000_000
+# generationConfig.thinkingConfig.thinkingLevel (ai.google.dev thinking guide, read
+# 2026-10-12: Gemini 3 defaults to "high"; gemini-3.5-flash-lite and gemini-3.6-flash
+# accept minimal / low / medium / high). Low keeps the p90 latency targets in reach.
+THINKING_LEVELS = ("minimal", "low", "medium", "high")
+DEFAULT_THINKING_LEVEL = "low"
 # More function calls than this in one response is treated as malformed.
 MAX_TOOL_CALLS = 4
 # usage_event token columns are BIGINT; a count outside this range is not stored.
@@ -211,9 +216,10 @@ def gemini_schema(schema):
     return out
 
 
-def build_body(system, tools, contents):
+def build_body(system, tools, contents, thinking_level=None):
     """The request body: the stable prefix (system instruction, tools, tool config)
-    first, then the per-turn contents."""
+    first, then the per-turn contents, then the generation config (thinking level;
+    omitted when None)."""
     declarations = []
     for tool in tools:
         declaration = {"name": tool["name"], "description": tool["description"]}
@@ -225,6 +231,8 @@ def build_body(system, tools, contents):
         body["tools"] = [{"functionDeclarations": declarations}]
         body["toolConfig"] = {"functionCallingConfig": {"mode": "AUTO"}}
     body["contents"] = contents
+    if thinking_level is not None:
+        body["generationConfig"] = {"thinkingConfig": {"thinkingLevel": thinking_level}}
     return body
 
 
@@ -317,12 +325,13 @@ class GeminiClient:
     def close(self):
         self._http.close()
 
-    def generate(self, model, *, system, tools, contents, timeout_s):
+    def generate(self, model, *, system, tools, contents, timeout_s, thinking_level=None):
         """One attempt, finished (or abandoned and closed) within timeout_s seconds.
         Returns an LLMResponse; raises ProviderError."""
         if timeout_s <= 0:
             raise ProviderError("deadline", failover=False)
-        body = json.dumps(build_body(system, tools, contents), ensure_ascii=False).encode()
+        body = json.dumps(build_body(system, tools, contents, thinking_level),
+                          ensure_ascii=False).encode()
         status, raw = self._post(f"{self._base_url}/models/{model}:generateContent",
                                  body, timeout_s)
         if status == 200:

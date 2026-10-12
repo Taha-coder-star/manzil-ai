@@ -6,6 +6,12 @@ live acceptance checks in section 8 are pending, no model ID has been verified f
 account, and nothing is deployed. Migrations 013 and 014 are not applied anywhere except
 disposable test databases.
 
+Update (2026-10-12): merged (PR #27) and deployed in stub mode as `manzil-ai:6.1-f76e30e`
+with 013 and 014 applied (Taha's handoff). Follow-up on `fix/task-6-1-followups`: the
+interim message + continuation (section 3), failure notices for failed turns (section
+4), the thinking level and the owner's model IDs (section 2). Live acceptance (L1-L5)
+is still pending.
+
 Sources: Execution Plan Day 6 (6.1), RFC sections 3, 5 and 9 (L1-L4), Red-Team R-17,
 R-21, R-22, R-36, R-37, R16 sections 3 and 8, the 5.3 / 5.4 handoff (section 6), and the
 owner's decisions of 2026-10-12 (section 9). Gemini facts: ai.google.dev pages read
@@ -56,11 +62,17 @@ Task 5.1 stub responders (default). Payloads still go out through
   behaviour (not changed here).
 - Model IDs have no defaults and must match `[a-z0-9][a-z0-9.-]{1,63}` (they become part
   of the request path).
-- Proposed pinned IDs (not verified for this account): primary `gemini-3.8-flash`,
-  failover `gemini-3.5-flash-lite`. Both are listed as stable on the models page; the
-  page names `gemini-flash-latest` only as an example of the alias pattern. Free-tier
+- Model IDs (owner decision 2026-10-11, CLAUDE.md section 1; pinned, no aliases):
+  primary `gemini-3.5-flash-lite`, failover `gemini-3.6-flash`. Benchmark run #1 decides
+  whether Flash-Lite meets R16; if not, Flash becomes primary (config only). Free-tier
   availability and limits are shown only in AI Studio: check both IDs there before
   activation.
+- `LLM_THINKING_LEVEL` (follow-up 2026-10-12): every call sends
+  `generationConfig.thinkingConfig.thinkingLevel`, default `low` (Gemini 3 defaults to
+  `high`; both chosen models accept minimal / low / medium / high per the thinking guide
+  read 2026-10-12). `off` leaves the field out, a kill switch if the live check (L4)
+  finds it rejected; any other value is a configuration error. It sits after
+  `contents`, outside the stable prefix.
 - The key goes only in the `x-goog-api-key` header; `Settings` hides it from `repr`.
 
 ## 3. Budget and deadline
@@ -76,7 +88,18 @@ end-to-end guarantee.
   (primary and failover), tool execution and the per-attempt usage inserts.
 - Each attempt gets `min(8 s, 15 s - elapsed)`; none starts with less than 1 s left.
   Example: the primary times out at 8 s -> the failover gets 7 s; iteration 1 takes 3 s,
-  iteration 2 times out at 8 s -> no failover (see section 4), failure template.
+  iteration 2 times out at 8 s -> no failover (see section 4), but the continuation below.
+- **Interim + continuation** (Red-Team R-17, follow-up 2026-10-12): when the turn budget
+  runs out before an answer (an attempt cannot start with 1 s left, or an iteration ends
+  in `timeout`), the engine sends `TEMPLATES["interim"]` ("Ek minute, check kar raha
+  hoon.") once, through the orchestrator under `turn:{id}:interim` (send-time gate, 24 h
+  window, at most once: a retried job never repeats it), then gets
+  `CONTINUATION_BUDGET_SECONDS` (15 s) more and retries that iteration: the same model if
+  one has answered (no cross-model replay), else primary -> failover. Attempts after the
+  interim are metered under keys ending in `:c`. A second exhaustion ends the turn with
+  the failure template. Fast provider errors (503 on both models), refusals, malformed
+  answers and 4xx get no interim. Worst case before the reply: about 30 s plus the
+  overruns below.
 - What bounds an attempt (`app.llm`): once the TCP connection is up, a watchdog ends the
   call at its deadline. httpx's own timeouts bound single socket operations, not the
   request, so the request runs in the calling worker thread while a `threading.Timer`
@@ -138,6 +161,18 @@ end-to-end guarantee.
 - No automatic retry job (the RFC's "retry job in 30 s" is plan Task 13.1). The failure
   template is truthful because processing has ended: "Maazrat, abhi aap ki request
   process nahi ho saki. Thori dair baad dobara bhejein."
+- **Failed turns tell the customer** (RFC 13 poison jobs, follow-up 2026-10-12): every
+  turn closed as `failed` gets the failure template once
+  (`orchestrator.send_failure_notice`, key `turn:{id}:failed`), through the send-time gate
+  (nothing after a takeover) and the 24 h window, and only if its status really is
+  `failed` and no part of its reply plan went out. One notice per job, sent before the
+  job answers newer messages. Paths: a job that will not retry (`fail_turn`); an open
+  turn given up at the attempt cap (`assemble_turn`); and a process_message job that
+  dies of a crash on its last attempt: `queue.reap_expired` then queues a
+  `turn_failed_notice` job (same conversation key) whose handler
+  (`orchestrator.notify_failed_job`) closes the turn as `failed` unless another job of
+  the conversation will still resume it, and sends the notice. Send or database errors
+  in the notice are logged, never raised.
 
 ## 5. Tools and roles
 
@@ -300,12 +335,16 @@ smoke test, not a read-only tool.
 - Implicit cache minimum vs prompt size (likely no cache hits); revisit with the real
   7.x / 8.x prompts and tool payloads.
 - Template wording approval (Roman Urdu; English variants not written).
-- Thinking level is not set (provider default); the `generateContent` field for it was
-  not confirmed in the docs read. Latency with the default is unmeasured.
+- Thinking level: `low` is sent as `generationConfig.thinkingConfig.thinkingLevel`. The
+  guide read on 2026-10-12 shows the values and model support but its REST example is
+  the Interactions API (snake_case); acceptance on `generateContent` is part of L4
+  (`LLM_THINKING_LEVEL=off` if rejected). Latency at `low` is unmeasured.
+- Interim / failure-notice wording awaits owner approval with the other templates.
 - DNS resolution and the TCP connect are outside the watchdog (section 3); database
   statements are bounded only by `statement_timeout`.
-- Failed-turn limits: a failed turn sends the customer nothing (no apology template).
-  A process_message job that dies **before** its message is in any turn (for example
+- Failed-turn limits: a crash between closing a turn as `failed` and sending its notice
+  loses that notice (the close is committed first). A process_message job that dies
+  **before** its message is in any turn (for example
   three attempts that fail before turn assembly, such as a database outage) still leaves
   that message unanswered: assembly only takes messages of the current or `pending`
   jobs. This is the queue's existing dead-job behaviour, not specific to failed turns;

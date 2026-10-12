@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from app import audio, cards, echo, media, orchestrator, outbound, turn_engine, whatsapp
 from app.config import check_ai_settings
 from app.db import tenant_transaction
-from app.queue import PermanentJobError
+from app.queue import TURN_FAILED_NOTICE_JOB, PermanentJobError
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +190,11 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         )
 
     handlers["process_message"] = process
+
+    def failed_turn_notice(conn, job):
+        orchestrator.notify_failed_job(conn, job, client_factory)
+
+    handlers[TURN_FAILED_NOTICE_JOB] = failed_turn_notice
 
     def carousel_fallback(conn, job):
         cards.carousel_fallback(conn, job, client_factory)
