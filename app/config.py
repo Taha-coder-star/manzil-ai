@@ -1,5 +1,6 @@
 import os
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,42 @@ class Settings:
     site_address: str | None
     worker_concurrency: int
     privacy_contact_email: str | None
+    # Task 6.1 AI turn engine (C6). "stub" keeps the Task 5.1 stub replies; "gemini"
+    # must be selected explicitly and then needs the key and both model IDs.
+    ai_provider: str = "stub"
+    gemini_api_key: str | None = field(default=None, repr=False)
+    llm_primary_model: str | None = None
+    llm_failover_model: str | None = None
+
+
+AI_PROVIDERS = ("stub", "gemini")
+# A model ID becomes part of the request path, so only plain ID characters pass.
+MODEL_ID = re.compile(r"[a-z0-9][a-z0-9.-]{1,63}")
+
+
+class ConfigurationError(Exception):
+    """A configuration problem; the message names settings, never their values."""
+
+
+def check_ai_settings(settings):
+    """Raise ConfigurationError unless the AI settings are usable. An explicit
+    AI_PROVIDER=gemini never falls back to the stub when something is missing."""
+    provider = getattr(settings, "ai_provider", "stub")
+    if provider not in AI_PROVIDERS:
+        raise ConfigurationError("AI_PROVIDER must be one of: " + ", ".join(AI_PROVIDERS))
+    if provider == "stub":
+        return
+    missing = [name for name, value in (
+        ("GEMINI_API_KEY", settings.gemini_api_key),
+        ("LLM_PRIMARY_MODEL", settings.llm_primary_model),
+        ("LLM_FAILOVER_MODEL", settings.llm_failover_model),
+    ) if not value]
+    if missing:
+        raise ConfigurationError("AI_PROVIDER=gemini requires " + ", ".join(missing))
+    for name, value in (("LLM_PRIMARY_MODEL", settings.llm_primary_model),
+                        ("LLM_FAILOVER_MODEL", settings.llm_failover_model)):
+        if not MODEL_ID.fullmatch(value):
+            raise ConfigurationError(f"{name} is not a valid model ID")
 
 
 def _optional(name):
@@ -41,4 +78,8 @@ def load_settings():
         site_address=_optional("SITE_ADDRESS"),
         worker_concurrency=max(1, int(os.environ.get("WORKER_CONCURRENCY") or "2")),
         privacy_contact_email=_optional("PRIVACY_CONTACT_EMAIL"),
+        ai_provider=(_optional("AI_PROVIDER") or "stub").lower(),
+        gemini_api_key=_optional("GEMINI_API_KEY"),
+        llm_primary_model=_optional("LLM_PRIMARY_MODEL"),
+        llm_failover_model=_optional("LLM_FAILOVER_MODEL"),
     )
