@@ -36,8 +36,9 @@ Nothing blocks the loader code or its disposable-database tests.
   which rule search applies is open and unverified.
 - **Clifton neighbours.** R17 p3 "Clifton Blk 2/4/5 <-> Blk 8/9" could mean every cross pair
   (6 pairs) or something narrower. Not included until decided.
-- **Bahria Precinct 6.** R17's `p6` context example points to a precinct D11 does not list.
-  Left out; decide whether to add the location and its context alias.
+- **Bahria Precinct 6.** Settled 2026-10-12 (owner, Task 7.1): added as `btk-p6` with its
+  official alias and R17's context alias `p6` (Bahria); no listing, no neighbour.
+  docs/DECISIONS.md.
 
 ## Optional gaps (blank on purpose)
 
@@ -45,7 +46,10 @@ Nothing blocks the loader code or its disposable-database tests.
   transliteration examples), and D11 section 7 asks for Urdu-script and voice-STT aliases per
   area. The extracted PDF text could not be checked against a rendered page, so these are
   omitted until visually verified or supplied by the owner. The validator accepts Urdu text;
-  a test loads a valid Urdu alias.
+  a test loads a valid Urdu alias. Update 2026-10-12 (Task 7.1): the four D11 forms were
+  decoded (visual-order presentation forms reversed + NFKC) and are used by the resolver's
+  term table in app/location.py, not seeded as `urdu_script` aliases; per-area Urdu and
+  voice-STT aliases remain a gap.
 - Further aliases for other locations; alias `kind` for the sourced examples (all `common`)
   and weights (all 1, schema default).
 - Centroids, developer names, project amenities, approval notes, titles, descriptions,

@@ -138,7 +138,7 @@ def test_fresh_agency_is_fully_seeded(db):
     assert result.conflicts == []
     assert [p.outcome for p in result.phases] == ["committed", "committed"]
     assert inserts(result, "gazetteer") == {
-        "location": 52, "location_alias": 85, "location_neighbor": 3}
+        "location": 53, "location_alias": 87, "location_neighbor": 3}
     assert inserts(result, "tenant") == {"staff": 3, "project": 2, "property": 30}
     assert tenant_counts(app_url, agency) == {
         "staff": 3, "project": 2, "property": 30, "v_public_listing": 27}
@@ -219,11 +219,51 @@ def test_dry_run_on_an_empty_database_writes_nothing(db, monkeypatch):
     assert [p.outcome for p in result.phases] == ["planned (read-only, rolled back)"] * 2
     # The full plan, with tenant rows pointing at not-yet-inserted locations.
     assert inserts(result, "gazetteer") == {
-        "location": 52, "location_alias": 85, "location_neighbor": 3}
+        "location": 53, "location_alias": 87, "location_neighbor": 3}
     assert inserts(result, "tenant") == {"staff": 3, "project": 2, "property": 30}
     assert owner_counts(admin_url) == before == dict.fromkeys(SEED_TABLES, 0)
     assert tenant_counts(app_url, agency) == dict.fromkeys(
         ("staff", "project", "property", "v_public_listing"), 0)
+
+
+def test_precinct_6_upgrade_inserts_only_the_new_gazetteer_rows(db, tmp_path):
+    """Task 7.1 seed change: a database seeded before Bahria Precinct 6 existed gets
+    exactly the new location and its two aliases on a rerun (the production path),
+    tenant rows untouched; the next rerun plans nothing."""
+    admin_url, app_url, agency = db
+    old = tmp_path / "demo"
+    old.mkdir()
+    for path in seed.dd.DEMO_DIR.iterdir():
+        if path.is_file():
+            lines = path.read_text("utf-8").splitlines(keepends=True)
+            (old / path.name).write_text(
+                "".join(line for line in lines if not line.startswith("btk-p6,")), "utf-8")
+    seed.run(agency, admin_url, app_url, ENV, demo_dir=old, apply=True)
+    assert owner_counts(admin_url)["location"] == 52
+    assert owner_counts(admin_url)["location_alias"] == 85
+    before = snapshot(app_url, agency)
+
+    result = run(db)
+    assert result.conflicts == []
+    assert inserts(result, "gazetteer") == {"location": 1, "location_alias": 2}
+    assert inserts(result, "tenant") == {}
+    assert snapshot(app_url, agency) == before
+    counts = owner_counts(admin_url)
+    assert (counts["location"], counts["location_alias"], counts["location_neighbor"]) == (
+        53, 87, 3)
+    with psycopg.connect(admin_url, autocommit=True) as conn:
+        contexts = conn.execute(
+            "SELECT l.name, c.name FROM location_alias a JOIN location l ON l.id = "
+            "a.location_id JOIN location c ON c.id = a.context_parent_id "
+            "WHERE a.alias_norm = 'p6' ORDER BY c.name").fetchall()
+        precinct = conn.execute(
+            "SELECT l.level, l.level_label, l.code, p.name FROM location l JOIN location p "
+            "ON p.id = l.parent_id WHERE l.name = 'Precinct 6'").fetchall()
+    assert contexts == [("Precinct 6", "Bahria Town Karachi"), ("Phase 6", "DHA Defence")]
+    assert precinct == [("sub_area", "precinct", None, "Bahria Town Karachi")]
+
+    again = run(db)
+    assert again.conflicts == [] and all(not phase.inserts for phase in again.phases)
 
 
 def test_dry_run_after_seeding_plans_nothing(db):
@@ -299,7 +339,7 @@ def test_tenant_insert_failure_rolls_back_and_is_recoverable(db, monkeypatch):
     assert "gazetteer phase had already committed" in message
     assert "15550000101" not in message
     # Gazetteer committed; every tenant row (staff, projects, 10 listings) rolled back.
-    assert owner_counts(admin_url)["location"] == 52
+    assert owner_counts(admin_url)["location"] == 53
     assert tenant_counts(app_url, agency) == dict.fromkeys(
         ("staff", "project", "property", "v_public_listing"), 0)
 
@@ -394,8 +434,8 @@ def test_concurrent_runs_do_not_duplicate(db):
     assert errors == [] and len(results) == 3
     assert all(r.conflicts == [] for r in results)
     assert sum(inserts(r, "tenant").get("property", 0) for r in results) == 30
-    assert sum(inserts(r, "gazetteer").get("location", 0) for r in results) == 52
-    assert owner_counts(admin_url)["location"] == 52
+    assert sum(inserts(r, "gazetteer").get("location", 0) for r in results) == 53
+    assert owner_counts(admin_url)["location"] == 53
     assert tenant_counts(app_url, agency) == {
         "staff": 3, "project": 2, "property": 30, "v_public_listing": 27}
 

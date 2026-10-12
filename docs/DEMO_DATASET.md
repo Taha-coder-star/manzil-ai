@@ -23,8 +23,8 @@ included; it does not try to detect reversed Urdu by banning characters.
 
 | File | Rows | Identity used by a later loader |
 |---|---|---|
-| `locations.csv` | 52 (1 city, 8 areas, 32 sub-areas, 11 zones) | `key` -> (parent, lower(name)); `code` is unique |
-| `location_aliases.csv` | 85 (37 sourced + 48 official; 7 with a context) | (location, alias_norm, context) |
+| `locations.csv` | 53 (1 city, 8 areas, 33 sub-areas, 11 zones; Bahria Precinct 6 added by Task 7.1) | `key` -> (parent, lower(name)); `code` is unique |
+| `location_aliases.csv` | 87 (38 sourced + 49 official; 8 with a context) | (location, alias_norm, context) |
 | `location_neighbors.csv` | 3 | unordered pair |
 | `projects.csv` | 2 | (agency, lower(name)); `key` is the D11 id PRJ-P1 / PRJ-P2 |
 | `properties.csv` | 30 (27 active) | (agency, listing_code) |
@@ -73,7 +73,7 @@ Arrays use `;`. Columns `pf_*` become `public_features` keys (all on the 007 all
   owner direct -> `source_type`; possession / file / on ground -> `possession_status`;
   tenanted @ 1.2 lakh -> `is_tenanted` + `current_rent_pkr` 120,000; 4th floor -> `floor_no`
   4; 2 parking -> `parking_spaces` 2; 3 months advance -> `rent_advance_months` 3.
-- Official aliases (48 rows, `kind=official`, weight 1, `derived` = "alias (canonical
+- Official aliases (49 rows, `kind=official`, weight 1, `derived` = "alias (canonical
   name)"): one per location, the normalised canonical name from `locations.csv`. These are
   not quoted from the PDFs. A name used by more than one location (Block 2: Clifton, PECHS;
   Block 6: Clifton, Gulshan, PECHS) gets its parent area as context; a unique name has none.
