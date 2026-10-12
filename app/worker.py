@@ -22,8 +22,8 @@ import time
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import queue
-from app.config import load_settings
+from app import orchestrator, queue, turn_engine
+from app.config import ConfigurationError, load_settings
 from app.handlers import make_handlers
 from app.routing import RoutingConfigError, parse_sender_agencies
 
@@ -33,6 +33,22 @@ CONNECT_TIMEOUT_SECONDS = 5
 POLL_SECONDS = 1.0
 REAP_EVERY_SECONDS = 30
 MAX_RECONNECT_DELAY_SECONDS = 30
+CONFIGURATION_EXIT_CODE = 78  # EX_CONFIG (sysexits.h)
+
+
+def check_schema(database_url, agency_id, *, ai):
+    """Before any job is claimed, on a runtime connection: migration 014 (always; the
+    turn lifecycle uses it) and, with ai, migration 013 (app.turn_engine)."""
+    try:
+        conn = psycopg.connect(database_url, autocommit=True,
+                               connect_timeout=CONNECT_TIMEOUT_SECONDS)
+    except psycopg.Error:
+        raise ConfigurationError("Schema check failed: database unavailable") from None
+    with conn:
+        orchestrator.check_schema(conn, agency_id)
+        if ai:
+            turn_engine.check_schema(conn, agency_id)
+
 
 class Worker:
     def __init__(
@@ -150,7 +166,16 @@ def run():
         return
 
     # job_type -> handler(conn, job). Only registered types are claimed; others stay pending.
-    handlers = make_handlers(settings)
+    try:
+        handlers = make_handlers(settings)
+        check_schema(settings.database_url, agency_ids[0],
+                     ai=settings.ai_provider == "gemini")
+    except ConfigurationError as exc:
+        # AI settings or schema that cannot work: claim nothing and exit non-zero, so
+        # the container is visibly not running (deploy/compose.yml restarts it under
+        # restart: unless-stopped). Never a silent fallback to the stubs.
+        logger.error("Worker not started: %s", exc)
+        raise SystemExit(CONFIGURATION_EXIT_CODE) from None
     workers = [
         Worker(settings.database_url, agency_ids, handlers, stop, name=f"worker-{i + 1}")
         for i in range(settings.worker_concurrency)

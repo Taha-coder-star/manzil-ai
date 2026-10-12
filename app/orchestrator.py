@@ -18,9 +18,16 @@ One process_message job runs one turn for its conversation:
    and mode = 'ai'; otherwise the turn is 'gated' and nothing is sent
    (forwarding to the broker is Task 11.x). The send-time gate in app.outbound
    still re-checks before every message (R-28).
-5. The route's responder builds the reply (a stub until Task 6.1). Sends use
-   the dedupe key "turn:{turn_id}:{seq}", so a resumed turn never sends twice.
-6. The turn is closed ('replied') only after its sends are recorded.
+5. The reply: Task 6.1's AI turn engine (app.turn_engine) when AI_PROVIDER=gemini,
+   otherwise the route's stub responder. Sends use the dedupe key
+   "turn:{turn_id}:{seq}", so a resumed turn never sends twice.
+6. The turn is closed ('replied') only after its sends are recorded. A turn whose
+   job will not retry (a permanent error, or the failure of its last attempt) is
+   closed as 'failed' (migration 014), so it cannot block the conversation's later
+   messages. A crashed attempt runs no cleanup and leaves the turn open; every
+   attempt is counted in conversation_turn.attempts before it starts, and an open
+   turn found with MAX_TURN_ATTEMPTS attempts is closed as 'failed' instead of
+   resumed, so crashes cannot block the conversation either.
 
 Task 5.2: a turn ending in a tap on a listing card (More photos, Visit / Details,
 Similar, an overflow-list row) gets a stub reply naming the action and listing;
@@ -31,13 +38,18 @@ Never log message text or phone numbers.
 
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+import psycopg
+from psycopg.pq import TransactionStatus
+
 from app import echo, outbound, whatsapp
+from app.config import ConfigurationError
 from app.db import tenant_transaction
-from app.queue import PermanentJobError
+from app.queue import PermanentJobError, error_code
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +59,10 @@ COALESCED = "coalesced"
 ROUTES = {"admin": "staff", "agent": "staff", "broker": "broker"}
 # A resumed open turn plus the new turn of the job that found it.
 MAX_TURNS_PER_JOB = 2
+# Attempts (by any job, crashed or not) after which an open turn is abandoned as
+# 'failed' instead of resumed again; the same as the job default max_attempts.
+MAX_TURN_ATTEMPTS = 3
+TURN_FAILED = "turn_failed"
 # Reply ids of the listing cards (app.cards). The id is client-supplied: only this exact
 # shape is ever echoed back.
 TAP_ID = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
@@ -160,12 +176,27 @@ def assemble_turn(conn, job, sender):
 
         turn = conn.execute(
             """
-            SELECT id, sender_role, route, staff_id, control_state, conversation_mode
+            SELECT id, sender_role, route, staff_id, control_state, conversation_mode,
+                   attempts
             FROM conversation_turn WHERE conversation_id = %s AND status = 'open'
             """,
             (conversation_id,),
         ).fetchone()
+        if turn is not None and turn[6] >= MAX_TURN_ATTEMPTS:
+            # Every attempt so far ended without closing the turn (a crash runs no
+            # cleanup; this count is all it leaves): give the turn up, then answer
+            # the messages waiting behind it.
+            _close_failed(conn, turn[0])
+            logger.warning("Turn %s abandoned after %d attempts", turn[0], turn[6])
+            turn = None
         if turn is not None:
+            # Counted before any work, in this committed transaction: a crash cannot
+            # undercount it.
+            conn.execute(
+                "UPDATE conversation_turn SET attempts = attempts + 1 WHERE id = %s",
+                (turn[0],),
+            )
+            turn = turn[:6]
             rows = conn.execute(
                 f"""
                 SELECT {_MESSAGE_COLUMNS} FROM message m
@@ -237,6 +268,31 @@ def _turn(agency_id, conversation_id, sender, snapshot, rows):
     )
 
 
+def check_schema(conn, agency_id):
+    """Raise ConfigurationError unless migration 014 (conversation_turn.attempts and
+    the 'failed' status) is applied; the turn lifecycle needs it with any AI_PROVIDER.
+    Runs as the runtime login inside a tenant transaction (RLS on)."""
+    try:
+        with tenant_transaction(conn, agency_id):
+            _set_timeout(conn)
+            conn.execute("SELECT attempts FROM conversation_turn LIMIT 0")
+            row = conn.execute(
+                """
+                SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint
+                WHERE conrelid = 'conversation_turn'::regclass
+                  AND conname = 'conversation_turn_status_check'
+                """
+            ).fetchone()
+    except (psycopg.errors.UndefinedColumn, psycopg.errors.UndefinedTable,
+            psycopg.errors.InsufficientPrivilege):
+        row = None
+    except psycopg.Error:
+        raise ConfigurationError("Schema check failed: database unavailable") from None
+    if row is None or "'failed'" not in row[0]:
+        raise ConfigurationError("The worker requires migration 014 (turn attempts and "
+                                 "failed turns)")
+
+
 def close_turn(conn, turn, status):
     with tenant_transaction(conn, turn.agency_id):
         _set_timeout(conn)
@@ -249,7 +305,7 @@ def close_turn(conn, turn, status):
         )
 
 
-# --- responders (stubs; Task 6.1 replaces them with the AI turn engine) -------------
+# --- responders (stubs; used when no AI turn engine is configured) -------------------
 
 def mode_reply(turn):
     count = len(turn.messages)
@@ -281,22 +337,84 @@ def demo_command(turn):
     return {"type": "text", "text": {"body": last.text}}
 
 
-def run_turns(conn, job, client, sender, *, demo=None):
+def run_turns(conn, job, client, sender, *, demo=None, engine=None):
     """Answer the conversation's pending turn for this job; an open turn a crashed
     attempt left behind is finished first, then the new messages form the next turn.
 
     demo(turn, message, dedupe_prefix) handles a staff '#demo …' turn (app.handlers).
+    engine: the AI turn engine (app.turn_engine.TurnEngine), or None for the stubs.
+
+    When this job will not retry (a permanent error or its last attempt), a failing
+    turn is closed as 'failed'. If it was a resumed (older) turn, this job's own
+    messages still get their turn before the failure is raised, so its dead job
+    does not strand them; an error marked blocks_later_turns (a usage row that
+    cannot be written) records them as a failed turn instead, with no provider call.
     """
+    failure = None
     for _ in range(MAX_TURNS_PER_JOB):
         turn, resumed = assemble_turn(conn, job, sender)
         if turn is None:
-            return
-        _answer(conn, client, turn, demo)
+            break
+        if failure is not None and getattr(failure, "blocks_later_turns", False):
+            fail_turn(conn, turn, failure)
+            break
+        try:
+            _answer(conn, client, job, turn, demo, engine)
+        except Exception as exc:
+            if not (isinstance(exc, PermanentJobError) or job.attempts >= job.max_attempts):
+                raise  # retried; the turn stays open and is resumed
+            if not fail_turn(conn, turn, exc) or not resumed or failure is not None:
+                raise
+            failure = exc
+            continue
         if not resumed:
-            return
+            break
+    if failure is not None:
+        raise failure
 
 
-def _answer(conn, client, turn, demo):
+def _close_failed(conn, turn_id):
+    """Inside a tenant transaction holding the conversation lock: close an open turn
+    as 'failed' and dead-letter its trigger job if it is still waiting to retry (its
+    messages stay in the failed turn, so a retry would only report success). A turn
+    that is no longer open (already replied or gated) is left as it is."""
+    closed = conn.execute(
+        "UPDATE conversation_turn SET status = 'failed', completed_at = now() "
+        "WHERE id = %s AND status = 'open' RETURNING trigger_job_id",
+        (turn_id,),
+    ).fetchone()
+    if closed is not None:
+        conn.execute(
+            "UPDATE job SET status = 'dead', completed_at = now(), last_error_code = %s "
+            "WHERE id = %s AND status = 'pending'",
+            (TURN_FAILED, closed[0]),
+        )
+
+
+def fail_turn(conn, turn, error):
+    """The job will not retry: close the turn as 'failed' (_close_failed) so the
+    conversation's next message starts a new turn instead of resuming this one. Never
+    'replied'; the job keeps its error code. Returns False if the close itself failed
+    (the database still down): the turn then stays open, and the next job resumes it
+    within MAX_TURN_ATTEMPTS."""
+    if conn.closed:
+        return False
+    try:
+        if conn.info.transaction_status != TransactionStatus.IDLE:
+            conn.rollback()
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            _close_failed(conn, turn.id)
+    except psycopg.Error as exc:
+        logger.error("Turn %s left open: closing it as failed raised %s", turn.id,
+                     type(exc).__name__)
+        return False
+    logger.warning("Turn %s failed (%s); the next message starts a new turn", turn.id,
+                   error_code(error))
+    return True
+
+
+def _answer(conn, client, job, turn, demo, engine=None):
     if not turn.ai_allowed:
         # Control-state gate stub: no AI output; forwarding is Task 11.x.
         close_turn(conn, turn, "gated")
@@ -314,12 +432,19 @@ def _answer(conn, client, turn, demo):
         if command is not None:
             demo(turn, command, f"turn:{turn.id}")
         else:
-            payloads = tap_reply(turn) or RESPONDERS[turn.route](turn)
+            payloads = tap_reply(turn)
+            if payloads is None:
+                payloads = (engine.respond(conn, job, turn) if engine is not None
+                            else RESPONDERS[turn.route](turn))
+            # Outbound transport time is outside the AI turn budget; logged separately.
+            began = time.monotonic()
             for seq, payload in enumerate(payloads):
                 outbound.send_message(
                     conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
                     payload, f"turn:{turn.id}:{seq}",
                 )
+            logger.info("Turn %s: %d message(s) through outbound in %d ms", turn.id,
+                        len(payloads), int((time.monotonic() - began) * 1000))
     except whatsapp.PermanentSendError as exc:
         # The failure is on its outbound_message row; the turn is finished.
         close_turn(conn, turn, "replied")

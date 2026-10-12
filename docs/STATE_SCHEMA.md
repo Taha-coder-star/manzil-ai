@@ -300,7 +300,7 @@ Component C3 (RFC flow steps 2-3, Red-Team R-01). Code: `app/orchestrator.py`, c
 
 | Object | Purpose | Runtime (manzil_app) privileges | RLS |
 |---|---|---|---|
-| conversation_turn | one coalesced turn: routing + control snapshot, status open -> replied / gated | SELECT, INSERT, UPDATE | ENABLE + FORCE, tenant_isolation |
+| conversation_turn | one coalesced turn: routing + control snapshot, status open -> replied / gated / failed (014: job will not retry, or 3 attempts incl. crashes; attempts column) | SELECT, INSERT, UPDATE | ENABLE + FORCE, tenant_isolation |
 | message.turn_id | the turn that consumed an inbound message (NULL = not in a turn) | (message grants) | (message) |
 
 - Keys: `UNIQUE (agency_id, id)` and `(agency_id, conversation_id, id)`; message.turn_id is a
