@@ -21,8 +21,7 @@ downloads in the turn through ensure_stored (Red-Team R-02), and the job then
 finds the row stored and does nothing. Both paths write the same object and only
 a 'pending' row is updated, so either order is safe.
 
-Task 6.3 also adds pure helpers for C4: Opus packet sizes (activity_ratio, the
-silence pre-check that needs no decoder) and truncate_ogg (the first 120 s).
+Task 6.3 also adds truncate_ogg for C4 (the first 120 s of a note).
 
 Retention is short (docs/DECISIONS.md). Never log audio bytes, phone numbers or
 URLs.
@@ -58,12 +57,6 @@ OPUS_RATE = 48_000
 OGG_HEADER = struct.Struct("<4sBBqIIIB")
 OGG_EOS = 0x04
 OGG_CRC_OFFSET = 22
-# Silence pre-check (Task 6.3). An Opus packet of at most SILENT_PACKET_BYTES carries
-# no speech (silence / comfort-noise frames are a few bytes; speech frames at
-# WhatsApp's bitrates are tens of bytes). PROVISIONAL: calibrate on the silent and
-# near_silent benchmark controls (docs/SPEECH.md); until then the value only catches
-# clearly empty notes, and Scribe's "no words" result is the second guard.
-SILENT_PACKET_BYTES = 10
 
 
 class AudioRejected(Exception):
@@ -309,31 +302,6 @@ def _ogg_pages(data):
 def _is_opus(data, pages):
     first = pages[0]
     return data[first[3]:first[4]].startswith(b"OpusHead") and first[4] - first[3] >= 12
-
-
-def opus_packet_sizes(data):
-    """Sizes of the audio packets of an Ogg Opus stream (the OpusHead and OpusTags
-    packets skipped), or None when it is not readable Ogg Opus."""
-    pages = _ogg_pages(data)
-    if pages is None or not _is_opus(data, pages):
-        return None
-    sizes, current = [], 0
-    for _, _, table, _, _ in pages:
-        for lacing in table:
-            current += lacing
-            if lacing < 255:
-                sizes.append(current)
-                current = 0
-    return sizes[2:] if len(sizes) >= 2 else None
-
-
-def activity_ratio(data):
-    """Share of Opus packets larger than SILENT_PACKET_BYTES (a speech-energy proxy
-    that needs no decoder), or None when it cannot be measured."""
-    sizes = opus_packet_sizes(data)
-    if not sizes:
-        return None
-    return sum(1 for size in sizes if size > SILENT_PACKET_BYTES) / len(sizes)
 
 
 def _crc_table():

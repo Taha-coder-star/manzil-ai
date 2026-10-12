@@ -63,25 +63,6 @@ def opus_note(seconds, packet_bytes=60, pre_skip=312, per_page=50, pattern=None)
     return b"".join(pages)
 
 
-def test_activity_ratio_tells_silence_from_speech():
-    assert audio.activity_ratio(opus_note(5, packet_bytes=3)) == 0
-    assert audio.activity_ratio(opus_note(5, packet_bytes=60)) == 1
-    assert audio.activity_ratio(opus_note(4, pattern=[3, 3, 3, 60])) == 0.25
-    assert audio.activity_ratio(b"ID3\x04" + b"\0" * 64) is None
-    assert audio.activity_ratio(b"") is None
-
-
-def test_packets_spanning_pages_are_joined():
-    head = b"OpusHead" + struct.pack("<BBHIhB", 1, 1, 0, 16_000, 0, 0)
-    big = b"\x02" * 600
-    # The 600-byte packet is laced 255, 255, 90; split it after the first 255 bytes.
-    first = struct.pack("<4sBBqIIIB", b"OggS", 0, 0, -1, 1, 2, 0, 1) + bytes([255]) + big[:255]
-    second = (struct.pack("<4sBBqIIIB", b"OggS", 0, 1, 960, 1, 3, 0, 2) + bytes([255, 90])
-              + big[255:])
-    data = page([head], 0, 0) + page([b"OpusTags" + b"\0" * 8], 0, 1) + first + second
-    assert audio.opus_packet_sizes(data) == [600]
-
-
 def test_truncate_keeps_at_most_the_limit_and_closes_the_stream():
     data = opus_note(150)
     assert audio.ogg_duration_ms(data) == 150_000
@@ -96,7 +77,6 @@ def test_truncate_keeps_at_most_the_limit_and_closes_the_stream():
     zeroed = bytearray(cut[last:])
     struct.pack_into("<I", zeroed, 22, 0)
     assert stored == audio.ogg_crc(bytes(zeroed))
-    assert audio.activity_ratio(cut) == 1
 
 
 def test_ogg_crc_matches_the_reference_vector():
@@ -136,7 +116,7 @@ def test_check_transcript(text, kwargs, reason):
 def test_notices_are_approved_templates_once_each():
     assert speech.notice_texts(()) == []
     assert speech.notice_texts(("transcribed",)) == []
-    assert speech.notice_texts(("silent", "too_short", "failed")) == [
+    assert speech.notice_texts(("no_speech", "too_short", "failed")) == [
         TEMPLATES["voice_retry"], TEMPLATES["voice_failed"]]
     assert speech.notice_texts(("truncated",)) == [TEMPLATES["voice_truncated"]]
     assert speech.notice_texts(("unsupported_language",)) == [TEMPLATES["voice_language"]]
@@ -442,7 +422,7 @@ def test_a_voice_note_from_a_customer_gets_a_stored_transcript(sp):
     assert transcript == SPOKEN
     assert meta["status"] == "transcribed" and meta["provider"] == "elevenlabs"
     assert meta["model"] == "scribe_v2" and meta["duration_ms"] == 6_000
-    assert meta["truncated"] is False and meta["activity_ratio"] == 1
+    assert meta["truncated"] is False and "activity_ratio" not in meta
     assert meta["primary"]["detail"] == "transcribed" and "fallback" not in meta
     assert sp.replies() == [stub_reply()]
     # The note was sent as stored, with the domain vocabulary and the gazetteer.
@@ -497,16 +477,20 @@ def test_a_forced_primary_error_uses_the_fallback(sp):
     ]
 
 
-def test_a_silent_control_asks_to_resend_without_any_provider_call(sp):
-    """Done condition 3."""
-    sp.deliver(sp.voice(opus_note(5, packet_bytes=3)))
+def test_a_silent_control_asks_to_resend_and_never_reaches_the_fallback(sp):
+    """Done condition 3 (as seen live 2026-10-12: Scribe returns no words)."""
+    sp.scribe.script.append({"text": "", "language_code": "eng",
+                             "language_probability": 0.4, "words": []})
+    sp.deliver(sp.voice(opus_note(5)))
     sp.drain()
     assert sp.replies() == [TEMPLATES["voice_retry"]]
     assert "dobara bhej" in TEMPLATES["voice_retry"].lower()
     [(transcript, meta)] = sp.stt()
-    assert transcript is None and meta["status"] == "silent"
-    assert meta["activity_ratio"] == 0
-    assert sp.scribe.calls == [] and sp.gemini.calls == [] and sp.usage() == []
+    assert transcript is None and meta["status"] == "no_speech"
+    assert meta["primary"]["detail"] == "no_speech" and "fallback" not in meta
+    assert sp.gemini.calls == []
+    assert [row[:5] for row in sp.usage()] == [
+        ("elevenlabs", "scribe_v2", "stt", "succeeded", "no_speech")]
 
 
 def test_event_tags_are_not_part_of_the_transcript(sp):
@@ -608,9 +592,11 @@ def test_text_and_voice_in_one_turn_share_the_reply(sp):
 
 
 def test_a_failed_note_next_to_text_still_answers_the_text(sp):
-    sp.deliver(sp.text("salaam"), sp.voice(opus_note(4, packet_bytes=2)))
+    sp.scribe.script.append(scribe_body(text="(static)", events=1))
+    sp.deliver(sp.text("salaam"), sp.voice(opus_note(4)))
     sp.drain()
-    assert sp.replies() == [stub_reply(count=2, voice="silent"), TEMPLATES["voice_retry"]]
+    assert sp.replies() == [stub_reply(count=2, voice="no_speech"),
+                            TEMPLATES["voice_retry"]]
 
 
 def test_a_resumed_turn_never_pays_for_a_note_twice(sp, monkeypatch):

@@ -21,7 +21,6 @@ minutes). For each voice note, in the turn's order:
 | 2 | `audio.ensure_stored`: the stored object, or download now if `fetch_audio` has not run | unusable audio -> `download_failed` |
 | 3 | duration < 1 s | `too_short` (no call) |
 | 3 | duration > 120 s | only the first 120 s are sent (`truncate_ogg`, page boundary, EOS + CRC) -> `truncated` |
-| 3 | Ogg Opus with `activity_ratio` < `MIN_ACTIVITY_RATIO` | `silent` (no call) |
 | 4 | Scribe v2 (6 s), keyterms, `tag_audio_events` | |
 | 5 | sanity checks | `no_speech` / `unsupported_language` end here; `implausible_rate`, `bad_script`, `repetition` and any error go to step 6 |
 | 6 | Gemini audio (6 s), once, structured `{speech_present, transcript, language}` | the same checks; `speech_present=false` -> `no_speech` |
@@ -40,7 +39,7 @@ like typed text (FR-C13: one pipeline). `Turn.voice` holds the statuses.
 
 | Status | Template |
 |---|---|
-| `too_short`, `silent`, `no_speech`, `download_failed` | `voice_retry`: "Awaaz clear nahi aayi. Dobara bhej dein ya likh kar bhej dein." |
+| `too_short`, `no_speech`, `download_failed` | `voice_retry`: "Awaaz clear nahi aayi. Dobara bhej dein ya likh kar bhej dein." |
 | `failed` (both providers, or the cut failed) | `voice_failed`: "Maazrat, awaaz samajh nahi aayi. Please apni baat likh kar bhej dein." + an ERROR log `ALERT speech failed` (C16 hook) |
 | `unsupported_language` | `voice_language`: "Please Urdu ya English mein bolein ya likh kar bhej dein." |
 | `truncated` | `voice_truncated`: "Voice note lamba tha; sirf pehle 2 minute suni gayi hain." |
@@ -52,7 +51,7 @@ in this turn · voice: transcribed`.
 
 ## stt_meta
 
-`status`, `audio_id`, `mime_type`, `duration_ms`, `truncated`, `activity_ratio`,
+`status`, `audio_id`, `mime_type`, `duration_ms`, `truncated`,
 `keyterms` (count), `provider` / `model` (the one whose transcript was used),
 `primary` and `fallback` (`{provider, model, outcome, detail, ms}`), `fallback_reason`,
 `rejected_transcript` (the primary's text when it failed a sanity check; R16 7.7 "both
@@ -84,19 +83,39 @@ stub replies.
   Arabic-Urdu / Devanagari; a 1-4 word sequence 5 times in a row, or one token > 50 % of a
   12+ token transcript; a detected language outside ur / en / hi with probability >= 0.7.
 
-## Silence pre-check (calibration pending)
+## Silence (no audio-level pre-check)
 
-No decoder is used (owner decision 2026-10-12: no new dependency). `audio.activity_ratio`
-is the share of Opus packets larger than `SILENT_PACKET_BYTES` (10); a note below
-`MIN_ACTIVITY_RATIO` (0.05) is `silent`. Both values are **provisional**: they only catch
-clearly empty notes. Scribe returning no words (or only audio events) is the second guard
-and also never reaches Gemini. The residual risk: a silent note on which Scribe *errors*
-goes to Gemini, guarded only by `speech_present` and the instruction.
+The first version had a decoder-free silence pre-check (the share of Opus packets above
+10 bytes). Live data on 2026-10-12 showed it cannot work: WhatsApp voice notes are
+near-constant-bitrate Opus with ~120 ms packets of 220-330 bytes **whether silent or
+not** (2 silent notes: median 250-254 bytes; 3 speech notes: 268-282 bytes; 89-100 % of
+packets above every threshold up to 80 bytes). It was removed (owner decision: no decoder
+dependency). Silence is now caught by Scribe returning no words (or only audio events) ->
+`no_speech`, which never reaches Gemini (live L3: one Scribe row, no Gemini row). Costs:
+each silent note uses ~5 s of Scribe minutes. Residual risk: a silent note on which Scribe
+*errors* goes to Gemini, guarded by `speech_present` (live, with an invalid Scribe key,
+Gemini answered `no_speech` for silence: one sample). A real energy check needs an Opus
+decoder (ffmpeg / libopus): revisit if Scribe minutes run short or the benchmark controls
+fail.
 
-Calibrate when the controls are recorded (Day 7): for each stored `silent`, `near_silent`
-and a few quiet speech notes, read `stt_meta.activity_ratio` (every processed note records
-it), or compute it offline with `audio.activity_ratio(open(path, "rb").read())`. Then set
-the threshold between the controls and the quietest speech and record the values here.
+## Live results (2026-10-12, `manzil-ai:6.3-33daf5a`, AI_PROVIDER=stub, team phone)
+
+| Check | Result |
+|---|---|
+| L1 voice note -> transcript | Scribe v2, 1.3 s, 100 keyterms, one usage row (6.68 s) |
+| L2 invalid Scribe key | `http_401` -> Gemini `gemini-3.5-flash-lite` transcribed, 1.8 s, two usage rows |
+| L3 silent note | Scribe `no_speech`, no Gemini call, "Awaaz clear nahi aayi" |
+
+Findings for the Day 8 benchmark:
+- Scribe auto-detected Roman Urdu speech as Hindi and wrote **Devanagari mixed with Latin**
+  ("DHA phase 6 में 500 gaz का घर, budget 8 crore तक का।"); it also wrote "aath" as "8" and
+  added a word. R16 accepts Devanagari, but the 6.2 normalisers / 7.1 resolver do not read
+  Devanagari words ("तक" = tak) and D15 wants Roman Urdu replies. Gemini returned Roman
+  Urdu ("Clifton block eight mein ghar chahiye, budget aath crore tak."). Options to
+  benchmark: `language_code=ur` for Scribe (Urdu script, which the normalisers read),
+  transliteration, or Gemini as primary.
+- A failed attempt's usage row still carries `audio_seconds` (the audio attempted, not
+  billed): cost reports count only `outcome = 'succeeded'` rows.
 
 ## Live acceptance (team phones only; free tiers may train on data)
 
@@ -105,9 +124,8 @@ the threshold between the controls and the quietest speech and record the values
    ends `voice: transcribed`.
 2. Forced primary error: set an invalid `ELEVENLABS_API_KEY`, restart, send a note:
    `stt_meta.primary.detail=http_401`, `provider=gemini`. Restore the key and restart.
-3. Silent control: "Awaaz clear nahi aayi. Dobara bhej dein ..."; no `stt` usage row when
-   the pre-check catches it (`status=silent`), or a single Scribe row (`no_speech`) and no
-   Gemini row.
+3. Silent control: "Awaaz clear nahi aayi. Dobara bhej dein ..."; a single Scribe row
+   (`no_speech`) and no Gemini row.
 
 Out of scope here: the voice-critical echo-confirm (10.2), voice-then-text ordering tests
 (12.2), the fault-injection suite (13.3), the STT benchmark (Day 8), staff voice.

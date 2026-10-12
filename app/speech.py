@@ -11,8 +11,10 @@ in the turn's order:
 2. The audio (app.audio.ensure_stored): downloaded now if the fetch_audio job has
    not run yet. Unusable audio -> download_failed.
 3. Pre-checks, before any paid call: < 1 s -> too_short; > 120 s -> only the first
-   120 s are sent (truncated); an Ogg Opus note whose packets are almost all
-   silence-sized (app.audio.activity_ratio) -> silent.
+   120 s are sent (truncated). There is no audio-level silence check: WhatsApp
+   notes are near-constant-bitrate Opus (~120 ms packets of 220-330 bytes whether
+   silent or not, measured live 2026-10-12), so packet sizes cannot show silence
+   and no decoder is used (owner decision). Silence is Scribe's no_speech.
 4. Primary STT: ElevenLabs Scribe v2 with the gazetteer keyterms (app.stt).
 5. Sanity checks (check_transcript): no speech, an unsupported language, an
    implausible word rate, a script outside Latin / Arabic-Urdu / Devanagari, a
@@ -20,7 +22,8 @@ in the turn's order:
 6. Fallback, once: Gemini audio (app.llm.GeminiClient.transcribe) on a primary
    error, timeout or garbage (rate, script, loop). Never after no_speech or
    unsupported_language, and never after a pre-check: Gemini has invented speech
-   for silence (CLAUDE.md), so silence must not reach it.
+   for silence (CLAUDE.md), so Scribe's verdict on silence is final. A silent note
+   on which Scribe errors does reach Gemini, guarded by speech_present.
 7. The result is stored on the message (transcript in the spoken script, D18; NULL
    unless transcribed) with stt_meta, and conversation.last_modality = 'voice'.
 8. Every provider attempt writes one usage_event row (operation 'stt',
@@ -67,10 +70,6 @@ PRIMARY_TIMEOUT_SECONDS = 6.0
 FALLBACK_TIMEOUT_SECONDS = 6.0
 SPEECH_BUDGET_SECONDS = 20.0
 MIN_ATTEMPT_SECONDS = 1.0
-# Silence pre-check: below this share of non-silent Opus packets the note is not sent
-# to any provider. PROVISIONAL (app.audio.SILENT_PACKET_BYTES): calibrate on the
-# silent / near_silent controls and record the values in docs/SPEECH.md.
-MIN_ACTIVITY_RATIO = 0.05
 # Sanity checks (R16 section 7.3).
 MAX_WORDS_PER_SECOND = 6.0
 MAX_FOREIGN_SCRIPT_SHARE = 0.2
@@ -96,7 +95,7 @@ TEMPLATES = {
     "voice_truncated": "Voice note lamba tha; sirf pehle 2 minute suni gayi hain.",
 }
 NOTICES = {
-    "too_short": "voice_retry", "silent": "voice_retry", "no_speech": "voice_retry",
+    "too_short": "voice_retry", "no_speech": "voice_retry",
     "download_failed": "voice_retry", "failed": "voice_failed",
     "unsupported_language": "voice_language", TRUNCATED: "voice_truncated",
 }
@@ -315,11 +314,6 @@ class SpeechService:
                 return "failed", None
             data, duration = cut, audio.ogg_duration_ms(cut) or MAX_DURATION_MS
             meta["truncated"] = True
-        if stored.mime_type == "audio/ogg":
-            ratio = audio.activity_ratio(data)
-            meta["activity_ratio"] = round(ratio, 3) if ratio is not None else None
-            if ratio is not None and ratio < MIN_ACTIVITY_RATIO:
-                return "silent", None
         done = TRUNCATED if meta["truncated"] else TRANSCRIBED
         seconds = duration / 1000 if duration is not None else None
 
