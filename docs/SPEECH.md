@@ -63,7 +63,7 @@ Logs hold only codes, ids and timings, never transcripts, audio or phone numbers
 | Variable | Values |
 |---|---|
 | `STT_PROVIDER` | `off` (default: voice gets the 6.1 "please type" template) or `elevenlabs` (needs `ELEVENLABS_API_KEY`, `S3_BUCKET`, migration 013) |
-| `STT_FALLBACK` | `gemini` (needs `GEMINI_API_KEY` + `LLM_PRIMARY_MODEL`) or `off`; empty = `gemini` when both are set; the call uses `LLM_THINKING_LEVEL` (default `low`, `off` omits it) |
+| `STT_FALLBACK` | `gemini` (needs `GEMINI_API_KEY` + `LLM_PRIMARY_MODEL`) or `off`; empty = `gemini` when both are set; the call uses `LLM_THINKING_LEVEL` (default `low`, `off` omits it; an unknown value stops the worker, exit 78, even with `AI_PROVIDER=stub`) |
 
 Unusable settings stop the worker with exit code 78 (never a silent fallback), as for
 `AI_PROVIDER`. Speech is independent of `AI_PROVIDER`: production can transcribe with the

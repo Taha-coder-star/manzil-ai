@@ -283,15 +283,49 @@ def test_the_fallback_follows_llm_thinking_level():
     for level in ("minimal", None):
         built = speech.build_speech(settings(llm_thinking_level=level), FakeStorage())
         assert built.thinking_level == level
-    bodies = []
 
-    def handler(request):
-        bodies.append(json.loads(request.content))
-        return httpx.Response(200, json=gemini_reply())
 
-    client = GeminiClient(KEY, transport=httpx.MockTransport(handler))
-    client.transcribe(MODEL, b"OggS-audio", "audio/ogg", timeout_s=5, thinking_level=None)
-    assert "thinkingConfig" not in bodies[0]["generationConfig"]
+def test_an_unknown_thinking_level_stops_speech_with_the_gemini_fallback():
+    # AI_PROVIDER=stub: only the STT fallback calls Gemini, so the speech check must
+    # reject the level itself (the same rule as config.check_ai_settings).
+    for overrides in ({}, {"stt_fallback": "gemini"}):
+        with pytest.raises(ConfigurationError, match="LLM_THINKING_LEVEL must be one of"):
+            config.check_stt_settings(settings(llm_thinking_level="bogus", **overrides))
+    for level in ("low", "minimal", None):  # None = LLM_THINKING_LEVEL=off
+        config.check_stt_settings(settings(llm_thinking_level=level))
+
+
+@pytest.mark.parametrize("overrides", [
+    {"stt_provider": "off", "elevenlabs_api_key": None},  # no speech at all
+    {"stt_fallback": "off"},  # Scribe only
+    {"stt_fallback": None, "gemini_api_key": None},  # effective fallback off
+])
+def test_the_thinking_level_is_not_required_without_a_gemini_consumer(overrides):
+    config.check_stt_settings(settings(llm_thinking_level="bogus", **overrides))
+    config.check_ai_settings(settings(llm_thinking_level="bogus", **overrides))
+
+
+def test_an_unknown_thinking_level_stops_the_worker_with_exit_78(monkeypatch, caplog):
+    # The real make_handlers, so the speech check is what stops the worker.
+    from app import worker as worker_main
+
+    value = settings(llm_thinking_level="bogus", webhook_sender_agencies="x",
+                     database_url="unused", meta_access_token="unused",
+                     meta_api_version="v25.0")
+    monkeypatch.setattr(worker_main.signal, "signal", lambda *args: None)
+    monkeypatch.setattr(worker_main, "load_settings", lambda: value)
+    monkeypatch.setattr(worker_main, "parse_sender_agencies", lambda v: {PNID: "unused"})
+
+    def never(*args, **kwargs):
+        raise AssertionError("nothing may run past the configuration check")
+
+    monkeypatch.setattr(worker_main, "check_schema", never)
+    monkeypatch.setattr(worker_main, "Worker", never)
+    with pytest.raises(SystemExit) as caught:
+        worker_main.run()
+    assert caught.value.code == worker_main.CONFIGURATION_EXIT_CODE == 78
+    assert "Worker not started: LLM_THINKING_LEVEL must be one of" in caplog.text
+    assert KEY not in caplog.text
 
 
 def test_unusable_speech_settings_stop_make_handlers():
@@ -730,6 +764,33 @@ def test_a_slow_engine_after_a_voice_note_sends_the_interim_once_and_continues(s
                     "WHERE dedupe_key LIKE 'turn:%%:interim'") == [(1,)]
     [(transcript, meta)] = sp.stt()
     assert transcript == SPOKEN and meta["status"] == "transcribed"
+
+
+@pytest.mark.parametrize(("level", "expected"), [
+    ("low", {"thinkingLevel": "low"}),
+    ("minimal", {"thinkingLevel": "minimal"}),
+    (None, None),  # LLM_THINKING_LEVEL=off: thinkingConfig left out
+])
+def test_the_built_fallback_sends_the_thinking_level(sp, monkeypatch, level, expected):
+    # build_speech -> SpeechService -> GeminiClient.transcribe -> the HTTP request body.
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=gemini_reply())
+
+    monkeypatch.setattr(speech, "GeminiClient", lambda key: GeminiClient(
+        key, transport=httpx.MockTransport(handler)))
+    service = speech.build_speech(settings(llm_thinking_level=level), sp.storage)
+    service.primary = sp.scribe  # Scribe returns garbage, so the fallback runs
+    sp.rebuild(service)
+    sp.scribe.script.append(scribe_body(text="thank you " * 10))
+    sp.deliver(sp.voice(opus_note(20)))
+    sp.drain()
+    [body] = bodies
+    assert body["generationConfig"].get("thinkingConfig") == expected
+    [(transcript, meta)] = sp.stt()
+    assert transcript == SPOKEN and meta["fallback_reason"] == "repetition"
 
 
 def test_speech_logs_hold_no_transcript_or_phone(sp, caplog):

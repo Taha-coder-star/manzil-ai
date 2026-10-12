@@ -69,6 +69,13 @@ def check_ai_settings(settings):
                         ("LLM_FAILOVER_MODEL", settings.llm_failover_model)):
         if not MODEL_ID.fullmatch(value):
             raise ConfigurationError(f"{name} is not a valid model ID")
+    check_thinking_level(settings)
+
+
+def check_thinking_level(settings):
+    """LLM_THINKING_LEVEL (already normalised by thinking_level_setting) must be one of
+    THINKING_LEVELS or None ('off'). Shared by every Gemini consumer: the turn engine
+    and the STT fallback."""
     level = getattr(settings, "llm_thinking_level", DEFAULT_THINKING_LEVEL)
     if level is not None and level not in THINKING_LEVELS:
         raise ConfigurationError("LLM_THINKING_LEVEL must be one of: "
@@ -115,8 +122,11 @@ def check_stt_settings(settings):
     missing = [name for name, value in required if not value]
     if missing:
         raise ConfigurationError("STT_PROVIDER=elevenlabs requires " + ", ".join(missing))
-    if stt_fallback(settings) == "gemini" and not MODEL_ID.fullmatch(settings.llm_primary_model):
-        raise ConfigurationError("LLM_PRIMARY_MODEL is not a valid model ID")
+    if stt_fallback(settings) == "gemini":
+        if not MODEL_ID.fullmatch(settings.llm_primary_model):
+            raise ConfigurationError("LLM_PRIMARY_MODEL is not a valid model ID")
+        # The fallback sends LLM_THINKING_LEVEL (app.speech), even with AI_PROVIDER=stub.
+        check_thinking_level(settings)
 
 
 def _optional(name):
