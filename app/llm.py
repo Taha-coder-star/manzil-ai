@@ -67,8 +67,9 @@ _SCHEMA_KEYS = ("description", "enum", "minimum", "maximum", "minItems", "maxIte
 _CODE = re.compile(r"[^a-z0-9_]+")
 _MODEL_VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}")
 # Task 6.3 transcription (STT fallback): a small thinking budget for latency (Gemini 3
-# defaults to high; CLAUDE.md section 1).
-TRANSCRIBE_THINKING_LEVEL = "low"
+# defaults to high; CLAUDE.md section 1). app.speech passes LLM_THINKING_LEVEL, so
+# 'off' (None) leaves it out here too.
+TRANSCRIBE_THINKING_LEVEL = DEFAULT_THINKING_LEVEL
 TRANSCRIBE_INSTRUCTION = (
     "You transcribe one WhatsApp voice note from a customer of a real-estate agency in "
     "Karachi, Pakistan. Write exactly what is said, word for word, in the script it is "

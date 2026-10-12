@@ -276,6 +276,24 @@ def test_speech_settings_defaults():
     assert speech.build_speech(settings(stt_fallback="off"), FakeStorage()).fallback is None
 
 
+def test_the_fallback_follows_llm_thinking_level():
+    # Task 6.1 follow-up: LLM_THINKING_LEVEL applies to every Gemini call, transcription
+    # included; 'off' (None) is the kill switch that leaves the field out.
+    assert speech.build_speech(settings(), FakeStorage()).thinking_level == "low"
+    for level in ("minimal", None):
+        built = speech.build_speech(settings(llm_thinking_level=level), FakeStorage())
+        assert built.thinking_level == level
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, json=gemini_reply())
+
+    client = GeminiClient(KEY, transport=httpx.MockTransport(handler))
+    client.transcribe(MODEL, b"OggS-audio", "audio/ogg", timeout_s=5, thinking_level=None)
+    assert "thinkingConfig" not in bodies[0]["generationConfig"]
+
+
 def test_unusable_speech_settings_stop_make_handlers():
     with pytest.raises(ConfigurationError):
         make_handlers(settings(elevenlabs_api_key=None, meta_access_token="unused",
@@ -308,8 +326,9 @@ class FakeGemini:
     def __init__(self):
         self.script, self.calls = [], []
 
-    def transcribe(self, model, data, mime_type, *, timeout_s):
-        self.calls.append(SimpleNamespace(model=model, data=data, timeout=timeout_s))
+    def transcribe(self, model, data, mime_type, *, timeout_s, thinking_level=None):
+        self.calls.append(SimpleNamespace(model=model, data=data, timeout=timeout_s,
+                                          thinking_level=thinking_level))
         step = self.script.pop(0)
         if isinstance(step, Exception):
             raise step
@@ -539,6 +558,7 @@ def test_garbage_goes_to_the_fallback_and_both_failing_asks_to_type(sp, caplog):
     [(transcript, meta)] = sp.stt()
     assert transcript is None and meta["status"] == "failed"
     assert meta["fallback_reason"] == "repetition"
+    assert [call.thinking_level for call in sp.gemini.calls] == ["low"]
     assert meta["rejected_transcript"].startswith("thank you")
     assert [row[3:5] for row in sp.usage()] == [("succeeded", "repetition"),
                                                 ("failed", "http_503")]
@@ -668,6 +688,48 @@ def test_the_turn_engine_reads_the_transcript_as_text(sp):
     [body] = requests
     current = body["contents"][0]["parts"][-1]["text"]
     assert f"1. {SPOKEN}" in current and "no transcript yet" not in current
+
+
+def test_a_slow_engine_after_a_voice_note_sends_the_interim_once_and_continues(sp):
+    # #29 + #30 combined: STT runs first, then the 6.1 engine; an exhausted 15 s budget
+    # sends the interim (turn:{id}:interim) once and the one continuation answers.
+    from app.turn_engine import TEMPLATES as ENGINE_TEMPLATES
+    from app.turn_engine import TurnEngine
+
+    clock = SimpleNamespace(now=1000.0)
+    calls = []
+
+    def handler(request):
+        calls.append(request.url.path)
+        if len(calls) == 1:
+            clock.now += 16
+            raise httpx.ReadTimeout("deadline")
+        return httpx.Response(200, json={"candidates": [{"content": {"role": "model",
+                              "parts": [{"text": "ok"}]}, "finishReason": "STOP"}]})
+
+    engine = TurnEngine(GeminiClient(KEY, transport=httpx.MockTransport(handler)),
+                        "primary-model", "failover-model", clock=lambda: clock.now)
+    worker_settings = SimpleNamespace(
+        meta_access_token="unused", meta_api_version="v25.0", s3_bucket=None,
+        site_address="demo.example")
+    handlers = make_handlers(worker_settings, client_factory=lambda pnid: sp.channel,
+                             storage=sp.storage, engine=engine,
+                             speech_service=SpeechService(sp.scribe, sp.storage))
+    worker = Worker(sp.app_url, [sp.agency], handlers, threading.Event(),
+                    backoff=lambda n: 0)
+    try:
+        sp.scribe.script.append(scribe_body())
+        sp.deliver(sp.voice(opus_note(4)))
+        while worker.run_once():
+            pass
+    finally:
+        worker.close()
+    assert len(calls) == 2
+    assert sp.replies() == [ENGINE_TEMPLATES["interim"], ENGINE_TEMPLATES["customer_default"]]
+    assert sp.query("SELECT count(*) FROM outbound_message "
+                    "WHERE dedupe_key LIKE 'turn:%%:interim'") == [(1,)]
+    [(transcript, meta)] = sp.stt()
+    assert transcript == SPOKEN and meta["status"] == "transcribed"
 
 
 def test_speech_logs_hold_no_transcript_or_phone(sp, caplog):

@@ -55,7 +55,7 @@ from psycopg.types.json import Jsonb
 from app import audio
 from app.config import stt_fallback
 from app.db import tenant_transaction
-from app.llm import GeminiClient, ProviderError, Usage
+from app.llm import DEFAULT_THINKING_LEVEL, GeminiClient, ProviderError, Usage
 from app.stt import MAX_KEYTERMS, ScribeClient
 from app.turn_engine import PERSISTENT_SQLSTATE_CLASSES, UsageWriteError
 
@@ -248,11 +248,13 @@ class SpeechService:
     """C4. primary: app.stt.ScribeClient; fallback: app.llm.GeminiClient or None."""
 
     def __init__(self, primary, storage, *, fallback=None, fallback_model=None,
-                 clock=time.monotonic):
+                 thinking_level=DEFAULT_THINKING_LEVEL, clock=time.monotonic):
         self.primary = primary
         self.storage = storage
         self.fallback = fallback if fallback_model else None
         self.fallback_model = fallback_model
+        # LLM_THINKING_LEVEL (Task 6.1 follow-up); None leaves it out of the request.
+        self.thinking_level = thinking_level
         self._clock = clock
 
     def transcribe_turn(self, conn, job, turn, client):
@@ -389,7 +391,8 @@ class SpeechService:
         began = self._clock()
         model = self.fallback_model
         try:
-            result = self.fallback.transcribe(model, data, mime, timeout_s=timeout)
+            result = self.fallback.transcribe(model, data, mime, timeout_s=timeout,
+                                              thinking_level=self.thinking_level)
         except ProviderError as exc:
             ms = int((self._clock() - began) * 1000)
             return None, exc.code, _Attempt("gemini", model, "failed", exc.code, ms)
@@ -463,4 +466,6 @@ def build_speech(settings, storage):
     if stt_fallback(settings) == "gemini":
         fallback, model = GeminiClient(settings.gemini_api_key), settings.llm_primary_model
     return SpeechService(ScribeClient(settings.elevenlabs_api_key), storage,
-                         fallback=fallback, fallback_model=model)
+                         fallback=fallback, fallback_model=model,
+                         thinking_level=getattr(settings, "llm_thinking_level",
+                                                DEFAULT_THINKING_LEVEL))
