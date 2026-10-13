@@ -144,6 +144,17 @@ STUB_RESPONSE = {
 class ToolContext:
     route: str
     turn_text: str  # the current turn's text exactly as the model saw it
+    # Task 7.3: the turn's app.requirements.TurnBinding (update(patch) -> ToolResult).
+    # None keeps the 6.1 stub body (no state is read or written).
+    requirements: object = None
+
+
+@dataclass(frozen=True)
+class Notice:
+    """A customer-visible notice with parameters: TEMPLATES[key] formatted with values
+    that come from the backend only (canonical place names), never from the model."""
+    key: str
+    params: tuple = ()  # ((name, value), ...), hashable
 
 
 @dataclass(frozen=True)
@@ -152,7 +163,8 @@ class ToolResult:
     ok: bool
     response: dict  # sent back to the model as the functionResponse
     error: str | None = None
-    notice: str | None = None  # template key for the customer-visible reply
+    # Template key (str), Notice, or a tuple of those for the customer-visible reply.
+    notice: object = None
 
 
 def declarations(route):
@@ -231,6 +243,8 @@ def execute(call, context):
 
 
 def _update_requirements(args, context):
+    if context.requirements is not None:
+        return context.requirements.update(args["patch"])
     accepted = sum(span_in_turn(op["raw_span"], context.turn_text) for op in args["patch"])
     response = dict(STUB_RESPONSE, spans_verified=accepted,
                     spans_rejected=len(args["patch"]) - accepted)

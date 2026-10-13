@@ -161,7 +161,7 @@ def record_event(conn, agency_id, inbound_event_id):
 
 
 def make_handlers(settings, *, client_factory=None, image_link=None, storage=None,
-                  engine=None, speech_service=None):
+                  engine=None, speech_service=None, requirements=None):
     """Build the job handlers. process_message is only registered when sending is
     configured, so its jobs wait (pending) instead of failing without a token;
     fetch_media also needs the bucket and its public URL; fetch_audio the bucket.
@@ -169,12 +169,13 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
     tests); unusable AI settings raise app.config.ConfigurationError, never a
     silent fallback to the stubs. Task 6.3: STT_PROVIDER=elevenlabs transcribes
     customer voice notes in the turn (speech_service is for tests); unusable speech
-    settings raise ConfigurationError the same way."""
+    settings raise ConfigurationError the same way. Task 7.3: requirements is the
+    app.requirements.RequirementService (worker start loads the gazetteer for it)."""
 
     check_ai_settings(settings)
     check_stt_settings(settings)
     if engine is None:
-        engine = turn_engine.build_engine(settings)
+        engine = turn_engine.build_engine(settings, requirements=requirements)
     handlers = {"reconcile_status": reconcile_status}
     if client_factory is None:
         if not settings.meta_access_token:

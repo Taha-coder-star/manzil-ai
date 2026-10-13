@@ -916,7 +916,7 @@ def start_worker(monkeypatch, settings_value, make_handlers_result):
     monkeypatch.setattr(worker_main, "parse_sender_agencies",
                         lambda value: {PNID_A: settings_value.agency})
 
-    def handlers(settings):
+    def handlers(settings, **kwargs):
         if isinstance(make_handlers_result, Exception):
             raise make_handlers_result
         return make_handlers_result

@@ -22,7 +22,7 @@ import time
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import orchestrator, queue, turn_engine
+from app import gazetteer, orchestrator, queue, requirements, turn_engine
 from app.config import ConfigurationError, load_settings
 from app.handlers import make_handlers
 from app.routing import RoutingConfigError, parse_sender_agencies
@@ -39,7 +39,8 @@ CONFIGURATION_EXIT_CODE = 78  # EX_CONFIG (sysexits.h)
 def check_schema(database_url, agency_id, *, ai, stt=False):
     """Before any job is claimed, on a runtime connection: migration 014 (always; the
     turn lifecycle uses it) and, with ai or stt, migration 013 (usage_event detail,
-    written by app.turn_engine and app.speech)."""
+    written by app.turn_engine and app.speech); with ai also the requirement-state
+    tables (006) and agency settings (007) that app.requirements uses."""
     try:
         conn = psycopg.connect(database_url, autocommit=True,
                                connect_timeout=CONNECT_TIMEOUT_SECONDS)
@@ -49,6 +50,25 @@ def check_schema(database_url, agency_id, *, ai, stt=False):
         orchestrator.check_schema(conn, agency_id)
         if ai or stt:
             turn_engine.check_schema(conn, agency_id)
+        if ai:
+            requirements.check_schema(conn, agency_id)
+
+
+def load_gazetteer(cache):
+    """Task 7.3: load and validate the read-only location gazetteer once, at start
+    (docs/LOCATION_RESOLVER.md, "Database snapshot and cache"). Fail closed: any problem
+    (database, empty or invalid rows, missing city node) is a configuration error, never
+    a silent fallback to an empty or partial gazetteer. The log names the failure class
+    only, never row contents or server text."""
+    try:
+        snapshot = cache.load()
+    except Exception as exc:  # noqa: BLE001 - every failure must stop the start
+        logger.error("Gazetteer load failed (%s)", type(exc).__name__)
+        raise ConfigurationError(
+            "AI_PROVIDER=gemini requires a valid location gazetteer (migration 005 and the "
+            "seed)") from None
+    logger.info("Location gazetteer loaded: %d locations, %d aliases, version %s",
+                snapshot.locations, snapshot.aliases, snapshot.version[:12])
 
 
 class Worker:
@@ -168,10 +188,20 @@ def run():
 
     # job_type -> handler(conn, job). Only registered types are claimed; others stay pending.
     try:
-        handlers = make_handlers(settings)
+        # Task 7.3: the requirement manager needs the location gazetteer, so it exists
+        # only with the AI engine that calls it (AI_PROVIDER=gemini). The cache is
+        # created here and loaded after the schema check; a change in the gazetteer
+        # (an owner seed run) is picked up at the next start (GazetteerCache.refresh()
+        # exists but nothing calls it on a timer).
+        cache = (gazetteer.GazetteerCache.from_database_url(settings.database_url)
+                 if settings.ai_provider == "gemini" else None)
+        handlers = make_handlers(
+            settings, requirements=requirements.RequirementService(cache) if cache else None)
         check_schema(settings.database_url, agency_ids[0],
                      ai=settings.ai_provider == "gemini",
                      stt=getattr(settings, "stt_provider", "off") != "off")
+        if cache is not None:
+            load_gazetteer(cache)
     except ConfigurationError as exc:
         # AI settings or schema that cannot work: claim nothing and exit non-zero, so
         # the container is visibly not running (deploy/compose.yml restarts it under
