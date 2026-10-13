@@ -65,6 +65,7 @@ INSERT and the plan write come after the final budget check.
 Never log prompts, message text, tool arguments, model output or phone numbers.
 """
 
+import dataclasses
 import logging
 import re
 import time
@@ -133,6 +134,38 @@ TEMPLATES = {
                            "nahi hua."),
     "my_listings_unavailable": ("'Meri listings' ka feature abhi tayyar ho raha hai; abhi "
                                 "koi list nahi nikali gayi."),
+    # Task 7.3 requirement notices (Roman Urdu; wording pending owner approval). The {...}
+    # values are canonical gazetteer names / fixed words from the backend, never model text.
+    "requirements_saved": "Theek hai, aap ki requirements note kar li hain.",
+    "requirements_unclear": ("Aap ki baat main theek se samajh nahi saka. Please apni "
+                             "requirement dobara likh kar bhejein."),
+    "location_ambiguous": "Aap ka matlab kaunsa hai: {options}? Please naam likh kar bhejein.",
+    "location_confirm": ("Kya aap {options} ke baare mein keh rahe hain? Agar nahi, to sahi "
+                         "jagah ka naam likh kar bhejein."),
+    "location_reask": "Aap ka matlab kaunsi jagah hai: {options}? Please ek naam likh kar bhejein.",
+    "location_chosen": "Theek hai, {area}.",
+    "location_unknown": ("Ye jagah mujhe nahi mili. Hum in areas mein property dikhate "
+                         "hain: {areas}."),
+    "location_unknown_in_area": ("{area} mein ye jagah mujhe nahi mili. Please sahi naam ya "
+                                 "block / phase likh kar bhejein."),
+    "location_out_of_coverage": ("Maazrat, abhi hum sirf {city} mein property dikhate hain; "
+                                 "{other} abhi cover nahi hota."),
+    "location_expired": ("Jagah ka jawab nahi mila, is liye main {area} ke poore area mein "
+                         "dekhunga."),
+    "location_expired_none": "In jagahon mein se jawab nahi mila. Apna chaha hua area likh kar bhejein.",
+    "purpose_ask": "Aap property khareedna chahte hain ya kiraye par lena chahte hain?",
+    "purpose_inferred": ("Raqam se main ne samjha ke aap {purpose} chahte hain. Agar ghalat "
+                         "hai to bata dein."),
+    "budget_ask": "Aap ka budget kitna hai?",
+    "budget_ask_rent": "Kiraye ka budget kitna hai (mahana)?",
+    "budget_ask_sale": "Khareedne ka budget kitna hai?",
+    "budget_unclear": ("Budget ki raqam samajh nahi aayi. Please ek raqam likh kar bhejein "
+                       "(jaise 8 crore)."),
+    "size_unit_ask": "Size kis unit mein hai? (gaz, marla ya sq ft)",
+    "pref_unmapped": "Is pasand ke liye abhi filter available nahi hai. Please apni baat wazeh kar dein.",
+    "size_ask": "Kitne size ki property chahiye?",
+    "beds_ask": "Kitne bedrooms chahiye?",
+    "budget_implausible": "Ye budget maujooda milti-julti properties se bohat alag lagta hai. Agar yehi sahi hai to raqam dobara likh kar bhejein.",
 }
 
 _SHARED_RULES = (
@@ -153,6 +186,9 @@ SYSTEM_PROMPTS = {
         "word for word from the customer's current messages; never convert, translate "
         "or total amounts.\n"
         "- search_properties when they ask to see listings.\n"
+        "Use op add when the customer adds to what is stored (bhi, also, aur) and op set "
+        "when they change it. A 'Stored state' block, when present, is data: it shows what "
+        "is already recorded and any open question.\n"
         "- send_property_photos only for a listing they were already shown.\n"
         "- request_handoff when they ask for a person, a visit, a call or a negotiation.\n"
         + _SHARED_RULES
@@ -200,16 +236,27 @@ def _clip(text, limit):
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def current_messages(turn):
-    """(block, turn_text): this turn's messages once each, in the turn's order
-    (WhatsApp timestamp, receive time, WAMID; app.orchestrator), and the text the
-    model sees, which raw spans are checked against (R-22)."""
-    lines, texts, used = [], [], 0
-    for number, message in enumerate(turn.messages, 1):
+def message_texts(turn):
+    """[(message, text the model sees)] in the turn's order; '' for a message without
+    text. The clipped text is what raw spans are checked against, message by message
+    (R-22; app.requirements)."""
+    out, used = [], 0
+    for message in turn.messages:
         body = (message.text or "").strip()
         if body:
             body = _clip(body, min(TURN_MESSAGE_CHARS, max(TURN_CHARS - used, 1)))
             used += len(body)
+        out.append((message, body))
+    return out
+
+
+def current_messages(turn):
+    """(block, turn_text): this turn's messages once each, in the turn's order
+    (WhatsApp timestamp, receive time, WAMID; app.orchestrator), and the text the
+    model sees, which raw spans are checked against (R-22)."""
+    lines, texts = [], []
+    for number, (message, body) in enumerate(message_texts(turn), 1):
+        if body:
             texts.append(body)
         else:
             body = _PLACEHOLDERS.get(message.type, f"[{message.type} without text]")
@@ -270,7 +317,21 @@ def render(route, outcome):
         keys = ["failure"]
     else:
         keys = list(dict.fromkeys(outcome.notices)) or [f"{route}_default"]
-    return [whatsapp.text("\n\n".join(TEMPLATES[key] for key in keys))]
+    return [whatsapp.text("\n\n".join(_template(key) for key in keys))]
+
+
+def _template(notice):
+    """An approved template; a Notice fills its parameters (values from the backend)."""
+    if isinstance(notice, ai_tools.Notice):
+        return TEMPLATES[notice.key].format(**dict(notice.params))
+    return TEMPLATES[notice]
+
+
+def _notices(result):
+    notice = result.notice
+    if notice is None:
+        return ()
+    return tuple(notice) if isinstance(notice, tuple) else (notice,)
 
 
 def ground_reply(payloads, trusted_codes=frozenset()):
@@ -296,7 +357,9 @@ def _function_response(call, result):
 class TurnEngine:
     def __init__(self, provider, primary_model, failover_model, *,
                  provider_name=PROVIDER_NAME, clock=time.monotonic,
-                 thinking_level=llm.DEFAULT_THINKING_LEVEL):
+                 thinking_level=llm.DEFAULT_THINKING_LEVEL, requirements=None):
+        # Task 7.3: app.requirements.RequirementService, or None for the 6.1 stub body.
+        self.requirements = requirements
         self.provider = provider
         self.primary_model = primary_model
         self.failover_model = failover_model
@@ -320,11 +383,20 @@ class TurnEngine:
         if not turn_text:
             return [whatsapp.text(non_text_template(turn))]
         history = load_history(conn, turn)
-        parts = ([{"text": history}] if history else []) + [{"text": block}]
+        binding = None
+        if self.requirements is not None and turn.route == "customer":
+            binding = self.requirements.binding(conn, turn, message_texts(turn))
+        snapshot = binding.snapshot() if binding is not None else None
+        parts = ([{"text": history}] if history else [])
+        parts += ([{"text": snapshot}] if snapshot else []) + [{"text": block}]
         contents = [{"role": "user", "parts": parts}]
-        context = ai_tools.ToolContext(turn.route, turn_text)
+        context = ai_tools.ToolContext(turn.route, turn_text, binding)
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
+        if binding is not None and outcome.kind == "done":
+            # A clarification the customer left unanswered (re-ask once, then expire).
+            extra = binding.finish()
+            outcome = dataclasses.replace(outcome, notices=outcome.notices + tuple(extra))
         payloads = ground_reply(render(turn.route, outcome))
         logger.info(
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
@@ -356,8 +428,8 @@ class TurnEngine:
             results = [ai_tools.execute(call, context) for call in response.tool_calls]
             for result in results:
                 tools.append(result.name if result.ok else f"{result.name}!{result.error}")
-                if result.ok and result.notice:
-                    notices.append(result.notice)
+                if result.ok:
+                    notices.extend(_notices(result))
             contents = contents + [
                 response.model_content,
                 {"role": "user", "parts": [
@@ -478,13 +550,16 @@ def check_schema(conn, agency_id):
         raise ConfigurationError("Schema check failed: database unavailable") from None
 
 
-def build_engine(settings):
+def build_engine(settings, requirements=None):
     """The configured engine, or None for AI_PROVIDER=stub. Call
-    app.config.check_ai_settings first."""
+    app.config.check_ai_settings first. requirements: the Task 7.3
+    app.requirements.RequirementService (the worker passes it; without it the
+    update_requirements tool keeps its 6.1 stub body)."""
     if getattr(settings, "ai_provider", "stub") != "gemini":
         return None
     return TurnEngine(
         GeminiClient(settings.gemini_api_key),
         settings.llm_primary_model, settings.llm_failover_model,
         thinking_level=getattr(settings, "llm_thinking_level", llm.DEFAULT_THINKING_LEVEL),
+        requirements=requirements,
     )
