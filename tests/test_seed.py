@@ -226,6 +226,16 @@ def test_dry_run_on_an_empty_database_writes_nothing(db, monkeypatch):
         ("staff", "project", "property", "v_public_listing"), 0)
 
 
+def gazetteer_rows(admin_url):
+    """location and location_alias rows by id (UUIDs), as the owner sees them."""
+    with psycopg.connect(admin_url, autocommit=True) as conn:
+        locations = {r[0]: r[1:] for r in conn.execute(
+            "SELECT id, parent_id, name, level, code FROM location")}
+        aliases = {r[0]: r[1:] for r in conn.execute(
+            "SELECT id, alias, location_id, context_parent_id FROM location_alias")}
+    return locations, aliases
+
+
 def test_precinct_6_upgrade_inserts_only_the_new_gazetteer_rows(db, tmp_path):
     """Task 7.1 seed change: a database seeded before Bahria Precinct 6 existed gets
     exactly the new location and its two aliases on a rerun (the production path),
@@ -242,6 +252,7 @@ def test_precinct_6_upgrade_inserts_only_the_new_gazetteer_rows(db, tmp_path):
     assert owner_counts(admin_url)["location"] == 52
     assert owner_counts(admin_url)["location_alias"] == 85
     before = snapshot(app_url, agency)
+    old_locations, old_aliases = gazetteer_rows(admin_url)
 
     result = run(db)
     assert result.conflicts == []
@@ -261,6 +272,14 @@ def test_precinct_6_upgrade_inserts_only_the_new_gazetteer_rows(db, tmp_path):
             "ON p.id = l.parent_id WHERE l.name = 'Precinct 6'").fetchall()
     assert contexts == [("Precinct 6", "Bahria Town Karachi"), ("Phase 6", "DHA Defence")]
     assert precinct == [("sub_area", "precinct", None, "Bahria Town Karachi")]
+    # Existing gazetteer rows keep their UUIDs and content; only the new ones appear.
+    new_locations, new_aliases = gazetteer_rows(admin_url)
+    assert old_locations.items() <= new_locations.items()
+    assert old_aliases.items() <= new_aliases.items()
+    assert [row[1] for key, row in new_locations.items() if key not in old_locations] == [
+        "Precinct 6"]
+    assert sorted(row[0] for key, row in new_aliases.items() if key not in old_aliases) == [
+        "p6", "precinct 6"]
 
     again = run(db)
     assert again.conflicts == [] and all(not phase.inserts for phase in again.phases)

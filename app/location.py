@@ -217,18 +217,28 @@ def _urdu_terms(tokens):
     return out
 
 
+def _gulshan_shorthand(nxt):
+    """Bare "gulshan" means Gulshan-e-Iqbal (Data Model 3.2 step 3) only in the
+    shorthand contexts its examples use: end of span, "gulshan iqbal", or a level
+    word / number after it ("gulshan 13", "gulshan block 13", "gulshan block chhe").
+    Before any other word it may be another Gulshan ("Gulshan Maymar", R-23), so
+    it is left alone and never acquires Gulshan-e-Iqbal."""
+    return (nxt is None or nxt == "iqbal" or nxt in LEVEL_WORDS
+            or nxt.isdigit() or _whole_number(nxt) is not None)
+
+
 def _phrases(tokens):
     """Multi-token canonicalisation (Data Model 3.2 step 3)."""
     out, i = [], 0
     while i < len(tokens):
         t, nxt = tokens[i], tokens[i + 1] if i + 1 < len(tokens) else None
         if t == "gulshan":
-            if nxt == "e":  # "gulshan e <name>": keep, so an unlisted Gulshan-e-X
-                out.append(t)  # is never turned into Gulshan-e-Iqbal (R-23)
-                i += 1
-            else:
+            if _gulshan_shorthand(nxt):
                 out += ["gulshan", "e", "iqbal"]
                 i += 2 if nxt == "iqbal" else 1
+            else:  # "gulshan e <name>", "gulshan <name>": kept as written
+                out.append(t)
+                i += 1
         elif (t, nxt) in (("nazimabad", "north"), ("n", "nazimabad"), ("n", "n")):
             out += ["north", "nazimabad"]
             i += 2
@@ -372,6 +382,51 @@ def length_difference(a, b):
     return Fraction(abs(la - lb), max(la, lb)) if max(la, lb) else Fraction(0)
 
 
+# Name-word compatibility guard (owner decision 2026-10-13, after the PR #31 review).
+# A whole-string trigram score lets one shared word ("gulshan", "north") carry an
+# unrelated place ("Gulshan-e-Maymar" -> Gulshan-e-Iqbal, "Nazimabad" -> North
+# Nazimabad). Before ranking, every distinctive name word on each side must be
+# accounted for on the other side; otherwise the key is not a candidate at all,
+# neither for auto-resolution nor for clarification.
+WORD_FLOOR = CANDIDATE_FLOOR  # a typo must score >= 0.30 against one word
+MIN_DISTINCTIVE = 3           # shorter words ("e", "rd", "n") are not distinctive
+# Explicit and narrow: place-type words a customer may leave out of a candidate's
+# name ("zamzama" for Zamzama Commercial, "tariq rd" for Tariq Road). Only the
+# candidate side may omit them; a span word is never discarded.
+OPTIONAL_CANDIDATE_WORDS = frozenset({"commercial", "road"})
+
+
+def _word_matches(word, other_words):
+    """`word` has a counterpart among `other_words`: equal, a typo (word trigram
+    score >= WORD_FLOOR), a truncation ("comm" of commercial) or part of a fused
+    form ("north" in "northnazimabad", and the reverse)."""
+    joined = "".join(other_words)
+    return any(
+        word == other or similarity(word, other) >= WORD_FLOOR
+        or (len(word) >= MIN_DISTINCTIVE and other.startswith(word))
+        for other in other_words) or (len(word) >= 4 and (word in joined))
+
+
+def names_compatible(span_words, key_words, ancestor_names=frozenset()):
+    """The guard. Span side: every distinctive word must match a key word (nothing
+    the customer wrote is discarded). Key side: every distinctive word must match
+    a span word, unless it is an OPTIONAL_CANDIDATE_WORDS word or part of a whole
+    ancestor name the span left out ("sports city" for Bahria Sports City: the
+    "bahria" of the parent area). A word of an ancestor name never counts alone:
+    "nazimabad" does not reach North Nazimabad by omitting "north"."""
+    if any(len(w) >= MIN_DISTINCTIVE and not _word_matches(w, key_words)
+           for w in span_words):
+        return False
+    unmatched = {i for i, w in enumerate(key_words)
+                 if len(w) >= MIN_DISTINCTIVE and not _word_matches(w, span_words)}
+    for words in ancestor_names:
+        for start in range(len(key_words) - len(words) + 1):
+            span = set(range(start, start + len(words)))
+            if tuple(key_words[start:start + len(words)]) == words and span <= unmatched:
+                unmatched -= span
+    return all(key_words[i] in OPTIONAL_CANDIDATE_WORDS for i in unmatched)
+
+
 # ---------------------------------------------------------------------------
 # Gazetteer snapshot
 # ---------------------------------------------------------------------------
@@ -439,6 +494,21 @@ class Gazetteer:
         # never take part: the 4-letter name guard applies to both sides.
         self._fuzzy = tuple(row for row in (
             _fuzzy_row(key.split(), loc, ctx) for key, loc, ctx in self._fuzzy_keys) if row)
+        # Name-word guard: the place-name word sequences of each location's
+        # ancestors (context-free alias keys and names), which a candidate's key may
+        # omit as a whole ("sports city" for "bahria sports city").
+        own = {}
+        for key, entries in index.items():
+            for loc, ctx in entries:
+                if ctx is None:
+                    own.setdefault(loc, set()).add(key)
+        for place in self.places.values():
+            own.setdefault(place.id, set()).update({clean(place.name), clean(place.display_name)})
+        names = {loc: frozenset(tuple(name_part(k.split())) for k in keys) - {()}
+                 for loc, keys in own.items()}
+        self._ancestor_names = MappingProxyType({
+            place_id: frozenset().union(*(names.get(a, ()) for a in self.ancestors(place_id)[1:]))
+            for place_id in self.places})
 
     @classmethod
     def from_dataset(cls, data):
@@ -544,6 +614,10 @@ class Gazetteer:
     def fuzzy_entries(self):
         """Global fuzzy rows (internal)."""
         return self._fuzzy
+
+    def ancestor_names(self, location_id):
+        """Place-name word tuples of the ancestors (internal, name-word guard)."""
+        return self._ancestor_names[location_id]
 
     def fuzzy_keys(self):
         """(key, location_id, context_id): alias keys plus display-name keys."""
@@ -714,6 +788,8 @@ def _rank(query, rows, gazetteer):
 
     - only rows with exactly the span's shape (identifiers, level words): an
       absent child never becomes another child, an explicit one never its parent;
+    - only rows that pass the name-word guard (names_compatible), so a shared
+      word alone never makes a candidate, for auto-resolution or clarification;
     - score = pg_trgm similarity of the place-name text only;
     - each location keeps its best row; margin = best - best of the next
       different location (0 if none); ties by display name, then ID;
@@ -721,10 +797,11 @@ def _rank(query, rows, gazetteer):
       character length rule; else AMBIGUOUS, top 3 at or above the 0.30 floor;
       else None (UNKNOWN)."""
     name, shape = query
-    name_trigrams = trigrams(name)
+    name_trigrams, name_words = trigrams(name), name.split()
     best = {}  # location -> (score, length_ok)
     for row in rows:
-        if row.shape != shape:
+        if row.shape != shape or not names_compatible(
+                name_words, row.name.split(), gazetteer.ancestor_names(row.location_id)):
             continue
         union = name_trigrams | row.name_trigrams
         score = Fraction(len(name_trigrams & row.name_trigrams), len(union))
@@ -840,7 +917,12 @@ def resolve(raw_span, active_area_id, gazetteer, *, city_code="KHI"):
             return result(OUT_OF_COVERAGE, "other_city", other_city=named[0])
         # 4. The agency city is dropped ("Clifton Karachi" -> clifton) unless it is
         #    all there is ("Karachi" matched above as the city node).
-        tokens = _strip_city(tokens, gazetteer.city_keys(city_code)) or tokens
+        #    A bare "gulshan" that now ends the span is the shorthand again
+        #    ("Gulshan Karachi"). Fuzzy still never matches what is left on a
+        #    shared word alone ("north karachi" -> "north": name-word guard).
+        stripped = _strip_city(tokens, gazetteer.city_keys(city_code))
+        if stripped and stripped != tokens:
+            tokens = _phrases(stripped)
         # 5. Deterministic steps on the rest, then (only if nothing matched) fuzzy.
         outcome = _resolve_tokens(tokens, area, gazetteer) or _fuzzy(tokens, area, gazetteer)
     if outcome is not None:

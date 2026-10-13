@@ -155,6 +155,95 @@ def test_loader_must_return_a_snapshot():
     assert cache.snapshot is None
 
 
+
+# --- concurrency (offline, deterministic: events and barriers, no sleeps) ----------
+
+class GatedLoader:
+    """Returns `results` in order; the call numbered `gate` (1-based) signals
+    `entered` and then blocks until `release` is set."""
+
+    def __init__(self, *results, gate):
+        self.results, self.gate, self.calls = list(results), gate, 0
+        self.entered, self.release = threading.Event(), threading.Event()
+
+    def __call__(self):
+        self.calls += 1
+        result = self.results[self.calls - 1]
+        if self.calls == self.gate:
+            self.entered.set()
+            assert self.release.wait(timeout=30), "test did not release the loader"
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def _start(target, out):
+    def run():
+        try:
+            out.append(target())
+        except (psycopg.Error, loc.GazetteerError) as exc:  # recorded for the assertion
+            out.append(exc)
+    thread = threading.Thread(target=run)
+    thread.start()
+    return thread
+
+
+@pytest.mark.parametrize("outcome", ["published", "failed"])
+def test_get_during_refresh_sees_the_previous_snapshot(outcome):
+    old, new = snapshot(), snapshot("klifton town")
+    result = new if outcome == "published" else psycopg.OperationalError("down")
+    loader = GatedLoader(old, result, gate=2)
+    cache = gz.GazetteerCache(loader)
+    cache.load()
+    refreshed = []
+    thread = _start(cache.refresh, refreshed)
+    assert loader.entered.wait(timeout=30)        # refresh is mid-load, lock held
+    assert cache.get() is old.gazetteer and cache.snapshot is old
+    loader.release.set()
+    thread.join(timeout=30)
+    assert not thread.is_alive()
+    if outcome == "published":
+        assert refreshed == [True] and cache.get() is new.gazetteer
+    else:
+        assert isinstance(refreshed[0], psycopg.OperationalError)
+        assert cache.get() is old.gazetteer      # never a partial or empty snapshot
+
+
+def test_load_racing_a_refresh_in_flight_reuses_its_snapshot():
+    """refresh() holds the lock while it fetches; a concurrent first load() waits and
+    returns the snapshot refresh published, without a second fetch."""
+    new = snapshot("klifton town")
+    loader = GatedLoader(new, gate=1)
+    cache = gz.GazetteerCache(loader)
+    refreshed, loaded = [], []
+    refresher = _start(cache.refresh, refreshed)
+    assert loader.entered.wait(timeout=30)
+    loader_thread = _start(cache.load, loaded)
+    loader.release.set()
+    for thread in (refresher, loader_thread):
+        thread.join(timeout=30)
+        assert not thread.is_alive()
+    assert refreshed == [True] and loaded == [new] and loader.calls == 1
+    assert cache.get() is new.gazetteer
+
+
+def test_refresh_racing_a_first_load_in_flight_publishes_after_it():
+    """load() holds the lock while it fetches; a concurrent refresh() runs after it
+    and publishes its own complete snapshot; nothing is lost or interleaved."""
+    old, new = snapshot(), snapshot("klifton town")
+    loader = GatedLoader(old, new, gate=1)
+    cache = gz.GazetteerCache(loader)
+    loaded, refreshed = [], []
+    loader_thread = _start(cache.load, loaded)
+    assert loader.entered.wait(timeout=30)
+    refresher = _start(cache.refresh, refreshed)
+    loader.release.set()
+    for thread in (loader_thread, refresher):
+        thread.join(timeout=30)
+        assert not thread.is_alive()
+    assert loaded == [old] and refreshed == [True] and loader.calls == 2
+    assert cache.get() is new.gazetteer
+
 # --- database --------------------------------------------------------------------
 
 @pytest.fixture
