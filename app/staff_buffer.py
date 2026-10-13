@@ -8,7 +8,8 @@ message of a staff turn is classified (classify_text, pure):
 - command:     "#..." commands, a listing code (DH6-102), or an update phrase
                ("DHA 6 wala ghar sold", "price 3 crore kar do");
 - note:        any other short text ("photos neeche hain");
-- photo:       an image staged by app.media (its caption is classified as text).
+- photo:       an image staged by app.media (its caption is classified as text);
+- ignored:     "unsupported" (sent by WhatsApp next to a photo album) and reactions.
 
 absorb() (inside the staff turn, app.orchestrator) groups them into segments:
 
@@ -60,7 +61,11 @@ QUIET_SECONDS = 75
 MEDIA_WAIT_SECONDS = 15
 MEDIA_WAITS = 2
 
-DESCRIPTION, NOTE, DONE, COMMAND = "description", "note", "done", "command"
+DESCRIPTION, NOTE, DONE, COMMAND, IGNORE = (
+    "description", "note", "done", "command", "ignore")
+# Never answered on the staff route: WhatsApp sends an "unsupported" message next to a
+# multi-photo album (seen live 2026-10-13), and an emoji reaction is not a request.
+IGNORED_TYPES = frozenset({"unsupported", "reaction"})
 FLAG_PHOTO_ONLY, FLAG_MEDIA_PENDING, FLAG_MEDIA_FAILED = (
     "photo_only", "media_pending", "media_failed")
 
@@ -109,7 +114,9 @@ def classify_text(text):
 
 def classify(message, is_photo):
     """(action, text_role, is_photo) for one turn message: action is description,
-    photo, note, done or command (answered as a normal staff turn)."""
+    photo, note, done, command (answered as a normal staff turn) or ignore."""
+    if message.type in IGNORED_TYPES:
+        return IGNORE, None, False
     role = classify_text(message.text) if message.type in ("text", "image", "document") \
         else COMMAND
     if is_photo:
@@ -255,7 +262,7 @@ def absorb(conn, turn):
         touched, rest = False, []
         for message in turn.messages:
             action, role, is_photo = classify(message, message.id in photos)
-            if message.id in done:
+            if message.id in done or action == IGNORE:
                 continue
             if action == COMMAND:
                 rest.append(message)

@@ -1,7 +1,12 @@
 # Staff buffer (Task 7.4)
 
-Status (2026-10-13): implemented and tested locally on `feature/task-7-4-staff-buffer`
-(from `origin/main` 5472481). Not merged, not deployed; needs migration 015.
+Status (2026-10-14): on `feature/task-7-4-staff-buffer` (from `origin/main` 5472481), PR for
+review. Deployed pre-review (owner decision) as `manzil-ai:7.4-288b8e7` with migration 015
+(snapshot `manzil-pre-015-2026-10-13`). Live checks 2026-10-13 with `AI_PROVIDER=stub`: text + 3
+photos -> one segment reply; two listings -> two segments; photos only -> photo-only question;
+listing + "done" -> reply at once; staff "hi" -> immediate stub. One finding, fixed after the
+deploy (not yet live): a photo album also delivers a `type=unsupported` message, which got its
+own reply; the staff route now ignores `unsupported` and `reaction` messages.
 
 Sources: Execution Plan 7.4 (done condition: text + 3 photos -> 1 segment with 3 photos;
 two listings back-to-back -> 2 segments; a photo-only segment is flagged), Red-Team R-08,
@@ -44,6 +49,7 @@ with that staff member's `process_message` jobs by the queue's conversation lock
 | command | starts with `#`; contains a listing code (`DH6-102`); or an update phrase (wala / wale / wali, kar do, ho gaya, sold, rented, reserved, withdrawn, on hold, undo) unless it is also a description with "new / naya / nayi" | "#DH6-102 price 7.8 crore", "DHA 6 wala ghar sold" |
 | description | a property type word (`requirements.parse_types`: ghar, flat, villa, office, ...) **and** an amount or a size (`normalise.find_money` / `find_areas`) | "New house DHA Phase 6, 500 yard, ... 8 crore" |
 | note | any other text | "photos neeche hain", "ok" |
+| ignored | message type `unsupported` (WhatsApp sends one next to a multi-photo album, seen live) or `reaction` | no reply, not in a segment |
 
 A photo is an image staged by `app.media` (an `inbound_media` row); its caption is
 classified the same way (a property-like caption makes it description + photo, any other

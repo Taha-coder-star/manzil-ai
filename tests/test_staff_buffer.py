@@ -385,6 +385,31 @@ def test_a_command_is_answered_at_once_and_leaves_the_segment_open(sb):
     assert sb.channel.sent[1:] == [stub(1, 1)]
 
 
+def test_the_unsupported_message_of_a_photo_album_is_ignored(sb):
+    # Seen live 2026-10-13: an album of 3 photos also delivers a type "unsupported"
+    # message (same second, its own turn), which must not get a reply of its own.
+    sb.deliver(sb.text("wamid.T1", LISTING))
+    sb.drain()
+    album = {"from": AGENT, "id": "wamid.U1", "timestamp": str(int(time.time())),
+             "type": "unsupported",
+             "errors": [{"code": 131051, "title": "Message type unknown"}]}
+    sb.deliver(album)
+    sb.drain()
+    sb.deliver(sb.image("wamid.P1"), sb.image("wamid.P2"), sb.image("wamid.P3"))
+    sb.drain()
+    reaction = {"from": AGENT, "id": "wamid.R1", "timestamp": str(int(time.time())),
+                "type": "reaction", "reaction": {"message_id": "wamid.OUT1", "emoji": "👍"}}
+    sb.deliver(reaction)
+    sb.drain()
+    assert sb.channel.sent == []
+
+    sb.due()
+    [(_, kind, _, _, items)] = segments(sb)
+    assert kind == "description" and [i[0] for i in items] == [
+        "wamid.T1", "wamid.P1", "wamid.P2", "wamid.P3"]
+    assert sb.channel.sent == [stub(1, 3)]
+
+
 def test_a_note_without_a_segment_is_a_normal_staff_turn(sb):
     sb.deliver(sb.text("wamid.N1", "salaam"))
     sb.drain()
