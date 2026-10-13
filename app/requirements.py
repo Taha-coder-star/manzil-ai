@@ -763,7 +763,10 @@ class Patch:
             echo = ["implausible"]   # restated, or heard: kept unconfirmed, echoed first
             if self.ctx.prev_guard != stated:
                 notices = [_notice("budget_implausible")]
-        entry = make_entry(value, span, ev, self.ctx, echo=echo, **self._flags(ev, reextracted))
+        # An amount outside the band is never confirmed, even when restated: it stays
+        # unconfirmed with its echo until the customer is asked to confirm it.
+        entry = make_entry(value, span, ev, self.ctx, echo=echo, confirmed=not echo,
+                           **self._flags(ev, reextracted))
         self.budget_given = True
         self._set(op, "budget", entry, notices)
 

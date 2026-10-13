@@ -705,6 +705,7 @@ def test_the_same_amount_stated_again_is_kept_unconfirmed_with_an_echo(gz):
                      prev=500_000)
     assert value(merge, "budget")["stated_pkr"] == 500_000
     assert merge.slots["budget"]["echo"] == ["implausible"]
+    assert merge.slots["budget"]["confirmed"] is False
     assert "budget_implausible" not in keys(merge)
 
 

@@ -725,10 +725,12 @@ def test_an_impossible_budget_is_asked_then_kept_when_restated(st):
     assert ops[0]["guard_pkr"] == 500_000 and ops[0]["detail"] == "implausible"
     reply = st.say("budget 5 lakh", [p("budget", "set", "5 lakh")])
     assert st.state()[1]["budget"]["echo"] == ["implausible"]
+    assert st.state()[1]["budget"]["confirmed"] is False
     assert reply == [TEMPLATES["requirements_saved"]]
     st.say("budget 8 crore tak", [p("budget", "set", "8 crore tak")])
     assert st.state()[1]["budget"]["value"]["max"] == 80_000_000
     assert "echo" not in st.state()[1]["budget"]
+    assert st.state()[1]["budget"]["confirmed"] is True
 
 
 def test_a_budget_inside_the_inventory_band_is_stored_normally(st):
