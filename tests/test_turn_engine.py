@@ -173,6 +173,15 @@ def media(kind, *, sender=CUSTOMER):
             "type": kind, kind: content}
 
 
+def flush_staff_segments(ai):
+    """Task 7.4: let the staff buffer's quiet window and media waits pass."""
+    for _ in range(5):
+        with tenant_transaction(ai.conn, ai.agency):
+            ai.conn.execute("UPDATE job SET available_at = now() WHERE status = 'pending' "
+                            "AND job_type LIKE 'staff_segment_%'")
+        ai.drain()
+
+
 def declared(request):
     return [d["name"] for d in request.body.get("tools", [{}])[0].get("functionDeclarations", [])]
 
@@ -250,6 +259,24 @@ def test_each_role_is_offered_only_its_tools(ai, sender, operation, names):
     ai.drain()
     assert declared(ai.requests[0]) == names
     assert ai.usage()[0][2] == operation
+
+
+def test_a_flushed_staff_segment_is_one_staff_turn(ai):
+    # Task 7.4: a description and its photo are buffered, then answered by one L2 call.
+    ai.script.append(answer())
+    ai.deliver(text("New house DHA Phase 6, 500 yard, 8 crore", sender=AGENT),
+               media("image", sender=AGENT))
+    ai.drain()
+    assert ai.requests == [] and ai.sent_texts() == []
+    flush_staff_segments(ai)
+
+    [request] = ai.requests
+    current = request.body["contents"][0]["parts"][-1]["text"]
+    assert "New house DHA Phase 6" in current and "[" in current  # text + photo placeholder
+    assert declared(request) == [
+        "draft_listing", "find_listings", "propose_update", "list_my_listings"]
+    assert [row[2] for row in ai.usage()] == ["L2"]
+    assert ai.sent_texts() == [TEMPLATES["staff_default"], TEMPLATES["staff_media_missing"]]
 
 
 def test_broker_turns_make_no_provider_call(ai):
@@ -543,11 +570,19 @@ def test_context_limits(ai):
 @pytest.mark.parametrize(("message", "template"), [
     (media("audio"), "voice"),
     (media("image"), "non_text"),
-    (media("image", sender=AGENT), "staff_photo"),
+    # Task 7.4: a staff photo waits in a segment; flushed alone, it is photo-only.
+    (media("image", sender=AGENT), "staff_photo_only"),
 ])
 def test_turns_without_text_get_a_template_and_no_provider_call(ai, message, template):
     ai.deliver(message)
     ai.drain()
+    if template == "staff_photo_only":
+        assert ai.sent_texts() == []
+        flush_staff_segments(ai)
+        # No bucket in this fixture: the photo is never stored, so it is also reported.
+        assert ai.sent_texts() == [TEMPLATES[template], TEMPLATES["staff_media_missing"]]
+        assert ai.requests == []
+        return
     assert ai.requests == []
     assert ai.sent_texts() == [TEMPLATES[template]]
 

@@ -252,8 +252,10 @@ def test_role_and_table_hardening(rls_db):
     media = {"inbound_media"}
     turns = {"conversation_turn"}
     audio = {"inbound_audio"}
+    segments = {"staff_segment", "staff_segment_item"}
     assert {r[0] for r in rows} == (
-        set(TABLES) | inventory | state | media | turns | audio | shared | {"schema_migration"}
+        set(TABLES) | inventory | state | media | turns | audio | segments | shared
+        | {"schema_migration"}
     )
     for name, enabled, forced, owner in rows:
         assert owner != "manzil_app"

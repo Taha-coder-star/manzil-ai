@@ -26,6 +26,7 @@ from app import (
     orchestrator,
     outbound,
     speech,
+    staff_buffer,
     turn_engine,
     whatsapp,
 )
@@ -207,6 +208,13 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         )
 
     handlers["process_message"] = process
+    # Task 7.4: staff buffer segments (app.staff_buffer).
+    handlers[staff_buffer.FLUSH_JOB] = staff_buffer.flush
+
+    def answer_segment(conn, job):
+        staff_buffer.answer(conn, job, client_factory, engine=engine)
+
+    handlers[staff_buffer.ANSWER_JOB] = answer_segment
 
     def failed_turn_notice(conn, job):
         orchestrator.notify_failed_job(conn, job, client_factory)

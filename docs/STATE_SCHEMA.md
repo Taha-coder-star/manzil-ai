@@ -326,3 +326,19 @@ Component C3 (RFC flow steps 2-3, Red-Team R-01). Code: `app/orchestrator.py`, c
   this list under the same `turn:{id}:{seq}` keys (docs/DECISIONS.md). Grants and RLS are the 010
   ones.
 
+
+## Staff segments (Task 7.4, migration 015)
+
+- `staff_segment`: one staff member's buffered listing input. `status` open / flushed,
+  `kind` description / photo_only (set when flushed), `version` (bumped per item; flush
+  jobs carry it), `last_item_at`, `flush_due_at`, `flushed_at`, `flush_reason` timer / done /
+  next_description, `flags[]` photo_only / media_pending / media_failed. At most one open
+  segment per (agency, staff).
+- `staff_segment_item`: the segment's messages in order (`position`), `text_role`
+  description / note / NULL, `is_photo`. `UNIQUE (agency_id, message_id)`: a message is in at
+  most one segment.
+- `conversation_turn.staff_segment_id`: the one staff turn that answers a flushed segment;
+  its messages are the segment's items (they keep the `turn_id` of the turns that buffered
+  them). Unique per segment; route must be staff.
+- FORCE RLS, `tenant_isolation`, `manzil_app` SELECT / INSERT / UPDATE (no DELETE).
+  Contract and flow: docs/STAFF_BUFFER.md.

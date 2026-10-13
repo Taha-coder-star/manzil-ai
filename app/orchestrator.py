@@ -33,6 +33,11 @@ One process_message job runs one turn for its conversation:
    turn found with MAX_TURN_ATTEMPTS attempts is closed as 'failed' instead of
    resumed, so crashes cannot block the conversation either.
 
+Task 7.4: a staff (admin / agent) turn first goes through the staff buffer
+(app.staff_buffer): descriptions, photos and notes are grouped into segments and
+answered later, one staff turn per segment (conversation_turn.staff_segment_id);
+only commands, taps and stray notes are answered at once.
+
 Task 5.2: a turn ending in a tap on a listing card (More photos, Visit / Details,
 Similar, an overflow-list row) gets a stub reply naming the action and listing;
 the real behaviour is Tasks 10.x / 11.x.
@@ -40,6 +45,7 @@ the real behaviour is Tasks 10.x / 11.x.
 Never log message text or phone numbers.
 """
 
+import dataclasses
 import logging
 import re
 import time
@@ -51,7 +57,7 @@ from uuid import UUID
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import echo, outbound, speech, turn_engine, whatsapp
+from app import echo, outbound, speech, staff_buffer, turn_engine, whatsapp
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.queue import PermanentJobError, error_code
@@ -109,6 +115,10 @@ class Turn:
     # Task 6.3: the speech status of each voice note, in order (app.speech); empty
     # when the turn was not transcribed.
     voice: tuple[str, ...] = ()
+    # Task 7.4: set on the staff turn that answers a flushed segment (its messages are
+    # the segment's items), with the segment's flags (app.staff_buffer).
+    staff_segment_id: UUID | None = None
+    segment_flags: tuple[str, ...] = ()
 
     @property
     def ai_allowed(self):
@@ -191,7 +201,7 @@ def assemble_turn(conn, job, sender, abandoned=None):
         turn = conn.execute(
             """
             SELECT id, sender_role, route, staff_id, control_state, conversation_mode,
-                   attempts
+                   attempts, staff_segment_id
             FROM conversation_turn WHERE conversation_id = %s AND status = 'open'
             """,
             (conversation_id,),
@@ -212,7 +222,11 @@ def assemble_turn(conn, job, sender, abandoned=None):
                 "UPDATE conversation_turn SET attempts = attempts + 1 WHERE id = %s",
                 (turn[0],),
             )
-            turn = turn[:6]
+            segment_id, turn = turn[7], turn[:6]
+            if segment_id is not None:
+                logger.info("Resuming open segment turn %s", turn[0])
+                return _segment_turn(conn, job.agency_id, conversation_id, sender, turn,
+                                     segment_id), True
             rows = conn.execute(
                 f"""
                 SELECT {_MESSAGE_COLUMNS} FROM message m
@@ -284,6 +298,87 @@ def _turn(agency_id, conversation_id, sender, snapshot, rows):
     )
 
 
+def _segment_turn(conn, agency_id, conversation_id, sender, snapshot, segment_id):
+    rows = conn.execute(
+        f"""
+        SELECT {_MESSAGE_COLUMNS} FROM staff_segment_item i
+        JOIN message m ON m.id = i.message_id
+        LEFT JOIN inbound_event e ON e.id = m.inbound_event_id
+        WHERE i.segment_id = %s ORDER BY i.position
+        """,
+        (segment_id,),
+    ).fetchall()
+    flags = conn.execute(
+        "SELECT flags FROM staff_segment WHERE id = %s", (segment_id,)
+    ).fetchone()[0]
+    return dataclasses.replace(
+        _turn(agency_id, conversation_id, sender, snapshot, rows),
+        staff_segment_id=segment_id, segment_flags=tuple(flags),
+    )
+
+
+class TurnBusy(Exception):
+    """Another turn of the conversation is still open; the job retries later."""
+
+
+def segment_turn(conn, job, sender, conversation_id, segment_id):
+    """The staff turn answering a flushed segment (Task 7.4): resumed when a crashed
+    attempt left it open, created otherwise; None when it was already answered or the
+    sender is no longer allowlisted staff. Raises TurnBusy while another turn of the
+    conversation is open (only after a crash; the queue serialises the rest)."""
+    with tenant_transaction(conn, job.agency_id):
+        _set_timeout(conn)
+        control_state, mode = conn.execute(
+            "SELECT control_state, mode FROM conversation WHERE id = %s FOR UPDATE",
+            (conversation_id,),
+        ).fetchone()
+        existing = conn.execute(
+            """
+            SELECT id, sender_role, route, staff_id, control_state, conversation_mode,
+                   status
+            FROM conversation_turn WHERE staff_segment_id = %s
+            """,
+            (segment_id,),
+        ).fetchone()
+        if existing is not None:
+            if existing[6] != "open":
+                return None
+            conn.execute(
+                "UPDATE conversation_turn SET attempts = attempts + 1 WHERE id = %s",
+                (existing[0],),
+            )
+            return _segment_turn(conn, job.agency_id, conversation_id, sender,
+                                 existing[:6], segment_id)
+        if conn.execute(
+            "SELECT 1 FROM conversation_turn WHERE conversation_id = %s AND status = 'open'",
+            (conversation_id,),
+        ).fetchone() is not None:
+            raise TurnBusy()
+        sender_role, route, staff_id = resolve_role(conn, sender)
+        if route != "staff":
+            logger.warning("Segment %s not answered: sender is no longer staff", segment_id)
+            return None
+        count = conn.execute(
+            "SELECT count(*) FROM staff_segment_item WHERE segment_id = %s", (segment_id,)
+        ).fetchone()[0]
+        turn_id = conn.execute(
+            """
+            INSERT INTO conversation_turn (
+                agency_id, conversation_id, trigger_job_id, sender_role, route, staff_id,
+                control_state, conversation_mode, message_count, staff_segment_id
+            )
+            VALUES (current_agency_id(), %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (conversation_id, job.id, sender_role, route, staff_id, control_state, mode,
+             count, segment_id),
+        ).fetchone()[0]
+        logger.info("Segment turn %s assembled: %d messages", turn_id, count)
+        snapshot = (turn_id, sender_role, route, staff_id, control_state, mode)
+        return _segment_turn(conn, job.agency_id, conversation_id, sender, snapshot,
+                             segment_id)
+
+
 def check_schema(conn, agency_id):
     """Raise ConfigurationError unless migration 014 (conversation_turn.attempts and
     the 'failed' status) is applied; the turn lifecycle needs it with any AI_PROVIDER.
@@ -333,6 +428,31 @@ def mode_reply(turn):
 
 
 RESPONDERS = {"customer": mode_reply, "staff": mode_reply, "broker": mode_reply}
+
+
+def segment_reply(turn):
+    """Stub reply to a flushed staff segment until draft extraction (Task 8.2)."""
+    texts = sum(1 for m in turn.messages if (m.text or "").strip())
+    photos = sum(1 for m in turn.messages if m.media_id)
+    return [whatsapp.text(
+        f"Listing segment (stub) · {texts} text(s), {photos} photo(s) · "
+        "drafts come with Task 8.2"
+    )]
+
+
+def _segment_payloads(conn, client, job, turn, engine):
+    """The reply to a segment turn: a photo-only segment is asked about (R-10, no
+    provider call); otherwise the engine or the stub, then the missing-photo notice."""
+    flags = set(turn.segment_flags)
+    if staff_buffer.FLAG_PHOTO_ONLY in flags:
+        payloads = [whatsapp.text(turn_engine.TEMPLATES["staff_photo_only"])]
+    elif engine is not None:
+        payloads = engine.respond(conn, job, turn, _interim(conn, client, turn))
+    else:
+        payloads = segment_reply(turn)
+    if flags & {staff_buffer.FLAG_MEDIA_FAILED, staff_buffer.FLAG_MEDIA_PENDING}:
+        payloads = [*payloads, whatsapp.text(turn_engine.TEMPLATES["staff_media_missing"])]
+    return payloads
 
 
 def tap_reply(turn):
@@ -578,12 +698,20 @@ def _respond(conn, client, job, turn, engine):
     return payloads
 
 
+def answer_turn(conn, client, job, turn, *, engine=None):
+    """Answer a turn assembled outside run_turns (a staff segment turn, Task 7.4)."""
+    _answer(conn, client, job, turn, None, engine)
+
+
 def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
     if not turn.ai_allowed:
         # Control-state gate stub: no AI output; forwarding is Task 11.x.
         close_turn(conn, turn, "gated")
         logger.info("Turn %s gated (%s / %s)", turn.id, turn.control_state,
                     turn.conversation_mode)
+        return
+    if turn.staff_segment_id is not None:
+        _send(conn, client, turn, _segment_payloads(conn, client, job, turn, engine))
         return
     transcribes = _transcribes(turn, speech_service)
     try:
@@ -598,20 +726,41 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
         if command is not None:
             demo(turn, command, f"turn:{turn.id}")
         else:
+            if turn.route == "staff" and turn.staff_id is not None:
+                # Task 7.4: descriptions, photos and notes wait in a segment.
+                rest = staff_buffer.absorb(conn, turn)
+                if not rest:
+                    close_turn(conn, turn, "replied")
+                    logger.info("Turn %s buffered (%d message(s))", turn.id,
+                                len(turn.messages))
+                    return
+                turn = dataclasses.replace(turn, messages=tuple(rest))
             if transcribes:
                 turn = speech_service.transcribe_turn(conn, job, turn, client)
             payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
-            # Outbound transport time is outside the AI turn budget; logged separately.
-            began = time.monotonic()
-            for seq, payload in enumerate(payloads):
-                outbound.send_message(
-                    conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
-                    payload, f"turn:{turn.id}:{seq}",
-                )
-            logger.info("Turn %s: %d message(s) through outbound in %d ms", turn.id,
-                        len(payloads), int((time.monotonic() - began) * 1000))
+            _send(conn, client, turn, payloads)
+            return
+    except whatsapp.PermanentSendError as exc:
+        # The failure is on its outbound_message row; the turn is finished.
+        close_turn(conn, turn, "replied")
+        raise PermanentJobError(exc.code) from None
+    close_turn(conn, turn, "replied")
+
+
+def _send(conn, client, turn, payloads):
+    """Send the turn's payloads under turn:{id}:{seq}, then close it as 'replied'."""
+    try:
+        # Outbound transport time is outside the AI turn budget; logged separately.
+        began = time.monotonic()
+        for seq, payload in enumerate(payloads):
+            outbound.send_message(
+                conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+                payload, f"turn:{turn.id}:{seq}",
+            )
+        logger.info("Turn %s: %d message(s) through outbound in %d ms", turn.id,
+                    len(payloads), int((time.monotonic() - began) * 1000))
     except whatsapp.PermanentSendError as exc:
         # The failure is on its outbound_message row; the turn is finished.
         close_turn(conn, turn, "replied")
