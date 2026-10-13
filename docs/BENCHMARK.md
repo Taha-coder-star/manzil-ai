@@ -79,3 +79,12 @@ Owner-run, with volunteers. Nothing here goes to Git except `voice_manifest.csv`
 
 Gold transcripts are the scripts. If a speaker deviates, correct `gold_transcript` (and spans) to what
 was actually said before scoring.
+
+## STT benchmark run (Task 7.2)
+
+`python -m app.stt_bench` scores R16 criterion A on these recordings (docs/STT_BENCHMARK.md). It reads
+`bench/voice_manifest.csv` plus the private audio (`<item_id>.ogg`, the bytes from the manifest's
+`storage_key`), and `bench/voice_gold_verified.json`, the human-verified record of what each recording actually
+says (sha256-bound). Planned scripts stay in `customer_voice.json`; they are never relabelled as verified.
+Add an `origin` column only for fixtures (`synthetic`); real rows carry the `storage_key` that
+`app.bench_manifest` prints.

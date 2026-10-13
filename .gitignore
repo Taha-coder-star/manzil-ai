@@ -17,3 +17,5 @@ demo/media/**/*.webp
 *.zip
 # Manual demo originals and local preparation outputs (also excluded by .dockerignore)
 /.local/demo-media/
+# Task 7.2: STT benchmark runs (transcripts, speaker labels) stay local
+/.local/stt-bench/
