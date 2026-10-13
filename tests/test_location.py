@@ -543,20 +543,23 @@ FUZZY = [
     # span, status, expected (node, or candidates in ranked order)
     ("bukhari comercial", R, ["dha-ph6-bukhari"]),       # 0.85, margin 0.45
     ("ittehad comercial", R, ["dha-ph6-ittehad"]),       # 0.85
-    ("zamzama comercial", A, ["dha-ph5-zamzama", "dha-ph5-badar", "dha-ph6-sehar"]),  # 0.842
+    ("zamzama comercial", A, ["dha-ph5-zamzama"]),        # 0.842; Badar / Sehar: name-word guard
     ("cliftn", A, ["clf"]),
     ("khadda markit", A, ["dha-ph5-khadda"]),
     ("north nazimabaad", A, ["nnz"]),                    # 0.82: below 0.85
     ("northnazimabad", A, ["nnz"]),
     ("bahriya town", A, ["btk"]),
     ("tariq rd", A, ["pec-tariq-road"]),
-    ("sports city", A, ["btk-sports-city", "dhc"]),
+    ("sports city", A, ["btk-sports-city"]),              # parent "bahria" omitted; not DHA City
+    ("zamzama", A, ["dha-ph5-zamzama"]),                 # "commercial" may be omitted
+    ("zamzama comm", A, ["dha-ph5-zamzama"]),            # truncation of "commercial"
+    ("tarik road", A, ["pec-tariq-road"]),
+    ("cliftn block 5", A, ["clf-b5"]),
+    ("gulshan e iqbaal", A, ["gli"]),                    # 0.83: asks, not auto
     ("pecs", A, ["pec"]),                                # exactly 4 letters
     ("nort nazimabad block h", A, ["nnz-bh"]),           # via the display name, H kept
     ("north nazimabd block l", A, ["nnz-bl"]),
     ("bahriya precinct 10", A, ["btk-p10"]),
-    ("Gulshan-e-Maymar", A, ["gli"]),                    # 0.43: asks (floor trade-off)
-    ("north karachi", A, ["nnz"]),                       # "north" after Karachi is dropped
 ]
 
 
@@ -611,6 +614,70 @@ def test_fuzzy_guard_helpers():
     assert loc.name_letters(["btq"]) == 3 and loc.name_letters(["pecs"]) == 4
     assert loc.length_difference("north nazimabad", "northnazimabad") == 0
     assert loc.length_difference("abcdefghij", "abcdefg") == Fraction(3, 10)
+
+
+# --- name-word compatibility guard (owner decision 2026-10-13, PR #31 review) ---
+# Unknown Karachi places that share one word with a covered place must not be
+# offered that place: not auto-resolved, not offered as a clarification candidate,
+# and not given its area as area_hint.
+
+UNRELATED = [
+    "north karachi", "North Karachi", "north", "North Karachi block h",
+    "Gulshan-e-Maymar", "Gulshan-e-Jauhar", "Gulshan-e-Hadeed", "Gulshan e Jamal",
+    "gulshan-e-maymar block 13",
+    "Gulshan Maymar", "Gulshan Hadeed", "Gulshan Jauhar", "Gulshan Jauhar block 13",
+    "Gulshan Jamal", "gulshan maymar block 13",          # missing-"e" variants
+    "Nazimabad", "Nazimabad block h", "nazimabad block l",
+]
+
+
+@pytest.mark.parametrize("active", [None, "gli", "nnz", "dha"])
+@pytest.mark.parametrize("span", UNRELATED)
+def test_unrelated_places_are_never_offered(span, active):
+    result = run(span, active)
+    check(result, U, [])
+    assert result.area_hint is None and result.method == "none"
+
+
+@pytest.mark.parametrize(("span", "expected"), [
+    ("Gulshan", ["gli"]), ("gulshan iqbal", ["gli"]), ("Gulshan-e-Iqbal", ["gli"]),
+    ("gulshan 13", ["gli-b13"]), ("gulshan block 13", ["gli-b13"]),
+    ("Gulshan block chhe", ["gli-b6"]), ("gulshan chhe", ["gli-b6"]),
+    ("Gulshan Karachi", ["gli"]),                        # the city word is stripped first
+])
+def test_bare_gulshan_shorthand_still_means_gulshan_e_iqbal(span, expected):
+    check(run(span), R, expected)
+
+
+def test_bare_gulshan_is_expanded_only_in_shorthand_contexts():
+    assert loc.clean("Gulshan Maymar") == "gulshan maymar"
+    assert loc.clean("Gulshan-e-Maymar") == "gulshan e maymar"
+    assert loc.clean("gulshan") == "gulshan e iqbal"
+    assert loc.clean("gulshan iqbal") == "gulshan e iqbal"
+    assert loc.clean("gulshan blk 6") == "gulshan e iqbal block 6"
+    assert loc.clean("gulshan chhe") == "gulshan e iqbal 6"
+
+
+def test_name_word_guard_rules():
+    ok = loc.names_compatible
+    assert ok(["cliftn"], ["clifton"])                          # typo, word score 0.5
+    assert ok(["zamzama"], ["zamzama", "commercial"])           # optional place-type word
+    assert ok(["tariq", "rd"], ["tariq", "road"])               # "rd" is not distinctive
+    assert ok(["northnazimabad"], ["north", "nazimabad"])       # fused form
+    assert ok(["sports", "city"], ["bahria", "sports", "city"], {("bahria",)})  # parent
+    assert not ok(["gulshan", "e", "maymar"], ["gulshan", "e", "iqbal"])   # span word lost
+    assert not ok(["nazimabad"], ["north", "nazimabad"])        # candidate word unmatched
+    assert not ok(["nazimabad"], ["north", "nazimabad"], {("north", "nazimabad")})
+    assert not ok(["commercial"], ["zamzama", "commercial"])    # only the generic word
+    assert not ok(["sports", "city"], ["dha", "city"])
+    assert loc.OPTIONAL_CANDIDATE_WORDS == {"commercial", "road"}  # explicit and narrow
+
+
+def test_name_word_guard_keeps_the_floor_and_auto_rules():
+    assert loc.CANDIDATE_FLOOR == Fraction(30, 100) and loc.AUTO_SCORE == Fraction(85, 100)
+    check(run("bukhari comercial"), R, ["dha-ph6-bukhari"])     # auto unchanged
+    check(run("DHA bukhari comercial"), R, ["dha-ph6-bukhari"])
+    assert run("gulshan e iqbaal").status == A                  # a typo is not forced to auto
 
 
 def test_fuzzy_does_not_override_deterministic_results():
@@ -672,7 +739,7 @@ def test_fuzzy_context_aliases_need_their_area():
 
 SCOPED = [
     ("DHA bukhari comercial", R, ["dha-ph6-bukhari"]),        # 0.85 on "bukhari comercial"
-    ("DHA zamzama comercial", A, ["dha-ph5-zamzama", "dha-ph5-badar", "dha-ph6-sehar"]),
+    ("DHA zamzama comercial", A, ["dha-ph5-zamzama"]),
     ("DHA khadda markit", A, ["dha-ph5-khadda"]),
     ("Bahria sport city", A, ["btk-sports-city"]),            # 0.77: asks
     ("Bahria heigts", A, ["btk-heights"]),
