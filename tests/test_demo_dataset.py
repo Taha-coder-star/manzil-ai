@@ -46,16 +46,16 @@ def test_counts_and_identities(dataset):
     summary = dd.summary(dataset)
     assert summary["listings"] == 30 and summary["active"] == 27
     assert summary["projects"] == 2 and summary["staff"] == 3
-    assert summary["location_levels"] == {"city": 1, "area": 8, "sub_area": 32, "zone": 11}
+    assert summary["location_levels"] == {"city": 1, "area": 8, "sub_area": 33, "zone": 11}
     codes = [r["listing_code"] for r in dataset["properties.csv"]]
     assert len(set(codes)) == 30
     assert "D2X-101" not in codes and "DH6-109" not in codes
     assert {"DH8-101", "DH8-102"} <= set(codes)
     assert row(dataset, "locations.csv", "code", "D2X")["name"] == "Phase 2 Ext"
     assert not any(r["code"] == "DH3" for r in dataset["locations.csv"])
-    assert summary["aliases"] == 85
-    assert summary["aliases_official"] == 48
-    assert summary["aliases_with_context"] == 7  # 2 sourced (R17) + 5 repeated block names
+    assert summary["aliases"] == 87
+    assert summary["aliases_official"] == 49
+    assert summary["aliases_with_context"] == 8  # 3 sourced (R17 p6 x2, phase 6) + 5 repeated block names
 
 
 def test_scenarios_match_their_expected_sets(dataset):

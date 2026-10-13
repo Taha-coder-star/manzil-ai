@@ -29,6 +29,7 @@ btk,bahria town karachi,,common,1,D11 p7 §3.3,
 btk-p27,p27,,common,1,D11 p7 §3.3,
 btk-p27,precinct 27,,common,1,D11 p7 §3.3,
 btk-p27,bahria 27,,common,1,D11 p7 §3.3,
+btk-p6,p6,btk,common,1,R17 p4 §3.2 (context alias: p6 -> Precinct 6 when the context is Bahria Town Karachi); owner decision 2026-10-12,
 dha-ph6-bukhari,bukhari,,common,1,D11 p7 §3.3,
 dha-ph6-bukhari,bukhari comm,,common,1,D11 p7 §3.3,
 dha-ph6-bukhari,bukhari commercial,,common,1,D11 p7 §3.3,
@@ -69,6 +70,7 @@ clf-b7,block 7,,official,1,locations.csv canonical name (mechanical; not quoted 
 clf-b8,block 8,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
 clf-b9,block 9,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
 btk-p1,precinct 1,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
+btk-p6,precinct 6,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
 btk-p10,precinct 10,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
 btk-p31,precinct 31,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
 btk-heights,bahria heights,,official,1,locations.csv canonical name (mechanical; not quoted from the PDFs),alias (canonical name)
