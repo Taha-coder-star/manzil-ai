@@ -731,3 +731,159 @@ def resolve_target(result, found):
             r["code"] for r in found["candidates"]}:
         return None
     return "ambiguous_target" if status in ("several", "too_many") else "target_not_in_text"
+
+
+# --- Task 9.2: code allocation, pick changes, Edit corrections -------------------------------
+
+def next_code(prefix, listing_codes):
+    """The code a commit assigns: the highest number over EVERY code of the agency with this
+    prefix (any status) + 1, the first being FIRST_SEQ (the rule of proposed_codes). The
+    caller holds the agency + prefix advisory lock; UNIQUE (agency_id, listing_code) is the
+    last line of defence."""
+    top = FIRST_SEQ - 1
+    for code in listing_codes:
+        m = _CODE_NUMBER.match(code or "")
+        if m and m.group(1) == prefix:
+            top = max(top, int(m.group(2)))
+    return f"{prefix}-{top + 1}"
+
+
+_PRICE_WORD = re.compile(r"\b(?:price|qeemat|keemat|demand|rate|daam)\b", re.IGNORECASE)
+
+
+def changes_in_text(texts, criteria=None):
+    """The change a description-update message asks for, read by the backend from the staff
+    member's own text (never from the model): {"status": ...} when the text names exactly one
+    status; {"price_pkr": ...} when a price word (price / qeemat / demand / rate) is followed
+    by exactly one amount that is not the find criterion. {} when nothing is clear: the pick
+    then asks for the change instead of guessing it (R-11)."""
+    text = "\n".join(t for t in texts if t)
+    out = {}
+    status = parse_status(text)
+    if status is not None:
+        out["status"] = status
+    words = list(_PRICE_WORD.finditer(text))
+    if words:
+        criterion = {pkr for pkr, _ in _amounts((criteria or {}).get("price") or "")}
+        after = {pkr for pkr, _ in _amounts(text[words[-1].end():])} - criterion
+        if len(after) == 1:
+            out["price_pkr"] = after.pop()
+    return out
+
+
+_LOCATION_WORD = re.compile(
+    r"\b(?:location|loc|jagah|jaga|address)\b\s*[:=-]?\s*(?P<span>[^,;\n]+)", re.IGNORECASE)
+_NOTE_WORD = re.compile(r"\b(?:note|description|remarks?)\b\s*[:=-]\s*(?P<span>.+)",
+                        re.IGNORECASE | re.DOTALL)
+# Warnings annotate() recomputes; the others stay with the fields they describe.
+_ANNOTATED = ("duplicate", "price_unusual")
+
+
+def _correction_fields(text, kind, gazetteer, marla_sqft, city_code):
+    """(fields, conflicts) a correction text states: a field the text gives one value for is
+    set; two values for one field are a new conflict; nothing is guessed."""
+    fields, conflicts = {}, []
+    note = _NOTE_WORD.search(text)
+    body = text[:note.start()] if note else text
+    if note:
+        clean, removed = sanitise_description(note.group("span"))
+        if clean:
+            fields["description"] = {"value": clean, "raw": note.group("span").strip(),
+                                     "removed": len(removed)}
+    where = _LOCATION_WORD.search(body)
+    if where:
+        fields["location"] = _normalise_location(where.group("span").strip(), gazetteer,
+                                                 city_code)
+        body = body[:where.start()] + " " + body[where.end():]
+    kinds = sorted({k for k in _types(body) if k in CORE_TYPES})
+    if len(kinds) > 1:
+        conflicts.append(_conflict("property_type", [(k, k) for k in kinds]))
+    elif kinds:
+        kind = kinds[0]
+        fields["property_type"] = {"value": kind, "raw": kind}
+    amounts = _amounts(body)
+    if _distinct([(raw, pkr) for pkr, raw in amounts]):
+        conflicts.append(_conflict("price_pkr", [(raw, pkr) for pkr, raw in amounts]))
+    elif amounts:
+        fields["price_pkr"] = {"value": amounts[0][0], "raw": amounts[0][1], "period": None}
+    areas = _areas(body, marla_sqft)
+    if areas:
+        size, clash, _ = _normalise_size(areas[0]["raw"], kind, marla_sqft, [body])
+        if clash:
+            conflicts.append(clash)
+        elif size:
+            fields["size"] = size
+    rooms = find_rooms(body)
+    for key, name in (("bed", "bedrooms"), ("bath", "bathrooms")):
+        if _distinct(rooms[key]):
+            conflicts.append(_conflict(name, rooms[key]))
+        elif rooms[key]:
+            fields[name] = {"value": rooms[key][0][1], "raw": rooms[key][0][0]}
+    purposes = normalise.purposes_in(body)
+    if len(purposes) > 1:
+        conflicts.append(_conflict("purpose", [(w, w) for w in sorted(purposes)]))
+    elif purposes:
+        value = next(iter(purposes))
+        raw = normalise.purpose_words(body).get(value, value)
+        fields["purpose"] = {"value": value, "raw": raw, "source": "text"}
+    construction = sorted(set(requirements.parse_vocab("construction", body) or []))
+    if len(construction) == 1:
+        fields["construction_status"] = {"value": construction[0], "raw": construction[0]}
+    if parse_source(body):
+        fields["source_type"] = {"value": parse_source(body), "raw": parse_source(body)}
+    if not fields and not conflicts and body.strip():
+        # A bare place name ("DHA Phase 7") is a location correction when it resolves.
+        place = _normalise_location(body.strip(), gazetteer, city_code)
+        if "location_id" in place:
+            fields["location"] = place
+    return fields, conflicts
+
+
+def apply_correction(payload, text, gazetteer, *, marla_sqft=225, city_code="KHI",
+                     listings=None):
+    """An Edit correction (Demo Scope S5 "free-text correction"), deterministic: each field the
+    staff member's text states once replaces the stored value (provenance "correction") and
+    settles that field's conflict; two values for one field are a new conflict and leave the
+    field unset. Missing fields, blockers, duplicates and the proposed code are recomputed.
+    Returns the new payload, or None when the text states nothing usable. Pure: the caller
+    stores it as version + 1."""
+    fields = {k: dict(v) for k, v in payload["fields"].items()}
+    kind = (fields.get("property_type") or {}).get("value")
+    found, clashes = _correction_fields(text or "", kind, gazetteer, marla_sqft, city_code)
+    if not found and not clashes:
+        return None
+    warnings = [w for w in payload.get("warnings", ()) if w not in _ANNOTATED]
+    for name, value in found.items():
+        fields[name] = dict(value, provenance="correction")
+    touched = set(found) | {c["field"] for c in clashes}
+    conflicts = [c for c in payload["conflicts"] if c["field"] not in touched] + clashes
+    for clash in clashes:  # a field in conflict holds no value
+        fields.pop(clash["field"], None)
+    kind = (fields.get("property_type") or {}).get("value")
+    if kind is not None and kind not in BEDROOM_TYPES and "bedrooms" in fields:
+        fields.pop("bedrooms")
+        warnings.append("bedrooms_ignored")
+    if (fields.get("purpose") or {}).get("source") == "text":
+        warnings = [w for w in warnings if w != "purpose_inferred"]
+    elif "price_pkr" in fields and not any(c["field"] == "purpose" for c in conflicts):
+        guess = normalise.infer_purpose(fields["price_pkr"]["value"],
+                                        normalise.category_of(kind))
+        fields.pop("purpose", None)
+        warnings = [w for w in warnings if w != "purpose_inferred"]
+        if guess.status == normalise.OK:
+            fields["purpose"] = {"value": guess.value, "raw": None, "source": "inferred"}
+            warnings.append("purpose_inferred")
+    if "price_pkr" in fields and "purpose" in fields:
+        fields["price_pkr"]["period"] = normalise.period_for(fields["purpose"]["value"])
+    if (found.get("description") or {}).get("removed"):
+        warnings.append("description_sanitised")
+    draft = Draft(payload.get("ordinal") or 1, payload.get("source_message"), fields,
+                  missing_fields(fields, conflicts), tuple(conflicts),
+                  tuple(dict.fromkeys(warnings)), tuple(payload.get("rejected", ())))
+    if listings is not None:
+        [draft] = annotate([draft], listings, gazetteer)
+    out = to_payload(draft)
+    for key in ("photos", "edits"):  # what 9.2 added to the draft survives a correction
+        if key in payload:
+            out[key] = payload[key]
+    return out

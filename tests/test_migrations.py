@@ -57,6 +57,7 @@ def test_apply_and_repeat(migration_database, migration_files):
         "inbound_audio",
         "staff_segment",
         "staff_segment_item",
+        "staff_card",
         "schema_migration",
     }
 
