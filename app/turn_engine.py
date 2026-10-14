@@ -118,6 +118,13 @@ TEMPLATES = {
     "voice": ("Voice note mil gaya, lekin abhi main voice notes nahi samajh sakta. "
               "Please apni baat likh kar bhejein."),
     "staff_photo": "Photo mil gayi. Listing ke liye tafseelat likh kar bhejein.",
+    # Task 7.4 staff buffer (wording pending owner approval): a segment of photos with
+    # no description (Red-Team R-10; the attach flow is Task 9.2), and photos that
+    # could not be stored.
+    "staff_photo_only": ("Ye photos kis listing ki hain? Listing ki tafseelat likh kar "
+                         "bhejein, ya listing ke card ko reply karke photos bhejein."),
+    "staff_media_missing": ("Kuch photos save nahi ho sakin. Please woh photos dobara "
+                            "bhejein."),
     "non_text": ("Abhi main sirf likhe hue messages samajh sakta hoon. "
                  "Please apni baat likh kar bhejein."),
     # Tool notices (Task 6.1 stubs).
