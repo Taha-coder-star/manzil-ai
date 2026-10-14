@@ -214,6 +214,21 @@ def scenario_4a(sc):
 
 # --- scenario 4a ---------------------------------------------------------------------------
 
+def test_the_live_turn_shape_bad_args_then_draft_then_an_empty_stop_still_sends_the_card(sc):
+    # Seen live 2026-10-14 on gemini-3.5-flash-lite: the answer after the tool results was a
+    # STOP without parts. It ends the turn; the backend card is the reply.
+    empty = {"candidates": [{"finishReason": "STOP", "content": {"role": "model"}}]}
+    sc.script += [tools_answer(tool("draft_listing", {"drafts": [{"rooms": 4}]}, "c1")),
+                  tools_answer(tool("draft_listing", {"drafts": [ST["ST-01"][1]]}, "c2")),
+                  empty]
+    sc.deliver(text(ST["ST-01"][0]))
+    sc.drain()
+    [(_, card)] = sc.send()
+    assert body(card).startswith("Draft 1 of 1 · Proposed ID DH6-109")
+    assert sc.query("SELECT status FROM conversation_turn WHERE staff_segment_id IS NOT NULL") \
+        == [("replied",)]
+
+
 def test_4a_the_card_has_the_cover_and_save_creates_dh6_109_visible_at_once(sc):
     _, card, saved = scenario_4a(sc)
     assert card["type"] == "interactive" and card["interactive"]["header"]["type"] == "image"

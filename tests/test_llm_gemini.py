@@ -88,6 +88,18 @@ def test_unusable_responses_never_carry_tool_calls(body, kind, detail):
     assert len(detail) <= 64
 
 
+@pytest.mark.parametrize("body", [
+    {"candidates": [{"finishReason": "STOP", "content": {"role": "model"}}]},
+    {"candidates": [{"finishReason": "STOP", "content": {"role": "model", "parts": []}}]},
+    {"candidates": [{"finishReason": "STOP"}]},
+])
+def test_an_empty_stop_is_a_finished_answer_not_a_malformed_one(body):
+    # Seen live 2026-10-14 (gemini-3.5-flash-lite, the answer after tool results).
+    response = llm.parse_response(body)
+    assert (response.kind, response.detail) == ("text", "stop_empty")
+    assert response.tool_calls == ()
+
+
 def test_usage_counts_are_validated():
     usage = llm.parse_usage({"promptTokenCount": True, "candidatesTokenCount": -1,
                              "cachedContentTokenCount": "5", "thoughtsTokenCount": 3})
