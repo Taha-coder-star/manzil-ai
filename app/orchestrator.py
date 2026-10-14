@@ -64,6 +64,7 @@ import psycopg
 from psycopg.pq import TransactionStatus
 
 from app import (
+    customer_reply,
     echo,
     outbound,
     speech,
@@ -510,13 +511,15 @@ def demo_command(turn):
     return {"type": "text", "text": {"body": last.text}}
 
 
-def run_turns(conn, job, client, sender, *, demo=None, engine=None, speech_service=None):
+def run_turns(conn, job, client, sender, *, demo=None, engine=None, speech_service=None,
+              storage=None):
     """Answer the conversation's pending turn for this job; an open turn a crashed
     attempt left behind is finished first, then the new messages form the next turn.
 
     demo(turn, message, dedupe_prefix) handles a staff '#demo …' turn (app.handlers).
     engine: the AI turn engine (app.turn_engine.TurnEngine), or None for the stubs.
     speech_service: app.speech.SpeechService, or None (STT_PROVIDER=off).
+    storage: app.media.S3Storage for listing photos (Task 10.1), or None.
 
     When this job will not retry (a permanent error or its last attempt), a failing
     turn is closed as 'failed'. If it was a resumed (older) turn, this job's own
@@ -547,7 +550,7 @@ def run_turns(conn, job, client, sender, *, demo=None, engine=None, speech_servi
                 tell_customer(turn.id, turn.conversation_id)
             break
         try:
-            _answer(conn, client, job, turn, demo, engine, speech_service)
+            _answer(conn, client, job, turn, demo, engine, speech_service, storage)
         except Exception as exc:
             if not (isinstance(exc, PermanentJobError) or job.attempts >= job.max_attempts):
                 raise  # retried; the turn stays open and is resumed
@@ -739,7 +742,7 @@ def answer_turn(conn, client, job, turn, *, engine=None):
     _answer(conn, client, job, turn, None, engine)
 
 
-def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
+def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, storage=None):
     if not turn.ai_allowed:
         # Control-state gate stub: no AI output; forwarding is Task 11.x.
         close_turn(conn, turn, "gated")
@@ -785,7 +788,7 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
             payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
-            _send(conn, client, turn, [*actions, *payloads])
+            _send(conn, client, turn, [*actions, *payloads], storage)
             return
     except whatsapp.PermanentSendError as exc:
         # The failure is on its outbound_message row; the turn is finished.
@@ -794,18 +797,22 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
     close_turn(conn, turn, "replied")
 
 
-def _send(conn, client, turn, payloads):
+def _send(conn, client, turn, payloads, storage=None):
     """Send the turn's payloads under turn:{id}:{seq}, then close it as 'replied'."""
     # Task 9.2: which draft or listing each staff card is about, before it is sent.
     staff_actions.register_cards(conn, turn, payloads)
     try:
         # Outbound transport time is outside the AI turn budget; logged separately.
         began = time.monotonic()
-        for seq, payload in enumerate(payloads):
-            outbound.send_message(
-                conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
-                payload, f"turn:{turn.id}:{seq}",
-            )
+        if turn.route == "customer":
+            # Task 10.1: carousel fallback, shown listings and listing photos.
+            customer_reply.send(conn, client, storage, turn, payloads)
+        else:
+            for seq, payload in enumerate(payloads):
+                outbound.send_message(
+                    conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+                    payload, f"turn:{turn.id}:{seq}",
+                )
         logger.info("Turn %s: %d message(s) through outbound in %d ms", turn.id,
                     len(payloads), int((time.monotonic() - began) * 1000))
     except whatsapp.PermanentSendError as exc:

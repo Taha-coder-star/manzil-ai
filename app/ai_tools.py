@@ -318,10 +318,20 @@ def _make_stub(name, notice):
     return run
 
 
+def _customer_tool(name, notice):
+    """A customer tool body of app.customer_tools.CustomerBinding (Task 10.1), else the stub."""
+    stub = _make_stub(name, notice)
+
+    def run(args, context):
+        body = getattr(context.binding, name, None) if context.route == "customer" else None
+        return body(args, context) if body is not None else stub(args, context)
+    return run
+
+
 _STUBS = {
     "update_requirements": _update_requirements,
-    "search_properties": _make_stub("search_properties", "search_unavailable"),
-    "send_property_photos": _make_stub("send_property_photos", "photos_unavailable"),
+    "search_properties": _customer_tool("search_properties", "search_unavailable"),
+    "send_property_photos": _customer_tool("send_property_photos", "photos_unavailable"),
     "request_handoff": _make_stub("request_handoff", "handoff_unavailable"),
     "draft_listing": _staff_stub("draft_listing", "draft_unavailable",
                                  staff_drafts.verify_draft_listing),

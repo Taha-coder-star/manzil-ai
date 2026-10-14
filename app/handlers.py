@@ -279,7 +279,7 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
                 )
 
         orchestrator.run_turns(conn, job, client, sender, demo=demo, engine=engine,
-                               speech_service=speech_service)
+                               speech_service=speech_service, storage=storage)
 
 
 def _demo_photo(conn, client, storage, turn, dedupe_prefix, variant):

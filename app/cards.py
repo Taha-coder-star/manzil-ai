@@ -429,24 +429,31 @@ def send_plan(conn, client, agency_id, conversation_id, recipient, payloads, ded
     recorded and sends the same cards under the same keys. Anything else that is not
     'sent' (gate, window, ambiguous) stops the turn. Returns the last status."""
     for seq, payload in enumerate(payloads):
-        key = f"{dedupe_prefix}:{seq}"
-        try:
-            status = outbound.send_message(
-                conn, client, agency_id, conversation_id, recipient, payload, key,
-            ).status
-        except whatsapp.PermanentSendError as exc:
-            if not is_carousel(payload):
-                raise
-            logger.warning("Carousel refused (%s); sending its cards", exc.code)
-            status = "refused"
-        if is_carousel(payload) and (
-            status == "refused" or (status == "failed" and _refused(conn, agency_id, key))
-        ):
-            status = send_all(conn, client, agency_id, conversation_id, recipient,
-                              carousel_cards(payload), f"{key}:fallback")
+        status = send_one(conn, client, agency_id, conversation_id, recipient, payload,
+                          f"{dedupe_prefix}:{seq}")
         if status != "sent":
             return status
     return "sent"
+
+
+def send_one(conn, client, agency_id, conversation_id, recipient, payload, key):
+    """One payload of a plan under key; a carousel Meta refuses is sent as its cards under
+    "{key}:fallback:{n}" (n = 0 the summary, n = i + 1 the carousel's card i)."""
+    try:
+        status = outbound.send_message(
+            conn, client, agency_id, conversation_id, recipient, payload, key,
+        ).status
+    except whatsapp.PermanentSendError as exc:
+        if not is_carousel(payload):
+            raise
+        logger.warning("Carousel refused (%s); sending its cards", exc.code)
+        status = "refused"
+    if is_carousel(payload) and (
+        status == "refused" or (status == "failed" and _refused(conn, agency_id, key))
+    ):
+        status = send_all(conn, client, agency_id, conversation_id, recipient,
+                          carousel_cards(payload), f"{key}:fallback")
+    return status
 
 
 def send_all(conn, client, agency_id, conversation_id, recipient, payloads, dedupe_prefix):

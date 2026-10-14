@@ -76,6 +76,7 @@ import psycopg
 from app import (
     ai_tools,
     cards,
+    customer_tools,
     llm,
     staff_buffer,
     staff_cards,
@@ -441,8 +442,10 @@ class TurnEngine:
         parts += ([{"text": snapshot}] if snapshot else []) + [{"text": block}]
         contents = [{"role": "user", "parts": parts}]
         staff = staff_context(turn) if turn.route == "staff" else None
-        context = ai_tools.ToolContext(turn.route, turn_text, binding, staff,
-                                       self._staff_binding(conn, turn))
+        customer = self._customer_binding(conn, turn, binding)
+        context = ai_tools.ToolContext(
+            turn.route, turn_text, customer or binding, staff,
+            customer or self._staff_binding(conn, turn))
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
         if binding is not None and outcome.kind == "done":
@@ -456,6 +459,18 @@ class TurnEngine:
             ", ".join(outcome.tools), int((self._clock() - start) * 1000),
         )
         return payloads
+
+    def _customer_binding(self, conn, turn, binding):
+        """Task 10.1: the real customer tool bodies (app.customer_tools) around the 7.3
+        binding, or None (no requirements service or gazetteer: the stubs)."""
+        if binding is None:
+            return None
+        try:
+            gazetteer = self.requirements.cache.get()
+        except GazetteerUnavailable:
+            return None
+        return customer_tools.CustomerBinding(conn, turn, gazetteer, binding,
+                                              message_texts(turn))
 
     def _staff_binding(self, conn, turn):
         """The real staff tool bodies (app.staff_tools), or None for the stubs: they need the
