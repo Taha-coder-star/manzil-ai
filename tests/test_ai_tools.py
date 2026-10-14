@@ -2,7 +2,7 @@
 
 import pytest
 
-from app import ai_tools
+from app import ai_tools, staff_drafts
 from app.ai_tools import ToolContext, execute
 from app.llm import ToolCall
 
@@ -10,7 +10,9 @@ CUSTOMER_TOOLS = ["update_requirements", "search_properties", "send_property_pho
                   "request_handoff"]
 STAFF_TOOLS = ["draft_listing", "find_listings", "propose_update", "list_my_listings"]
 CUSTOMER = ToolContext("customer", "DHA phase 6 mein 500 gaz ka ghar, budget  8 crore tak")
-STAFF = ToolContext("staff", "DH6-101 sold ho gaya")
+STAFF = ToolContext("staff", "DH6-101 sold ho gaya",
+                    staff=staff_drafts.context(["DH6-101 sold ho gaya"], (), False))
+SEGMENT = ToolContext("staff", "500 gaz ghar", staff=staff_drafts.context(["500 gaz ghar"], {1}, True))
 
 
 def call(name, args=None):
@@ -67,7 +69,9 @@ def test_unknown_tool_names_are_refused_and_never_echoed_to_logs(name):
     (CUSTOMER, "request_handoff", {"reason": "x", "phone": "x"}),
     (STAFF, "propose_update", {"target": "DH6-101"}),
     (STAFF, "draft_listing", {"raw_text": "x", "photo_refs": ["p"] * 16}),
+    (STAFF, "draft_listing", {"drafts": [{"price_pkr": 80000000}]}),
     (STAFF, "find_listings", None),
+    (STAFF, "find_listings", {"description": "phase 6 ghar"}),
 ])
 def test_bad_arguments_are_refused(context, name, args):
     result = execute(ToolCall(name, args, None), context)
@@ -78,9 +82,10 @@ def test_bad_arguments_are_refused(context, name, args):
     (CUSTOMER, "search_properties", None, "search_unavailable"),
     (CUSTOMER, "send_property_photos", {"position": 2}, "photos_unavailable"),
     (CUSTOMER, "request_handoff", {}, "handoff_unavailable"),
-    (STAFF, "draft_listing", {"raw_text": "500 gaz ghar"}, "draft_unavailable"),
-    (STAFF, "find_listings", {"description": "phase 6 ghar"}, "find_unavailable"),
-    (STAFF, "propose_update", {"target": "DH6-101", "changes": "sold"},
+    (SEGMENT, "draft_listing", {"drafts": [{"size": "500 gaz"}]}, "draft_unavailable"),
+    (STAFF, "find_listings", {"location": "DH6"}, "find_unavailable"),
+    (STAFF, "propose_update", {"target": {"code": "DH6-101"},
+                               "changes": [{"field": "status", "span": "sold"}]},
      "update_unavailable"),
     (STAFF, "list_my_listings", {}, "my_listings_unavailable"),
 ])

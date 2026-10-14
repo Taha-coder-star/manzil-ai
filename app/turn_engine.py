@@ -73,7 +73,7 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app import ai_tools, cards, llm, whatsapp
+from app import ai_tools, cards, llm, staff_buffer, staff_drafts, whatsapp
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.llm import GeminiClient, ProviderError, Usage
@@ -204,10 +204,15 @@ SYSTEM_PROMPTS = {
         "You are the tool-selecting step of the WhatsApp assistant used by the staff "
         "of a real-estate agency in Karachi, Pakistan. Staff write in English, Roman "
         "Urdu, Urdu script or a mix. Choose tools:\n"
-        "- draft_listing for a new property description.\n"
-        "- find_listings to look up existing listings from a description.\n"
-        "- propose_update to change one listing (nothing is saved until the staff "
-        "member confirms with a button; never claim that a change is saved).\n"
+        "- draft_listing for a new property description (only for the buffered "
+        "listing text of a listing segment): 1-5 drafts, each field the exact words "
+        "copied from the staff messages; several listings in one message get one draft "
+        "each with their own text. Never convert, count or invent a value, ID or photo.\n"
+        "- find_listings to look up existing listings: the exact words of each "
+        "criterion the staff member stated.\n"
+        "- propose_update to change one listing: its code and the exact words of the "
+        "price or status change (nothing is saved until the staff member confirms "
+        "with a button; never claim that a change is saved).\n"
         "- list_my_listings when they ask for their own listings.\n"
         "One listing per proposal; never act on many listings at once.\n"
         + _SHARED_RULES
@@ -270,6 +275,15 @@ def current_messages(turn):
         lines.append(f"{number}. {body}")
     block = "Current messages, oldest first:\n" + "\n".join(lines)
     return block, "\n".join(texts)
+
+
+def staff_context(turn):
+    """The spans a staff turn's tools verify against (app.staff_drafts): the same
+    clipped message texts as current_messages, in the same 1-based numbering."""
+    bodies = [body for _, body in message_texts(turn)]
+    descriptions = {n for n, body in enumerate(bodies, 1)
+                    if staff_buffer.classify_text(body) == staff_buffer.DESCRIPTION}
+    return staff_drafts.context(bodies, descriptions, turn.staff_segment_id is not None)
 
 
 def load_history(conn, turn):
@@ -397,7 +411,8 @@ class TurnEngine:
         parts = ([{"text": history}] if history else [])
         parts += ([{"text": snapshot}] if snapshot else []) + [{"text": block}]
         contents = [{"role": "user", "parts": parts}]
-        context = ai_tools.ToolContext(turn.route, turn_text, binding)
+        staff = staff_context(turn) if turn.route == "staff" else None
+        context = ai_tools.ToolContext(turn.route, turn_text, binding, staff)
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
         if binding is not None and outcome.kind == "done":

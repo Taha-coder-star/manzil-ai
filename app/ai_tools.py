@@ -22,6 +22,8 @@ Never log tool arguments.
 import re
 from dataclasses import dataclass
 
+from app import staff_drafts
+
 # R17 requirement slots and patch ops (migration 006 requirement_patch_log CHECK).
 SLOTS = (
     "purpose", "category", "property_types", "location", "budget", "previous_budget",
@@ -29,6 +31,8 @@ SLOTS = (
     "soft_prefs", "unmapped_prefs", "excluded_property_ids",
 )
 OPS = ("set", "add", "remove", "clear", "relative")
+
+_SPAN = {"type": "string", "minLength": 1, "maxLength": 300}
 
 _TOOLS = {
     # --- customer (L1) ---
@@ -84,37 +88,69 @@ _TOOLS = {
     },
     # --- staff (L2) ---
     "draft_listing": {
-        "description": "Start a listing draft from a staff member's description.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "raw_text": {"type": "string", "minLength": 1, "maxLength": 2000},
-                "photo_refs": {
-                    "type": "array", "maxItems": 15,
-                    "items": {"type": "string", "minLength": 1, "maxLength": 64},
-                },
-            },
-            "required": ["raw_text"],
-        },
-    },
-    "find_listings": {
-        "description": "Find agency listings matching a staff member's description.",
-        "parameters": {
-            "type": "object",
-            "properties": {"description": {"type": "string", "minLength": 1, "maxLength": 500}},
-            "required": ["description"],
-        },
-    },
-    "propose_update": {
         "description": (
-            "Propose a change to one listing (status, price, ...). Nothing is saved "
-            "until the staff member confirms with a button."
+            "Start 1-5 listing drafts from the staff member's buffered description. One "
+            "draft per listing; for several listings in one message give each draft's own "
+            "text, the exact part of the message about that listing. Every other field is "
+            "raw_span style: the exact words copied from the staff messages. Never "
+            "convert, count, compute or invent a value, ID or photo; leave out whatever "
+            "was not stated."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "target": {"type": "string", "minLength": 1, "maxLength": 200},
-                "changes": {"type": "string", "minLength": 1, "maxLength": 1000},
+                "drafts": {
+                    "type": "array", "minItems": 1, "maxItems": 5,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string", "minLength": 1, "maxLength": 1000},
+                            **{name: _SPAN for name in staff_drafts.DRAFT_FIELDS},
+                        },
+                    },
+                },
+            },
+            "required": ["drafts"],
+        },
+    },
+    "find_listings": {
+        "description": (
+            "Find agency listings a staff message refers to by description. Give the "
+            "exact words of each criterion the staff member stated (location, type, "
+            "size, price, ...); at least one. A listing code goes in code."
+        ),
+        "parameters": {
+            "type": "object", "minProperties": 1,
+            "properties": {name: _SPAN for name in staff_drafts.FIND_FIELDS},
+        },
+    },
+    "propose_update": {
+        "description": (
+            "Propose a change to ONE listing: target.code is its listing code (as the "
+            "staff member wrote it, or the only candidate find_listings returned); each "
+            "change names the field (price or status) and span, the exact words stating "
+            "it. Nothing is saved until the staff member confirms with a button."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "object",
+                    "properties": {"code": {"type": "string", "minLength": 1,
+                                            "maxLength": 12}},
+                    "required": ["code"],
+                },
+                "changes": {
+                    "type": "array", "minItems": 1, "maxItems": 2,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "field": {"type": "string", "enum": ["price", "status"]},
+                            "span": {"type": "string", "minLength": 1, "maxLength": 200},
+                        },
+                        "required": ["field", "span"],
+                    },
+                },
             },
             "required": ["target", "changes"],
         },
@@ -147,6 +183,9 @@ class ToolContext:
     # Task 7.3: the turn's app.requirements.TurnBinding (update(patch) -> ToolResult).
     # None keeps the 6.1 stub body (no state is read or written).
     requirements: object = None
+    # Task 8.2: app.staff_drafts.StaffContext of a staff turn (the messages spans are
+    # verified against); None on other routes.
+    staff: object = None
 
 
 @dataclass(frozen=True)
@@ -193,6 +232,8 @@ def _valid(value, schema, depth=0):
             return False
         properties = schema.get("properties", {})
         if any(key not in properties for key in value):
+            return False
+        if len(value) < schema.get("minProperties", 0):
             return False
         if any(key not in value for key in schema.get("required", ())):
             return False
@@ -251,6 +292,16 @@ def _update_requirements(args, context):
     return ToolResult("update_requirements", True, response, notice="requirements_unavailable")
 
 
+def _staff_stub(name, notice, verify):
+    """A staff tool body of slice 1: spans are verified, nothing is stored or sent."""
+    def run(args, context):
+        result = verify(args, context.staff)
+        if "error" in result:
+            return _error(name, result["error"])
+        return ToolResult(name, True, dict(STUB_RESPONSE, **result), notice=notice)
+    return run
+
+
 def _make_stub(name, notice):
     def run(args, context):
         return ToolResult(name, True, dict(STUB_RESPONSE), notice=notice)
@@ -262,8 +313,11 @@ _STUBS = {
     "search_properties": _make_stub("search_properties", "search_unavailable"),
     "send_property_photos": _make_stub("send_property_photos", "photos_unavailable"),
     "request_handoff": _make_stub("request_handoff", "handoff_unavailable"),
-    "draft_listing": _make_stub("draft_listing", "draft_unavailable"),
-    "find_listings": _make_stub("find_listings", "find_unavailable"),
-    "propose_update": _make_stub("propose_update", "update_unavailable"),
+    "draft_listing": _staff_stub("draft_listing", "draft_unavailable",
+                                 staff_drafts.verify_draft_listing),
+    "find_listings": _staff_stub("find_listings", "find_unavailable",
+                                 staff_drafts.verify_find_listings),
+    "propose_update": _staff_stub("propose_update", "update_unavailable",
+                                  staff_drafts.verify_propose_update),
     "list_my_listings": _make_stub("list_my_listings", "my_listings_unavailable"),
 }

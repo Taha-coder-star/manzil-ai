@@ -36,7 +36,7 @@ CONNECT_TIMEOUT_SECONDS = 5
 
 # Ordered so the version hash does not depend on the scan order.
 LOCATION_SQL = """
-    SELECT id, parent_id, level, name, display_name, level_label, city_code
+    SELECT id, parent_id, level, name, display_name, level_label, city_code, code
     FROM location ORDER BY id
 """
 ALIAS_SQL = """
@@ -67,7 +67,8 @@ def build_snapshot(location_rows, alias_rows, *, city_code="KHI"):
     if not location_rows or not alias_rows:
         raise location.GazetteerError("gazetteer is empty")
     places = [location.Place(id=r[0], parent_id=r[1], level=r[2], name=r[3],
-                             display_name=r[4] or r[3], level_label=r[5], city_code=r[6])
+                             display_name=r[4] or r[3], level_label=r[5], city_code=r[6],
+                             code=r[7] if len(r) > 7 else None)
               for r in location_rows]
     aliases = [location.Alias(location_id=r[0], alias=r[1], context_id=r[2], kind=r[3])
                for r in alias_rows]

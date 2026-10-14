@@ -22,6 +22,7 @@ from app import (
     llm,
     orchestrator,
     queue,
+    staff_drafts,
     turn_engine,
     webhook,
     whatsapp,
@@ -833,12 +834,18 @@ def test_usage_rows_are_tenant_isolated(ai):
 def test_every_reply_is_an_approved_template_without_listing_codes():
     valid = {
         "update_requirements": {"patch": [{"slot": "budget", "op": "set", "raw_span": "x"}]},
-        "draft_listing": {"raw_text": "x"}, "find_listings": {"description": "x"},
-        "propose_update": {"target": "x", "changes": "x"},
+        "draft_listing": {"drafts": [{"size": "x"}]}, "find_listings": {"location": "x"},
+        "propose_update": {"target": {"code": "DH6-101"},
+                           "changes": [{"field": "status", "span": "x"}]},
     }
+
+    def context(route, name):
+        staff = staff_drafts.context(["x"], {1}, name == "draft_listing")
+        return ai_tools.ToolContext(route, "x", staff=staff)
+
     notices = {
         ai_tools.execute(llm.ToolCall(name, valid.get(name, {}), None),
-                         ai_tools.ToolContext(route, "x")).notice
+                         context(route, name)).notice
         for route, names in ai_tools.REGISTRY.items() for name in names
     }
     assert None not in notices and len(notices) == 8 and notices <= set(TEMPLATES)

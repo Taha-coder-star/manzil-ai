@@ -447,6 +447,7 @@ class Place:
     display_name: str
     level_label: str | None = None
     city_code: str | None = None
+    code: str | None = None  # property-code prefix (DH6, BTK); may sit on an ancestor
 
 
 @dataclass(frozen=True)
@@ -517,7 +518,7 @@ class Gazetteer:
                         level=row["level"], name=row["name"],
                         display_name=row["display_name"] or row["name"],
                         level_label=row["level_label"] or None,
-                        city_code=row["city_code"] or None)
+                        city_code=row["city_code"] or None, code=row["code"] or None)
                   for row in data["locations.csv"]]
         aliases = [Alias(location_id=row["location_key"], alias=row["alias"],
                          context_id=row["context_key"] or None, kind=row["kind"])
@@ -583,6 +584,14 @@ class Gazetteer:
         for node in self.ancestors(location_id):
             if self.places[node].level == "area":
                 return node
+        return None
+
+    def code_of(self, location_id):
+        """The property-code prefix of a place: its own code, else its nearest
+        ancestor's (a zone or block takes the phase / area code); None when none has one."""
+        for node in self.ancestors(location_id):
+            if self.places[node].code:
+                return self.places[node].code
         return None
 
     def mode_of(self, location_id):
