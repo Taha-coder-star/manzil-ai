@@ -73,9 +73,19 @@ from dataclasses import dataclass
 
 import psycopg
 
-from app import ai_tools, cards, llm, whatsapp
+from app import (
+    ai_tools,
+    cards,
+    llm,
+    staff_buffer,
+    staff_cards,
+    staff_drafts,
+    staff_tools,
+    whatsapp,
+)
 from app.config import ConfigurationError
 from app.db import tenant_transaction
+from app.gazetteer import GazetteerUnavailable
 from app.llm import GeminiClient, ProviderError, Usage
 from app.queue import PermanentJobError
 
@@ -94,6 +104,10 @@ HISTORY_MESSAGE_CHARS = 500
 HISTORY_CHARS = 3000
 TURN_MESSAGE_CHARS = 1000
 TURN_CHARS = 4000
+# A staff segment may paste up to five listings: longer limits, and a message over them
+# is refused with a "split it" reply, never clipped (a clipped listing would be lost).
+STAFF_MESSAGE_CHARS = 3500
+STAFF_TURN_CHARS = 6000
 OPERATIONS = {"customer": "L1", "staff": "L2"}  # RFC 9: L1 customer turn, L2 staff turn
 # SQLSTATE classes of a usage_event INSERT that a retry cannot fix: data exceptions
 # (22), integrity violations (23, including a repeated request_key) and schema /
@@ -127,6 +141,7 @@ TEMPLATES = {
                             "bhejein."),
     "non_text": ("Abhi main sirf likhe hue messages samajh sakta hoon. "
                  "Please apni baat likh kar bhejein."),
+    **staff_cards.NOTICES,
     # Tool notices (Task 6.1 stubs).
     "requirements_unavailable": ("Requirements save karne ka feature abhi tayyar ho raha "
                                  "hai; abhi kuch save nahi hua."),
@@ -204,10 +219,15 @@ SYSTEM_PROMPTS = {
         "You are the tool-selecting step of the WhatsApp assistant used by the staff "
         "of a real-estate agency in Karachi, Pakistan. Staff write in English, Roman "
         "Urdu, Urdu script or a mix. Choose tools:\n"
-        "- draft_listing for a new property description.\n"
-        "- find_listings to look up existing listings from a description.\n"
-        "- propose_update to change one listing (nothing is saved until the staff "
-        "member confirms with a button; never claim that a change is saved).\n"
+        "- draft_listing for a new property description (only for the buffered "
+        "listing text of a listing segment): 1-5 drafts, each field the exact words "
+        "copied from the staff messages; several listings in one message get one draft "
+        "each with their own text. Never convert, count or invent a value, ID or photo.\n"
+        "- find_listings to look up existing listings: the exact words of each "
+        "criterion the staff member stated.\n"
+        "- propose_update to change one listing: its code and the exact words of the "
+        "price or status change (nothing is saved until the staff member confirms "
+        "with a button; never claim that a change is saved).\n"
         "- list_my_listings when they ask for their own listings.\n"
         "One listing per proposal; never act on many listings at once.\n"
         + _SHARED_RULES
@@ -233,6 +253,8 @@ class Outcome:
     notices: tuple = ()
     tools: tuple = ()  # registered tool names called (or "unknown")
     calls: int = 0  # provider attempts
+    payloads: tuple = ()  # Task 8.2: backend-built staff cards, sent before the notices
+    trusted: frozenset = frozenset()  # listing codes the cards and notices may show
 
 
 def _set_timeout(conn):
@@ -248,10 +270,13 @@ def message_texts(turn):
     text. The clipped text is what raw spans are checked against, message by message
     (R-22; app.requirements)."""
     out, used = [], 0
+    long = turn.route == "staff" and turn.staff_segment_id is not None
+    each, whole = ((STAFF_MESSAGE_CHARS, STAFF_TURN_CHARS) if long
+                   else (TURN_MESSAGE_CHARS, TURN_CHARS))
     for message in turn.messages:
         body = (message.text or "").strip()
         if body:
-            body = _clip(body, min(TURN_MESSAGE_CHARS, max(TURN_CHARS - used, 1)))
+            body = _clip(body, min(each, max(whole - used, 1)))
             used += len(body)
         out.append((message, body))
     return out
@@ -270,6 +295,15 @@ def current_messages(turn):
         lines.append(f"{number}. {body}")
     block = "Current messages, oldest first:\n" + "\n".join(lines)
     return block, "\n".join(texts)
+
+
+def staff_context(turn):
+    """The spans a staff turn's tools verify against (app.staff_drafts): the same
+    clipped message texts as current_messages, in the same 1-based numbering."""
+    bodies = [body for _, body in message_texts(turn)]
+    descriptions = {n for n, body in enumerate(bodies, 1)
+                    if staff_buffer.classify_text(body) == staff_buffer.DESCRIPTION}
+    return staff_drafts.context(bodies, descriptions, turn.staff_segment_id is not None)
 
 
 def load_history(conn, turn):
@@ -323,7 +357,13 @@ def render(route, outcome):
     elif outcome.kind == "failed":
         keys = ["failure"]
     else:
-        keys = list(dict.fromkeys(outcome.notices)) or [f"{route}_default"]
+        keys = list(dict.fromkeys(outcome.notices))
+        if outcome.payloads:  # staff cards go first; a notice follows only when there is one
+            payloads = list(outcome.payloads)
+            if keys:
+                payloads.append(whatsapp.text("\n\n".join(_template(key) for key in keys)))
+            return payloads
+        keys = keys or [f"{route}_default"]
     return [whatsapp.text("\n\n".join(_template(key) for key in keys))]
 
 
@@ -389,6 +429,9 @@ class TurnEngine:
         block, turn_text = current_messages(turn)
         if not turn_text:
             return [whatsapp.text(non_text_template(turn))]
+        if turn.route == "staff" and turn.staff_segment_id is not None and any(
+                len((m.text or "").strip()) > STAFF_MESSAGE_CHARS for m in turn.messages):
+            return [whatsapp.text(TEMPLATES["staff_draft_too_long"])]  # never clip a listing
         history = load_history(conn, turn)
         binding = None
         if self.requirements is not None and turn.route == "customer":
@@ -397,14 +440,16 @@ class TurnEngine:
         parts = ([{"text": history}] if history else [])
         parts += ([{"text": snapshot}] if snapshot else []) + [{"text": block}]
         contents = [{"role": "user", "parts": parts}]
-        context = ai_tools.ToolContext(turn.route, turn_text, binding)
+        staff = staff_context(turn) if turn.route == "staff" else None
+        context = ai_tools.ToolContext(turn.route, turn_text, binding, staff,
+                                       self._staff_binding(conn, turn))
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
         if binding is not None and outcome.kind == "done":
             # A clarification the customer left unanswered (re-ask once, then expire).
             extra = binding.finish()
             outcome = dataclasses.replace(outcome, notices=outcome.notices + tuple(extra))
-        payloads = ground_reply(render(turn.route, outcome))
+        payloads = ground_reply(render(turn.route, outcome), outcome.trusted)
         logger.info(
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
             turn.id, turn.route, outcome.kind, outcome.detail, outcome.calls,
@@ -412,9 +457,22 @@ class TurnEngine:
         )
         return payloads
 
+    def _staff_binding(self, conn, turn):
+        """The real staff tool bodies (app.staff_tools), or None for the stubs: they need the
+        gazetteer, which the worker loads only with the requirements service."""
+        if turn.route != "staff" or self.requirements is None:
+            return None
+        try:
+            gazetteer = self.requirements.cache.get()
+        except GazetteerUnavailable:
+            return None
+        city, marla = staff_tools.agency_settings(conn, turn.agency_id)
+        return staff_tools.StaffBinding(conn, turn, gazetteer, city_code=city, marla_sqft=marla)
+
     def _run(self, conn, job, turn, contents, context, budget, notify):
         active = None  # (model, label) once a model has answered in this turn
         notices, tools, calls = [], [], 0
+        payloads, trusted = [], set()
         iteration = 0
         while iteration < MAX_ITERATIONS:
             iteration += 1
@@ -429,14 +487,17 @@ class TurnEngine:
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
-                return Outcome("done", "stop", tuple(notices), tuple(tools), calls)
+                return Outcome("done", "stop", tuple(notices), tuple(tools), calls,
+                               tuple(payloads), frozenset(trusted))
             if response.kind != "tool_calls":
                 return Outcome("failed", response.detail, (), tuple(tools), calls)
             results = [ai_tools.execute(call, context) for call in response.tool_calls]
             for result in results:
                 tools.append(result.name if result.ok else f"{result.name}!{result.error}")
+                notices.extend(_notices(result))  # an error may name the reply it needs
+                trusted |= result.trusted_codes
                 if result.ok:
-                    notices.extend(_notices(result))
+                    payloads.extend(result.payloads)
             contents = contents + [
                 response.model_content,
                 {"role": "user", "parts": [
@@ -444,7 +505,8 @@ class TurnEngine:
                     for call, result in zip(response.tool_calls, results, strict=True)
                 ]},
             ]
-        return Outcome("done", "iteration_limit", tuple(notices), tuple(tools), calls)
+        return Outcome("done", "iteration_limit", tuple(notices), tuple(tools), calls,
+                       tuple(payloads), frozenset(trusted))
 
     def _extend(self, turn, budget, notify):
         """Once per turn: send the interim message and grant the continuation."""

@@ -663,6 +663,34 @@ def parse_purpose(text, *, source="text"):
     return Purpose(NONE)
 
 
+def purpose_words(text):
+    """{purpose: the words that state it} for every explicit purpose a text names."""
+    text, found = text or "", {}
+    for value, patterns in (("rent", _RENT), ("sale", _SALE)):
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                found[value] = match.group()
+                break
+    if "rent" not in found:
+        monthly = _MONTHLY.search(text)
+        if monthly:
+            found["rent"] = monthly.group()
+    return found
+
+
+def purposes_in(text):
+    """Every explicit purpose a text names ({"sale"}, {"rent"} or both); a monthly marker
+    counts as rent. parse_purpose returns only the first."""
+    text = text or ""
+    found = set()
+    if any(p.search(text) for p in _RENT) or _MONTHLY.search(text):
+        found.add("rent")
+    if any(p.search(text) for p in _SALE):
+        found.add("sale")
+    return found
+
+
 def infer_purpose(pkr, category=None):
     """Rent / sale from an amount alone (Data Model 4.4): residential <= 15 lakh
     rent, >= 50 lakh sale; commercial <= 25 lakh rent, >= 1 crore sale (owner

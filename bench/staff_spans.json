@@ -1,0 +1,382 @@
+{
+ "_note": "HAND-WRITTEN spans for the 20 staff items (docs/STAFF_EXTRACTION.md section 10). Spans only: no normalised value. Used by app.staff_bench in fixture mode; never a model output and never evidence of live accuracy.",
+ "ST-01": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "property_type": "house",
+       "location": "DHA Phase 6",
+       "size": "500 yard",
+       "price": "8 crore",
+       "bedrooms": "4 bed",
+       "bathrooms": "5 bath",
+       "source": "owner direct"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-02": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "sale ke liye",
+       "property_type": "ghar",
+       "location": "Bahria precinct 10",
+       "size": "125 gaz",
+       "price": "1 crore 5 lakh",
+       "bedrooms": "3 bed",
+       "bathrooms": "3 bath"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-03": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "Rent",
+       "property_type": "office",
+       "location": "PECHS block 2",
+       "size": "1800 sqft",
+       "price": "5 lakh monthly",
+       "parking": "2 parking"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-04": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "for rent",
+       "property_type": "Shop",
+       "location": "Clifton block 5",
+       "size": "350 sq ft",
+       "price": "2.5 lakh per month"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-05": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "sale pe",
+       "property_type": "flat",
+       "location": "Gulshan block 13",
+       "size": "950 sq ft",
+       "price": "85 lakh",
+       "bedrooms": "2 bed"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-06": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "for sale",
+       "property_type": "plot",
+       "location": "DHA City sector 13",
+       "size": "500 yd",
+       "price": "1 crore 30 lakh"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-07": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "sale ka",
+       "property_type": "ghar",
+       "location": "Phase 7",
+       "size": "500 gaz"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-08": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "for rent",
+       "property_type": "Office",
+       "location": "Shahrah-e-Faisal",
+       "price": "3 lakh monthly"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-09": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "property_type": "flat",
+       "size": "1800 sq ft",
+       "price": "4.5 crore",
+       "bedrooms": "3 bed"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-10": {
+  "calls": [
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "DH6-102"
+     },
+     "changes": [
+      {
+       "field": "price",
+       "span": "7.8 crore"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-11": {
+  "calls": [
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "DH8-102"
+     },
+     "changes": [
+      {
+       "field": "status",
+       "span": "sold ho gaya"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-12": {
+  "calls": [
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "BTK-105"
+     },
+     "changes": [
+      {
+       "field": "price",
+       "span": "48k"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-13": {
+  "calls": [
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "CLF-103"
+     },
+     "changes": [
+      {
+       "field": "status",
+       "span": "reserved"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-14": {
+  "calls": [
+   {
+    "tool": "find_listings",
+    "args": {
+     "location": "North Nazimabad",
+     "property_type": "portion"
+    }
+   },
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "NNZ-101"
+     },
+     "changes": [
+      {
+       "field": "status",
+       "span": "rent ho gaya"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-15": {
+  "calls": [
+   {
+    "tool": "find_listings",
+    "args": {
+     "location": "Sports City",
+     "property_type": "plot"
+    }
+   },
+   {
+    "tool": "propose_update",
+    "args": {
+     "target": {
+      "code": "BTK-106"
+     },
+     "changes": [
+      {
+       "field": "price",
+       "span": "1.5 crore"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-16": {
+  "calls": [
+   {
+    "tool": "find_listings",
+    "args": {
+     "location": "DHA 6",
+     "property_type": "ghar"
+    }
+   }
+  ],
+  "pending_changes": [
+   {
+    "field": "status",
+    "span": "sold"
+   }
+  ]
+ },
+ "ST-17": {
+  "calls": [
+   {
+    "tool": "find_listings",
+    "args": {
+     "location": "Bahria",
+     "size": "250 gaz",
+     "property_type": "ghar"
+    }
+   }
+  ],
+  "pending_changes": [
+   {
+    "field": "price",
+    "span": "3 crore"
+   }
+  ]
+ },
+ "ST-18": {
+  "calls": [
+   {
+    "tool": "find_listings",
+    "args": {
+     "location": "Phase 8",
+     "property_type": "flat"
+    }
+   }
+  ],
+  "pending_changes": [
+   {
+    "field": "price",
+    "span": "2.6 crore"
+   }
+  ]
+ },
+ "ST-19": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "sale pe",
+       "property_type": "villa",
+       "location": "Bahria precinct 10",
+       "size": "272 gaz",
+       "price": "3.1 crore",
+       "bedrooms": "4 bed",
+       "bathrooms": "4 bath"
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "ST-20": {
+  "calls": [
+   {
+    "tool": "draft_listing",
+    "args": {
+     "drafts": [
+      {
+       "purpose": "for sale",
+       "property_type": "ghar",
+       "location": "Gulshan block 6",
+       "size": "10 marla",
+       "price": "2.2 crore",
+       "bedrooms": "3 bed",
+       "bathrooms": "3 bath"
+      }
+     ]
+    }
+   }
+  ]
+ }
+}

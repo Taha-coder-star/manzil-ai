@@ -426,8 +426,8 @@ def test_every_tenant_reference_is_scoped_by_agency(inv, admin):
     ).fetchall()
     tenant_parents = [fk for fk in foreign_keys if fk[2] not in SHARED_TABLES + ("agency",)]
     # 005: 12; 007: property.assigned_broker_id, property_event.source_message_id;
-    # 008: property_media.source_inbound_media_id.
-    assert len(tenant_parents) == 15
+    # 008: property_media.source_inbound_media_id; 016: listing_draft.source_turn_id.
+    assert len(tenant_parents) == 16
     for name, _, _, columns, referenced in tenant_parents:
         assert (columns[0], referenced[0]) == ("agency_id", "agency_id"), name
 
