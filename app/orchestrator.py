@@ -38,6 +38,12 @@ Task 7.4: a staff (admin / agent) turn first goes through the staff buffer
 answered later, one staff turn per segment (conversation_turn.staff_segment_id);
 only commands, taps and stray notes are answered at once.
 
+Task 9.2: before the staff buffer, the messages that confirm, correct, undo or attach
+(app.staff_actions: card taps, "#undo CODE", replies to a staff card, the text after an Edit
+tap) are taken out and answered deterministically, without the model; a photo-only segment
+gets the "kis listing ki?" list. Every staff card sent is recorded (staff_card, migration
+017) so a reply to it reaches its draft or listing.
+
 Task 5.2: a turn ending in a tap on a listing card (More photos, Visit / Details,
 Similar, an overflow-list row) gets a stub reply naming the action and listing;
 the real behaviour is Tasks 10.x / 11.x.
@@ -57,9 +63,19 @@ from uuid import UUID
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import echo, outbound, speech, staff_buffer, turn_engine, whatsapp
+from app import (
+    echo,
+    outbound,
+    speech,
+    staff_actions,
+    staff_buffer,
+    staff_tools,
+    turn_engine,
+    whatsapp,
+)
 from app.config import ConfigurationError
 from app.db import tenant_transaction
+from app.gazetteer import GazetteerUnavailable
 from app.queue import PermanentJobError, error_code
 
 logger = logging.getLogger(__name__)
@@ -96,6 +112,7 @@ class TurnMessage:
     media_id: str | None
     provider_timestamp: datetime | None
     reply_id: str | None = None  # id of a tapped button, list row or carousel quick reply
+    context_wamid: str | None = None  # the WAMID this message quotes (swipe-reply or tap)
 
 
 @dataclass(frozen=True)
@@ -175,9 +192,10 @@ _MESSAGE_COLUMNS = (
     "CASE m.message_type "
     "WHEN 'interactive' THEN e.payload #>> ARRAY["
     "'message', 'interactive', e.payload #>> '{message,interactive,type}', 'id'] "
-    "WHEN 'button' THEN e.payload #>> '{message,button,payload}' END"
+    "WHEN 'button' THEN e.payload #>> '{message,button,payload}' END, "
+    "m.context_wamid"
 )
-_MESSAGE_COLUMN_COUNT = 7
+_MESSAGE_COLUMN_COUNT = 8
 # WhatsApp timestamps have one-second resolution: receive time, then WAMID, break ties.
 _ORDER = "m.provider_timestamp NULLS LAST, e.received_at, m.provider_message_id"
 
@@ -445,7 +463,9 @@ def _segment_payloads(conn, client, job, turn, engine):
     provider call); otherwise the engine or the stub, then the missing-photo notice."""
     flags = set(turn.segment_flags)
     if staff_buffer.FLAG_PHOTO_ONLY in flags:
-        payloads = [whatsapp.text(turn_engine.TEMPLATES["staff_photo_only"])]
+        # Task 9.2: a list of the staff member's open drafts and recent listings (R-10).
+        payloads = staff_actions.attach_prompt(conn, turn, _gazetteer(engine)) or [
+            whatsapp.text(turn_engine.TEMPLATES["staff_photo_only"])]
     elif engine is not None:
         payloads = engine.respond(conn, job, turn, _interim(conn, client, turn))
     else:
@@ -453,6 +473,22 @@ def _segment_payloads(conn, client, job, turn, engine):
     if flags & {staff_buffer.FLAG_MEDIA_FAILED, staff_buffer.FLAG_MEDIA_PENDING}:
         payloads = [*payloads, whatsapp.text(turn_engine.TEMPLATES["staff_media_missing"])]
     return payloads
+
+
+def _gazetteer(engine):
+    """The location gazetteer of the requirements service, or None (stub mode)."""
+    service = getattr(engine, "requirements", None)
+    if service is None:
+        return None
+    try:
+        return service.cache.get()
+    except GazetteerUnavailable:
+        return None
+
+
+def staff_context(conn, turn, engine):
+    city, marla = staff_tools.agency_settings(conn, turn.agency_id)
+    return staff_actions.Ctx(conn, turn, _gazetteer(engine), city, marla)
 
 
 def tap_reply(turn):
@@ -726,10 +762,19 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
         if command is not None:
             demo(turn, command, f"turn:{turn.id}")
         else:
+            actions = []
             if turn.route == "staff" and turn.staff_id is not None:
+                # Task 9.2: confirmations, corrections, undo and photo attach first.
+                mine, others = staff_actions.split(conn, turn)
                 # Task 7.4: descriptions, photos and notes wait in a segment.
-                rest = staff_buffer.absorb(conn, turn)
+                rest = staff_buffer.absorb(
+                    conn, dataclasses.replace(turn, messages=tuple(others))) if others else []
+                if mine:
+                    actions = staff_actions.respond(staff_context(conn, turn, engine), mine)
                 if not rest:
+                    if actions:
+                        _send(conn, client, turn, actions)
+                        return
                     close_turn(conn, turn, "replied")
                     logger.info("Turn %s buffered (%d message(s))", turn.id,
                                 len(turn.messages))
@@ -740,7 +785,7 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
             payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
-            _send(conn, client, turn, payloads)
+            _send(conn, client, turn, [*actions, *payloads])
             return
     except whatsapp.PermanentSendError as exc:
         # The failure is on its outbound_message row; the turn is finished.
@@ -751,6 +796,8 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None):
 
 def _send(conn, client, turn, payloads):
     """Send the turn's payloads under turn:{id}:{seq}, then close it as 'replied'."""
+    # Task 9.2: which draft or listing each staff card is about, before it is sent.
+    staff_actions.register_cards(conn, turn, payloads)
     try:
         # Outbound transport time is outside the AI turn budget; logged separately.
         began = time.monotonic()

@@ -204,6 +204,11 @@ def parse_response(data):
 
     content = candidate.get("content")
     parts = content.get("parts") if isinstance(content, dict) else None
+    if not parts and (content is None or isinstance(content, dict)):
+        # A STOP with no parts (seen live 2026-10-14 on gemini-3.5-flash-lite after tool
+        # results): the model has nothing more to say. Replies are templates and tool
+        # payloads, never model prose, so this ends the turn like an empty text answer.
+        return result("text", "stop_empty", model_content={"role": "model", "parts": []})
     if not isinstance(parts, list) or not all(isinstance(part, dict) for part in parts):
         return result("malformed", "malformed:no_parts")
     calls = []
