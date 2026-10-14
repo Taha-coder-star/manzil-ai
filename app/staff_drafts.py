@@ -128,7 +128,8 @@ def verify_find_listings(args, staff):
     stated = sum(f in args for f in FIND_FIELDS)
     if stated == len(bad):
         return {"error": "no_verified_span"}
-    return {"spans_verified": stated - len(bad), "spans_rejected": len(bad), "rejected": bad}
+    return {"spans_verified": stated - len(bad), "spans_rejected": len(bad), "rejected": bad,
+            "spans": {f: args[f] for f in FIND_FIELDS if f in args and f not in bad}}
 
 
 def verify_propose_update(args, staff):
@@ -147,14 +148,16 @@ def verify_propose_update(args, staff):
     if len(set(fields)) != len(fields):
         return {"error": "duplicate_field"}
     texts = [_squash(t) for t in staff.texts]
-    good = [c["field"] for c in changes if _within(_squash(c["span"]), texts)]
+    verified = [c for c in changes if _within(_squash(c["span"]), texts)]
+    good = [c["field"] for c in verified]
     if not good:
         return {"error": "no_verified_span"}
     code = match.group(1).upper()
     in_text = any(m.group(1).upper() == code
                   for t in staff.texts for m in _CODE_IN_TEXT.finditer(t or ""))
     return {"target": code, "target_in_text": in_text, "fields": good,
-            "changes_verified": len(good), "changes_rejected": len(changes) - len(good)}
+            "changes_verified": len(good), "changes_rejected": len(changes) - len(good),
+            "verified": verified}
 
 
 def _immediate(staff):

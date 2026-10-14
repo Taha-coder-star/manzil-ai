@@ -186,6 +186,8 @@ class ToolContext:
     # Task 8.2: app.staff_drafts.StaffContext of a staff turn (the messages spans are
     # verified against); None on other routes.
     staff: object = None
+    # Task 8.2: app.staff_tools.StaffBinding (database, turn, gazetteer) or None (the stub).
+    binding: object = None
 
 
 @dataclass(frozen=True)
@@ -295,9 +297,13 @@ def _update_requirements(args, context):
 def _staff_stub(name, notice, verify):
     """A staff tool body of slice 1: spans are verified, nothing is stored or sent."""
     def run(args, context):
+        body = getattr(context.binding, name, None)
+        if body is not None:
+            return body(args, context)
         result = verify(args, context.staff)
         if "error" in result:
             return _error(name, result["error"])
+        result = {k: v for k, v in result.items() if k not in ("spans", "verified")}
         return ToolResult(name, True, dict(STUB_RESPONSE, **result), notice=notice)
     return run
 

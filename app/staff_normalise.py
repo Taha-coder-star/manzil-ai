@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass, replace
 from decimal import Decimal
 
-from app import location, normalise, requirements
+from app import location, normalise, requirements, staff_drafts
 from app.staff_drafts import bind_draft_listing
 
 # Bedrooms are required for these types: the CHECK property_active_publishable of
@@ -466,3 +466,132 @@ def to_payload(draft):
             "duplicates": list(draft.duplicates), "proposed_code": draft.proposed_code,
             "rejected": list(draft.rejected), "blockers": list(draft.blockers()),
             "source_message": draft.source_message}
+
+
+# --- find_listings and propose_update rules (slice 4b) ----------------------------------
+
+FIND_SIZE = Decimal("0.05")   # a described size matches within 5 %: BTK-102 (235) is not "250"
+FIND_PRICE = Decimal("0.10")
+FIND_LIMIT = 10
+_STATUS_WORDS = (
+    (r"\bsold\b|\bbik\s*gay[ai]\b", "sold"), (r"\brent(?:ed)?\b", "rented"),
+    (r"\breserv", "reserved"), (r"\bwithdraw|\bhata\b", "withdrawn"),
+    (r"\bon[\s-]*hold\b|\bhold\b", "on_hold"), (r"\bavailable\b|\bactive\b|\bwapas\b", "active"),
+)
+
+
+def parse_status(span):
+    """The one status a span names, else None (none, or two different ones)."""
+    found = {value for pattern, value in _STATUS_WORDS
+             if re.search(pattern, span or "", re.IGNORECASE)}
+    return next(iter(found)) if len(found) == 1 else None
+
+
+def _criterion_sqft(size):
+    return Decimal(size["nominal_sqyd"]) * 9 if size.get("nominal_sqyd") else Decimal(
+        str(size["sqft"]))
+
+
+def find_candidates(criteria, rows, gazetteer, *, marla_sqft=225, city_code="KHI"):
+    """Listings a staff description refers to. `criteria` are verified spans (code, location,
+    property_type, purpose, size, price, bedrooms); rows are the agency's listings. A listing
+    code is a direct target in any status; otherwise the live listings that match every
+    criterion, active first, at most FIND_LIMIT. {"status": none | single | several |
+    too_many | direct, "candidates": [row]} or {"error": ...}. Never picks one of several."""
+    if "code" in criteria:
+        match = staff_drafts.CODE.fullmatch(criteria["code"].strip())
+        if match is None:
+            return {"error": "invalid_code"}
+        hit = [r for r in rows if r["code"] == match.group(1).upper()]
+        return {"status": "direct" if hit else "none", "candidates": hit}
+    node = kind = purpose = size = price = beds = None
+    if "location" in criteria:
+        field = _normalise_location(criteria["location"], gazetteer, city_code)
+        node = field.get("location_id")
+        if node is None and field["status"] == location.AMBIGUOUS \
+                and len(field.get("candidates", ())) == 1:
+            node = field["candidates"][0]["location_id"]  # one place, matched by similarity
+        if node is None and field.get("reason") != "too_broad":
+            return {"error": "location_unclear", "candidates": [
+                c["location_id"] for c in field.get("candidates", ())]}
+    if "property_type" in criteria:
+        types = requirements.parse_types(criteria["property_type"])
+        if len(types) != 1:
+            return {"error": "type_unclear"}
+        kind = types[0]
+    if "purpose" in criteria:
+        found = normalise.parse_purpose(criteria["purpose"])
+        if found.status != normalise.OK:
+            return {"error": "purpose_unclear"}
+        purpose = found.value
+    if "size" in criteria:
+        size, _, _ = _normalise_size(criteria["size"], kind, marla_sqft, [criteria["size"]])
+        if size is None:
+            return {"error": "size_unclear"}
+    if "price" in criteria:
+        amounts = {pkr for pkr, _ in _amounts(criteria["price"])}
+        if len(amounts) != 1:
+            return {"error": "price_unclear"}
+        price = amounts.pop()
+    if "bedrooms" in criteria:
+        beds = requirements.parse_count(criteria["bedrooms"])
+        if beds is None:
+            return {"error": "bedrooms_unclear"}
+    wanted = _criterion_sqft(size) if size else None
+    matches = []
+    for row in rows:
+        if row["status"] not in LIVE_STATUSES:
+            continue
+        if node is not None and not (row["location_id"] is not None
+                                     and gazetteer.is_within(row["location_id"], node)):
+            continue
+        if kind is not None and row["property_type"] != kind:
+            continue
+        if purpose is not None and row["purpose"] != purpose:
+            continue
+        if wanted is not None and (row["sqft"] is None
+                                   or abs(Decimal(str(row["sqft"])) - wanted) > FIND_SIZE * wanted):
+            continue
+        if price is not None and (row["price_pkr"] is None
+                                  or abs(Decimal(row["price_pkr"]) - price) > FIND_PRICE * price):
+            continue
+        if beds is not None and row["bedrooms"] != beds:
+            continue
+        matches.append(row)
+    matches.sort(key=lambda r: (r["status"] != "active", r["code"]))
+    status = ("none" if not matches else "single" if len(matches) == 1
+              else "too_many" if len(matches) > FIND_LIMIT else "several")
+    return {"status": status, "candidates": matches[:FIND_LIMIT]}
+
+
+def check_update(prop, changes):
+    """Validate a proposed change of one listing: `prop` is its row (status, purpose,
+    price_pkr), `changes` {"price_pkr": int, "status": str}. Returns {"changes": {field:
+    {"from", "to"}}, "warnings": [...]} or {"error": code}. A live listing may move to any
+    other status; a closed one only back to active; a sold listing must be a sale, a rented
+    one a rent. Nothing is written here."""
+    live = prop["status"] in LIVE_STATUSES
+    out, warnings = {}, []
+    if "price_pkr" in changes:
+        new, old = changes["price_pkr"], prop["price_pkr"]
+        if not isinstance(new, int) or new <= 0:
+            return {"error": "bad_amount"}
+        if new == old:
+            return {"error": "no_change"}
+        if not live:
+            return {"error": "not_live"}
+        if old and not (Decimal("0.3") <= Decimal(new) / Decimal(old) <= 3):
+            warnings.append("price_unusual")
+        out["price_pkr"] = {"from": old, "to": new}
+    if "status" in changes:
+        new = changes["status"]
+        if new == prop["status"]:
+            return {"error": "no_change"}
+        if not live and new != "active":
+            return {"error": "not_live"}
+        if new == "sold" and prop["purpose"] != "sale":
+            return {"error": "sold_needs_sale"}
+        if new == "rented" and prop["purpose"] != "rent":
+            return {"error": "rented_needs_rent"}
+        out["status"] = {"from": prop["status"], "to": new}
+    return {"changes": out, "warnings": warnings}
