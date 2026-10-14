@@ -102,11 +102,13 @@ def test_one_to_five_drafts_are_accepted(count):
     assert result.ok and len(result.response["drafts"]) == count
 
 
-@pytest.mark.parametrize("count", [0, 6])
-def test_zero_or_more_than_five_drafts_are_refused(count):
+@pytest.mark.parametrize(("count", "error"), [
+    (0, "invalid_arguments"), (6, "too_many_drafts"), (10, "too_many_drafts"),
+    (11, "invalid_arguments")])
+def test_zero_or_more_than_five_drafts_are_refused(count, error):
     context = staff("x", descriptions={1})
     result = drafts_call(context, *[draft(text="x") for _ in range(count)])
-    assert (result.ok, result.error) == (False, "invalid_arguments")
+    assert (result.ok, result.error) == (False, error)
 
 
 def test_several_drafts_must_each_name_their_text():

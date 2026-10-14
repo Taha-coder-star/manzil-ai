@@ -15,7 +15,7 @@ from decimal import Decimal
 import psycopg
 from psycopg.types.json import Jsonb
 
-from app import ai_tools, staff_drafts, staff_normalise
+from app import ai_tools, staff_cards, staff_drafts, staff_normalise
 from app.db import tenant_transaction
 
 STATEMENT_TIMEOUT = "5s"
@@ -42,6 +42,25 @@ def load_listings(conn, agency_id):
              "location_id": r[4], "sqft": None if r[5] is None else Decimal(r[5]),
              "price_pkr": r[6], "bedrooms": r[7], "id": r[8], "version": r[9]}
             for r in rows]
+
+
+def agency_settings(conn, agency_id):
+    """(city_default, marla_sqft) of the agency."""
+    with tenant_transaction(conn, agency_id):
+        row = conn.execute(
+            "SELECT city_default, marla_sqft FROM agency WHERE id = current_agency_id()"
+        ).fetchone()
+    return row if row else ("KHI", 225)
+
+
+def photo_count(conn, turn):
+    """Photos of the turn's segment (0 for a turn without one)."""
+    if turn.staff_segment_id is None:
+        return 0
+    with tenant_transaction(conn, turn.agency_id):
+        return conn.execute(
+            "SELECT count(*) FROM staff_segment_item WHERE agency_id = current_agency_id() "
+            "AND segment_id = %s AND is_photo", (turn.staff_segment_id,)).fetchone()[0]
 
 
 @dataclass(frozen=True)
@@ -184,6 +203,48 @@ class StaffBinding:
         self.found = None      # the last find_listings result: {"status", "candidates"}
         self.proposed = None   # the turn's proposal result (StoredDraft) once made
 
+    def _fail(self, name, error, notice=None, codes=()):
+        """An error result; the staff member still gets the reply `notice` names."""
+        result = ai_tools._error(name, error)
+        return ai_tools.ToolResult(name, False, result.response, error, notice,
+                                   trusted_codes=frozenset(codes))
+
+    def draft_listing(self, args, context):
+        existing = self._stored("create")
+        if existing:  # a retried turn: its own drafts, whatever the model says now
+            return self._drafted(existing, False)
+        bound = staff_drafts.bind_draft_listing(args, context.staff)
+        notices = {"too_many_drafts": "staff_draft_too_many", "no_segment": None}
+        if "error" in bound:
+            return self._fail("draft_listing", bound["error"], notices.get(bound["error"]))
+        if not any({"property_type", "size", "price", "location"} & set(d.spans)
+                   for d in bound["drafts"]):
+            return self._fail("draft_listing", "no_listing", "staff_draft_none")
+        listings = load_listings(self.conn, self.turn.agency_id)
+        drafts = staff_normalise.normalise_drafts(
+            args, context.staff, self.gazetteer, marla_sqft=self.marla_sqft,
+            city_code=self.city_code, listings=listings)["drafts"]
+        stored, created = save_drafts(self.conn, self.turn, drafts)
+        return self._drafted(stored, created)
+
+    def _drafted(self, stored, created):
+        photos = photo_count(self.conn, self.turn)
+        payloads = tuple(staff_cards.draft_card(d, len(stored), self.gazetteer, photos)
+                         for d in stored)
+        codes = frozenset().union(*(staff_cards.draft_codes(d) for d in stored))
+        response = {"status": "drafted" if created else "existing", "drafts": [
+            {"ordinal": d.ordinal, "complete": not d.payload["blockers"],
+             "missing": d.payload["missing"], "conflicts": len(d.payload["conflicts"]),
+             "duplicates": [x["code"] for x in d.payload["duplicates"] if "code" in x],
+             "proposed_code": d.payload["proposed_code"]} for d in stored]}
+        return ai_tools.ToolResult("draft_listing", True, response, payloads=payloads,
+                                   trusted_codes=codes)
+
+    def _stored(self, kind):
+        with tenant_transaction(self.conn, self.turn.agency_id):
+            self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+            return _stored(self.conn, self.turn.id, kind)
+
     def find_listings(self, args, context):
         result = staff_drafts.verify_find_listings(args, context.staff)
         if "error" in result:
@@ -192,15 +253,22 @@ class StaffBinding:
             result["spans"], load_listings(self.conn, self.turn.agency_id), self.gazetteer,
             marla_sqft=self.marla_sqft, city_code=self.city_code)
         if "error" in found:
-            return ai_tools._error("find_listings", found["error"])
+            return self._fail("find_listings", found["error"], "staff_find_unclear")
         self.found = found
-        response = {"status": found["status"], "candidates": [
-            _summary(row, self.gazetteer) for row in found["candidates"]]}
-        return ai_tools.ToolResult("find_listings", True, response)
+        summaries = [_summary(row, self.gazetteer) for row in found["candidates"]]
+        response = {"status": found["status"], "candidates": summaries}
+        codes = frozenset(s["code"] for s in summaries)
+        if found["status"] in ("several", "too_many"):  # a choice for the staff member
+            return ai_tools.ToolResult(
+                "find_listings", True, response, trusted_codes=codes,
+                payloads=(staff_cards.candidates_reply(summaries),))
+        notice = "staff_update_none" if found["status"] == "none" else None
+        return ai_tools.ToolResult("find_listings", True, response, notice=notice,
+                                   trusted_codes=codes)
 
     def propose_update(self, args, context):
         if self.proposed is not None:
-            return ai_tools._error("propose_update", "one_per_turn")
+            return self._fail("propose_update", "one_per_turn", "staff_one_at_a_time")
         existing = self._existing()
         if existing is not None:  # a retried turn: its own draft, whatever the model says now
             return self._result(existing, False)
@@ -212,20 +280,25 @@ class StaffBinding:
             only = self.found and self.found["status"] in ("single", "direct")
             if not only or code not in {r["code"] for r in self.found["candidates"]}:
                 several = self.found and self.found["status"] in ("several", "too_many")
-                return ai_tools._error(
-                    "propose_update", "ambiguous_target" if several else "target_not_in_text")
+                return self._fail(
+                    "propose_update", "ambiguous_target" if several else "target_not_in_text",
+                    None if several else "staff_update_pick")  # a list was already sent
         changes, raw = {}, {}
         for item in result["verified"]:
             field, span = item["field"], item["span"]
             amounts = {pkr for pkr, _ in staff_normalise._amounts(span)}
             value = (amounts.pop() if len(amounts) == 1 else None) if field == "price"                 else staff_normalise.parse_status(span)
             if value is None:
-                return ai_tools._error("propose_update", "invalid_change")
+                return self._invalid(code, "invalid_change")
             key = "price_pkr" if field == "price" else "status"
             changes[key], raw[key] = value, span
         outcome = propose_update_draft(self.conn, self.turn, code, changes, raw)
+        if outcome.get("error") == "target_not_found":
+            return self._fail("propose_update", "target_not_found",
+                              ai_tools.Notice("staff_update_not_found", (("code", code),)),
+                              codes=(code,))
         if "error" in outcome:
-            return ai_tools._error("propose_update", outcome["error"])
+            return self._invalid(code, outcome["error"])
         self.proposed = outcome["draft"]
         return self._result(outcome["draft"], outcome["created"])
 
@@ -236,9 +309,17 @@ class StaffBinding:
             rows = _stored(conn, self.turn.id, "update")
         return rows[0] if rows else None
 
+    def _invalid(self, code, error):
+        reason = staff_cards.REASONS.get(error, staff_cards.REASONS["invalid_change"])
+        return self._fail("propose_update", error,
+                          ai_tools.Notice("staff_update_invalid",
+                                          (("code", code), ("reason", reason))), codes=(code,))
+
     @staticmethod
     def _result(draft, created):
         response = {"status": "proposed" if created else "existing", "draft_id": str(draft.id),
                     "draft_status": draft.status, "target": draft.payload["target_code"],
                     "changes": draft.payload["changes"]}
-        return ai_tools.ToolResult("propose_update", True, response)
+        return ai_tools.ToolResult(
+            "propose_update", True, response, payloads=(staff_cards.update_card(draft),),
+            trusted_codes=frozenset({draft.payload["target_code"]}))

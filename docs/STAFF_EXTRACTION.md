@@ -567,3 +567,28 @@ fix them together at the end, not slice by slice:
 
 Slice 3 (duplicates and proposed codes) is implemented as specified; the ST-01 `duplicate_of`
 disagreement with the gold (Q1) is asserted in `tests/test_staff_codes.py` and left open.
+
+## 16. Implementation status and handoff (2026-10-14)
+
+Local only: `feature/task-8-2-staff-extraction`, not pushed, 016 not applied to RDS, no live model.
+Commits: f17a675 (slices 1-4a), 913e141 (4b), then 4c (this section's last commit).
+
+Done: spans-only tools and verification (`app/staff_drafts.py`); normalisation, conflicts,
+duplicates, advisory codes, update rules (`app/staff_normalise.py`); database layer, retry identity,
+supersede and the tool bodies (`app/staff_tools.py`, migration 016); text-only cards and the staff
+notices (`app/staff_cards.py`); engine wiring (`ToolResult.payloads` / `trusted_codes`,
+`TurnEngine._staff_binding`, staff segment limits 3,500 / 6,000 characters, an overlong message is
+refused with `staff_draft_too_long`, never clipped). Tool bodies are real only when the engine has the
+gazetteer (the requirements service); otherwise the 6.1 stubs remain.
+
+Decisions made while building (review them): a find_listings location that resolves to exactly one
+place by similarity (ST-15 "Sports City") is used, not asked again; more than 5 drafts is
+`too_many_drafts` (schema allows 10 so the staff gets the "split it" reply); an error result may carry
+its own reply template and trusted codes; the concurrent-proposal retry is one retry on a unique
+violation.
+
+Remaining: (1) the 20-item benchmark runner `app/staff_bench.py` (section 10) with `bench/staff_spans.json`;
+(2) the consolidated Slice 2 fixes of section 15; (3) wording approval (section 8) and owner answers
+Q1-Q5; (4) `peers` for the `price_unusual` draft warning is not wired (needs the live price band);
+(5) 9.2: Save / Edit / Cancel / Confirm, the real code allocation, photo attach (cards carry no
+buttons); (6) applying 016 to RDS (snapshot first) and the live Gemini run.

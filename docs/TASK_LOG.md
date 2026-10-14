@@ -227,3 +227,5 @@ Entries are historical snapshots; later entries supersede earlier status stateme
 2026-10-14: Task 8.2 slice 3 (duplicates + advisory codes, app/staff_normalise.py, app/staff_tools.load_listings, Place.code / Gazetteer.code_of) implemented locally, uncommitted, no migration. ST-01 gold disagreement asserted, not tuned. Slice 2 known limits recorded in docs/STAFF_EXTRACTION.md section 15.
 
 2026-10-14: Task 8.2 slice 4a implemented locally (uncommitted): migration 016_listing_draft_turn_identity.sql (superseded status, source_turn_id + ordinal, FK, CHECKs, partial unique index; 001-015 byte-identical), app/staff_tools.save_drafts, staff_normalise.to_payload. Not applied anywhere but disposable PostgreSQL; production application needs the owner (snapshot first).
+
+2026-10-14: Task 8.2 slices 4b (find_listings / propose_update, supersede + retry identity) and 4c (text-only staff cards, engine wiring, overlong-message refusal) implemented locally; migration 016 not applied to RDS; no live call. Handoff in docs/STAFF_EXTRACTION.md section 16.

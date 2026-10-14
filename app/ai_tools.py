@@ -100,7 +100,7 @@ _TOOLS = {
             "type": "object",
             "properties": {
                 "drafts": {
-                    "type": "array", "minItems": 1, "maxItems": 5,
+                    "type": "array", "minItems": 1, "maxItems": 10,  # > 5: too_many_drafts
                     "items": {
                         "type": "object",
                         "properties": {
@@ -206,6 +206,10 @@ class ToolResult:
     error: str | None = None
     # Template key (str), Notice, or a tuple of those for the customer-visible reply.
     notice: object = None
+    # Task 8.2: backend-built WhatsApp payloads (staff cards) sent before the notices, and
+    # the listing codes they (or the notices) may show.
+    payloads: tuple = ()
+    trusted_codes: frozenset = frozenset()
 
 
 def declarations(route):

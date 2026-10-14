@@ -20,6 +20,7 @@ DRAFT_FIELDS = ("purpose", "property_type", "location", "size", "price", "bedroo
 FIND_FIELDS = ("code", "location", "property_type", "purpose", "size", "price", "bedrooms")
 # Two drafts of one message may share a word, not a listing (R-08).
 OVERLAP_LIMIT = 0.20
+MAX_DRAFTS = 5
 CODE = re.compile(r"#?([A-Za-z0-9]{2,4}-[0-9]{3})")
 _CODE_IN_TEXT = re.compile(r"(?<![A-Za-z0-9])([A-Za-z0-9]{2,4}-[0-9]{3})(?![0-9])")
 
@@ -73,6 +74,8 @@ def bind_draft_listing(args, staff):
         return {"error": "no_segment"}
     texts = [_squash(t) for t in staff.texts]
     drafts = args["drafts"]
+    if len(drafts) > MAX_DRAFTS:
+        return {"error": "too_many_drafts"}
     multi = len(drafts) > 1
     placed = []  # (message number, start, end) of each draft's text
     for draft in drafts:
