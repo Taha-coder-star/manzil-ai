@@ -32,6 +32,10 @@ Sending (docs/DECISIONS.md, Task 5.2):
 Listings come from v_public_listing only (active, customer-safe columns); the
 cover is the card derivative's public URL (Task 4.1 / 4.4). Never log message
 text or phone numbers.
+
+Language (Task 9.1, docs/RENDERER.md): the words around the facts follow the
+customer ("english" / "roman_urdu"); codes, PKR amounts, units and place names
+are identical in both (D15). The default, English, is the Task 5.2 output.
 """
 
 import logging
@@ -54,6 +58,33 @@ RESULTS_MAX = SHOWN_MAX + whatsapp.LIST_ROWS_MAX
 NO_COVER = "photos coming soon"
 UNITS = {"sq_yd": "sq yd", "sq_ft": "sq ft", "marla": "marla", "kanal": "kanal"}
 STATUSES = {"ready": "Ready", "under_construction": "Under construction", "off_plan": "Off-plan"}
+ENGLISH, ROMAN_URDU = "english", "roman_urdu"
+LANGUAGES = (ENGLISH, ROMAN_URDU)
+# Customer-facing words around the facts (Task 9.1; wording awaits owner approval).
+WORDS = {
+    ENGLISH: {
+        "sale": "for sale", "rent": "for rent", "no_cover": NO_COVER,
+        "photos": "More photos", "visit": "Visit / Details", "similar": "Similar",
+        "count": "{n} matching listings:", "in_list": "#{a}-#{b} are in the list below.",
+        "reply": "Reply with a number, or {hint}.", "tap_card": "tap a card",
+        "tap_button": "tap a card's button",
+        "overflow": "{n} more matching listings. Pick one for details.",
+        "more_results": "More results", "none": "No matching listings right now.",
+    },
+    ROMAN_URDU: {
+        "sale": "sale", "rent": "kiraye par", "no_cover": "photos jald",
+        "photos": "Aur photos", "visit": "Visit / Detail", "similar": "Milti-julti",
+        "count": "{n} options:", "in_list": "#{a}-#{b} neeche list mein hain.",
+        "reply": "Number likh kar jawab dein, ya {hint}.", "tap_card": "card par tap karein",
+        "tap_button": "card ka button dabayein",
+        "overflow": "{n} aur options. Detail ke liye ek chunein.",
+        "more_results": "Aur options", "none": "Abhi koi property nahi mili.",
+    },
+}
+TYPE_WORDS = {ROMAN_URDU: {"house": "Ghar", "apartment": "Flat", "shop": "Dukaan",
+                           "warehouse": "Godown"}}
+STATUS_WORDS = {ROMAN_URDU: {"ready": "Tayyar", "under_construction": "Zer-e-tameer",
+                             "off_plan": "Off-plan", "grey_structure": "Grey structure"}}
 
 
 @dataclass(frozen=True)
@@ -70,6 +101,12 @@ class Listing:
     construction_status: str | None
     location: str | None
     cover_url: str | None
+    # Public feature facts (Task 9.1): what the grounding validator lets a text claim.
+    features: tuple = ()
+    facing: tuple = ()
+    is_corner: bool | None = None
+    furnishing: str | None = None
+    possession_status: str | None = None
 
 
 def _set_timeout(conn):
@@ -86,7 +123,8 @@ def load_listings(conn, agency_id, codes):
             SELECT l.listing_code, l.purpose, l.property_type, l.price_pkr, l.area_value,
                    l.area_unit, l.size_nominal_sqyd, l.bedrooms, l.bathrooms,
                    l.construction_status, COALESCE(loc.display_name, loc.name),
-                   CASE WHEN m.card_image_key IS NOT NULL THEN m.public_url_card END
+                   CASE WHEN m.card_image_key IS NOT NULL THEN m.public_url_card END,
+                   l.features, l.facing, l.is_corner, l.furnishing, l.possession_status
             FROM v_public_listing l
             LEFT JOIN location loc ON loc.id = l.location_id
             LEFT JOIN property_media m
@@ -95,7 +133,8 @@ def load_listings(conn, agency_id, codes):
             """,
             (list(codes),),
         ).fetchall()
-    by_code = {row[0]: Listing(*row) for row in rows}
+    by_code = {row[0]: Listing(*row[:12], tuple(row[12] or ()), tuple(row[13] or ()),
+                               *row[14:]) for row in rows}
     return [by_code[code] for code in codes if code in by_code]
 
 
@@ -171,16 +210,24 @@ def rooms_text(listing):
     return " / ".join(parts) or None
 
 
-def kind_text(listing):
+def kind_text(listing, language=ENGLISH):
     kind = (listing.property_type or "property").replace("_", " ").capitalize()
+    if language == ENGLISH:
+        if listing.purpose in ("sale", "rent"):
+            kind += f" for {listing.purpose}"
+        return kind
+    kind = TYPE_WORDS[language].get(listing.property_type, kind)
     if listing.purpose in ("sale", "rent"):
-        kind += f" for {listing.purpose}"
+        kind += f" · {WORDS[language][listing.purpose]}"
     return kind
 
 
-def status_text(listing):
+def status_text(listing, language=ENGLISH):
     status = listing.construction_status
-    return STATUSES.get(status, status.replace("_", " ").capitalize()) if status else None
+    if not status:
+        return None
+    words = STATUS_WORDS.get(language, STATUSES)
+    return words.get(status, status.replace("_", " ").capitalize())
 
 
 def _join(parts):
@@ -191,12 +238,15 @@ def _fit(text, limit):
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def card_body(rank, listing):
-    """Key facts in at most 160 characters and 2 line breaks (a carousel card body)."""
+def card_body(rank, listing, language=ENGLISH, labels=()):
+    """Key facts in at most 160 characters and 2 line breaks (a carousel card body).
+    labels (Task 9.1: "budget se thoda upar", "Phase 7 -- qareeb") end the price line;
+    the location line is shortened first when the body is too long."""
     lines = [
-        f"#{rank} {listing.code} · {kind_text(listing)}",
+        f"#{rank} {listing.code} · {kind_text(listing, language)}",
         _join([listing.location, area_text(listing), rooms_text(listing)]),
-        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing)]),
+        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing, language),
+               *labels]),
     ]
     lines = [line for line in lines if line]
     spare = whatsapp.CARD_BODY_MAX - sum(len(line) for line in lines) - (len(lines) - 1)
@@ -205,96 +255,117 @@ def card_body(rank, listing):
     return _fit("\n".join(lines), whatsapp.CARD_BODY_MAX)
 
 
-def details(listing):
+def details(listing, language=ENGLISH, labels=()):
     """Full details for the single-result card."""
     lines = [
-        f"*{listing.code}* · {kind_text(listing)}",
+        f"*{listing.code}* · {kind_text(listing, language)}",
         listing.location,
         _join([area_text(listing), rooms_text(listing)]),
-        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing)]),
+        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing, language),
+               *labels]),
     ]
     if listing.cover_url is None:
-        lines.append(f"({NO_COVER})")
+        lines.append(f"({WORDS[language]['no_cover']})")
     return "\n".join(line for line in lines if line)
 
 
-def index_line(rank, listing):
-    line = _join([f"#{rank} {listing.code}", kind_text(listing), listing.location,
-                  price_text(listing.price_pkr, listing.purpose)])
-    return line + (f" ({NO_COVER})" if listing.cover_url is None else "")
+def index_line(rank, listing, language=ENGLISH, labels=()):
+    line = _join([f"#{rank} {listing.code}", kind_text(listing, language), listing.location,
+                  price_text(listing.price_pkr, listing.purpose), *labels])
+    return line + (f" ({WORDS[language]['no_cover']})" if listing.cover_url is None else "")
 
 
-def summary(listings, shown, *, tap_hint):
-    lines = [f"{len(listings)} matching listings:"]
-    lines += [index_line(rank, listing) for rank, listing in enumerate(shown, 1)]
+def summary(listings, shown, *, tap_hint, language=ENGLISH, labels=None, note=None):
+    """The numbered summary. tap_hint is a WORDS key ("tap_card" / "tap_button")."""
+    words, labels = WORDS[language], labels or {}
+    lines = ([note] if note else []) + [words["count"].format(n=len(listings))]
+    lines += [index_line(rank, listing, language, labels.get(listing.code, ()))
+              for rank, listing in enumerate(shown, 1)]
     if len(listings) > len(shown):
-        lines.append(f"#{len(shown) + 1}-#{len(listings)} are in the list below.")
-    lines.append(f"Reply with a number, or {tap_hint}.")
+        lines.append(words["in_list"].format(a=len(shown) + 1, b=len(listings)))
+    lines.append(words["reply"].format(hint=words[tap_hint]))
     return _fit("\n".join(lines), whatsapp.INTERACTIVE_BODY_MAX)
 
 
 # --- payloads -------------------------------------------------------------------------
 
-def card_buttons(code):
-    return [(f"photos:{code}", "More photos"), (f"visit:{code}", "Visit / Details")]
+def card_buttons(code, language=ENGLISH):
+    words = WORDS[language]
+    return [(f"photos:{code}", words["photos"]), (f"visit:{code}", words["visit"])]
 
 
-def single_card(listing):
-    """Exactly one result: cover image header (or a text header), full details, 3 buttons."""
-    buttons = card_buttons(listing.code) + [(f"similar:{listing.code}", "Similar")]
-    return _card(details(listing), buttons, listing)
+def single_card(listing, language=ENGLISH, labels=(), note=None):
+    """Exactly one result: cover image header (or a text header), full details, 3 buttons.
+    note (Task 9.1: the wrapper line) opens the body."""
+    buttons = card_buttons(listing.code, language) + [
+        (f"similar:{listing.code}", WORDS[language]["similar"])]
+    body = details(listing, language, labels)
+    return _card(f"{note}\n\n{body}" if note else body, buttons, listing, language)
 
 
-def listing_card(rank, listing):
+def listing_card(rank, listing, language=ENGLISH, labels=()):
     """One card of the individual-cards format, or a coverless listing's text card."""
-    return _card(card_body(rank, listing), card_buttons(listing.code), listing)
+    return _card(card_body(rank, listing, language, labels),
+                 card_buttons(listing.code, language), listing, language)
 
 
-def _card(body, buttons, listing):
+def _card(body, buttons, listing, language=ENGLISH):
     if listing.cover_url is not None:
         return whatsapp.reply_buttons(body, buttons, image_header={"link": listing.cover_url})
-    return whatsapp.reply_buttons(body, buttons, header=f"{listing.code} · {NO_COVER}")
+    return whatsapp.reply_buttons(
+        body, buttons, header=f"{listing.code} · {WORDS[language]['no_cover']}")
 
 
-def overflow_list(listings, start):
+def overflow_list(listings, start, language=ENGLISH, labels=None):
+    words, labels = WORDS[language], labels or {}
     rows = [
         (f"listing:{listing.code}", f"#{rank} {listing.code}",
-         _fit(_join([kind_text(listing), listing.location,
-                     price_text(listing.price_pkr, listing.purpose)]),
+         _fit(_join([kind_text(listing, language), listing.location,
+                     price_text(listing.price_pkr, listing.purpose),
+                     *labels.get(listing.code, ())]),
               whatsapp.ROW_DESCRIPTION_MAX))
         for rank, listing in enumerate(listings, start)
     ]
     return whatsapp.list_message(
-        f"{len(rows)} more matching listings. Pick one for details.", "More results",
-        [(None, rows)],
+        words["overflow"].format(n=len(rows)), words["more_results"], [(None, rows)],
     )
 
 
-def render(listings, *, fallback=False):
-    """The payloads presenting ranked public listings, in send order."""
-    listings = list(listings)
+def render(listings, *, fallback=False, language=ENGLISH, labels=None, note=None):
+    """The payloads presenting ranked public listings, in send order. Task 9.1 options:
+    language, labels ({code: (label, ...)} shown with that listing's facts) and note (a
+    line that opens the first message: the summary, or the single card's body)."""
+    listings, labels, words = list(listings), labels or {}, WORDS[language]
     if not listings:
-        return [whatsapp.text("No matching listings right now.")]
+        return [whatsapp.text(f"{note}\n\n{words['none']}" if note else words["none"])]
     if len(listings) > RESULTS_MAX:
         raise ValueError(f"at most {RESULTS_MAX} results can be presented")
     if len(listings) == 1:
-        return [single_card(listings[0])]
+        return [single_card(listings[0], language, labels.get(listings[0].code, ()), note)]
     shown = listings[:SHOWN_MAX]
     ranked = list(enumerate(shown, 1))
     covered = [(rank, listing) for rank, listing in ranked if listing.cover_url is not None]
+
+    def card(rank, listing):
+        return listing_card(rank, listing, language, labels.get(listing.code, ()))
+
     if not fallback and len(covered) >= whatsapp.CAROUSEL_CARDS_MIN:
         payloads = [whatsapp.carousel(
-            summary(listings, shown, tap_hint="tap a card"),
-            [(listing.cover_url, card_body(rank, listing), card_buttons(listing.code))
+            summary(listings, shown, tap_hint="tap_card", language=language, labels=labels,
+                    note=note),
+            [(listing.cover_url,
+              card_body(rank, listing, language, labels.get(listing.code, ())),
+              card_buttons(listing.code, language))
              for rank, listing in covered],
         )]
-        payloads += [listing_card(rank, listing) for rank, listing in ranked
+        payloads += [card(rank, listing) for rank, listing in ranked
                      if listing.cover_url is None]
     else:
-        payloads = [whatsapp.text(summary(listings, shown, tap_hint="tap a card's button"))]
-        payloads += [listing_card(rank, listing) for rank, listing in ranked]
+        payloads = [whatsapp.text(summary(listings, shown, tap_hint="tap_button",
+                                          language=language, labels=labels, note=note))]
+        payloads += [card(rank, listing) for rank, listing in ranked]
     if len(listings) > SHOWN_MAX:
-        payloads.append(overflow_list(listings[SHOWN_MAX:], SHOWN_MAX + 1))
+        payloads.append(overflow_list(listings[SHOWN_MAX:], SHOWN_MAX + 1, language, labels))
     return payloads
 
 
