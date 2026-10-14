@@ -253,8 +253,9 @@ def test_role_and_table_hardening(rls_db):
     turns = {"conversation_turn"}
     audio = {"inbound_audio"}
     segments = {"staff_segment", "staff_segment_item"}
+    cards = {"staff_card"}  # migration 017 (Task 9.2)
     assert {r[0] for r in rows} == (
-        set(TABLES) | inventory | state | media | turns | audio | segments | shared
+        set(TABLES) | inventory | state | media | turns | audio | segments | cards | shared
         | {"schema_migration"}
     )
     for name, enabled, forced, owner in rows:
