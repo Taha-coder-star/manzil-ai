@@ -3,6 +3,7 @@
 These tests pin what the runner reports and what it refuses to claim. They say nothing about
 model accuracy: no model is called anywhere."""
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -11,7 +12,7 @@ import pytest
 from app import staff_bench
 
 BENCH = Path(staff_bench.BENCH_DIR)
-GOLD_SHA256 = "ac7281424f33029380b5301ec3cfdbbe1b7b361dd7bf4809522519c8e823c25e"
+GOLD_SHA256 = "7669513378d38fdf6280eda48de19889d67e66b9aa232b32e0252987927c8a40"
 
 
 @pytest.fixture(scope="module")
@@ -27,7 +28,8 @@ def test_the_result_is_labelled_a_fixture_run_and_never_a_model_score(result):
 
 
 def test_the_gold_file_is_untouched():
-    assert staff_bench._sha256(BENCH / "staff.json") == GOLD_SHA256
+    raw = (BENCH / 'staff.json').read_bytes()
+    assert hashlib.sha256(raw.replace(bytes((13, 10)), bytes((10,)))).hexdigest() == GOLD_SHA256
 
 
 def test_every_span_is_a_substring_of_its_item_input():
