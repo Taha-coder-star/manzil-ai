@@ -243,6 +243,10 @@ def test_two_asking_prices_conflict():
     "ghar DHA Phase 6, demand 8 crore, 5 lakh advance",
     "ghar DHA Phase 6, advance 5 lakh, demand 8 crore",
     "ghar DHA Phase 6, 8 crore, down payment 1 crore, qist 5 lakh",
+    "ghar DHA Phase 6, 8 crore advance 5 lakh",          # the keyword introduces the 5 lakh
+    "ghar DHA Phase 6, advance 5 lakh and 8 crore",        # reversed order
+    "ghar DHA Phase 6, token 1 lakh advance 5 lakh, 8 crore",
+    "ghar DHA Phase 6 8 crore (advance 5 lakh, token 1 lakh)",
 ])
 def test_advance_deposit_and_token_amounts_are_not_asking_prices(text):
     draft = build(text, {"property_type": "ghar", "price": "8 crore"})
@@ -260,6 +264,21 @@ def test_sale_and_rent_words_conflict():
                                                        "purpose": "for sale"})
     assert conflicts_of(draft) == {"purpose": ["rent", "sale"]}
     assert "purpose" not in draft.fields
+
+
+def test_a_house_with_an_upper_portion_is_one_house():
+    draft = build("house with upper portion 500 gaz", {"property_type": "house"})
+    assert draft.fields["property_type"]["value"] == "house" and draft.conflicts == ()
+    alone = build("upper portion 3 bed", {"property_type": "upper portion"})
+    assert alone.fields["property_type"]["value"] == "portion"
+
+
+@pytest.mark.parametrize("text", ["ghar ya upper portion", "house or ground portion",
+                                  "ghar ya flat", "plot or portion"])
+def test_genuinely_competing_types_still_conflict(text):
+    draft = build(text, {"property_type": text.split()[0]})
+    assert [c["field"] for c in draft.conflicts] == ["property_type"]
+    assert "property_type" not in draft.fields
 
 
 def test_two_property_types_conflict():
@@ -293,14 +312,62 @@ def test_a_single_draft_scans_its_notes_too():
 
 # --- rejected spans contribute nothing -----------------------------------------------------
 
-def test_a_rejected_span_never_becomes_a_value():
+def test_an_advance_alone_is_not_an_asking_price():
+    draft = build("ghar DHA Phase 6, advance 5 lakh",
+                  {"property_type": "ghar", "price": "5 lakh"})  # the span names the advance
+    assert "price_pkr" not in draft.fields and draft.conflicts == ()
+    assert "price_pkr" in draft.missing and "purpose" not in draft.fields
+
+
+def test_a_rejected_span_is_never_trusted_but_the_source_text_may_fill_the_gap():
     draft = build("ghar DHA Phase 6, 500 gaz, 8 crore",
                   {"property_type": "ghar", "location": "DHA Phase 6", "size": "500 gaz",
                    "price": "80 lakh", "bedrooms": "4 bed"})
     assert draft.rejected == ("price", "bedrooms")
-    assert "price_pkr" not in draft.fields and "bedrooms" not in draft.fields
-    assert draft.missing == ("purpose", "price_pkr", "bedrooms")
-    assert draft.fields["property_type"]["value"] == "house"
+    price = draft.fields["price_pkr"]  # the text states exactly one amount
+    assert (price["value"], price["raw"], price["provenance"]) == (
+        80_000_000, "8 crore", "source_text")
+    assert "re_extracted" in draft.warnings
+    assert "bedrooms" not in draft.fields and draft.missing == ("bedrooms",)  # nothing to find
+
+
+@pytest.mark.parametrize(("rejected", "text", "field", "value", "raw"), [
+    ({"purpose": "kiraya"}, "ghar for sale DHA Phase 6", "purpose", "sale", "for sale"),
+    ({"property_type": "flat"}, "ghar DHA Phase 6", "property_type", "house", "ghar"),
+    ({"bedrooms": "9 bed"}, "ghar 3 bed DHA Phase 6", "bedrooms", 3, "3 bed"),
+    ({"bathrooms": "9 bath"}, "ghar 2 bath DHA Phase 6", "bathrooms", 2, "2 bath"),
+    ({"size": "1 kanal"}, "ghar 500 gaz DHA Phase 6", "size", 500, "500 gaz"),
+])
+def test_other_rejected_fields_are_re_extracted_the_same_way(rejected, text, field, value, raw):
+    draft = build(text, {"location": "DHA Phase 6"} | rejected)
+    got = draft.fields[field]
+    assert (got["value"], got["raw"], got["provenance"]) == (value, raw, "source_text")
+
+
+@pytest.mark.parametrize(("text", "spans", "field", "conflict"), [
+    ("ghar DHA Phase 6, 8 crore, 9 crore", {"price": "80 lakh"}, "price_pkr", True),
+    ("ghar 4 bed 5 bedrooms", {"bedrooms": "9 bed"}, "bedrooms", True),
+    ("ghar 500 gaz 1 kanal 2 marla", {"size": "9 gaz"}, "size", True),
+    ("ghar for sale on rent", {"purpose": "kiraya"}, "purpose", True),
+    ("ghar ya flat", {"property_type": "dukaan"}, "property_type", True),
+    ("ghar 8 crore", {"price": "1 crore ya 2 crore"}, "price_pkr", False),  # none to find? one
+])
+def test_a_rejected_span_with_two_candidate_values_stays_missing_or_conflicted(
+        text, spans, field, conflict):
+    draft = build(text, spans if "property_type" in spans else {"property_type": "ghar"} | spans)
+    if conflict:
+        assert field not in draft.fields
+        assert field in {c["field"] for c in draft.conflicts}
+    else:  # the rejected span is not trusted; the single value of the text is used instead
+        assert draft.fields[field]["value"] == 80_000_000
+        assert draft.fields[field]["provenance"] == "source_text"
+
+
+def test_a_rejected_location_is_never_guessed_from_the_text():
+    draft = build("ghar DHA Phase 6 500 gaz 8 crore", {"property_type": "ghar",
+                                                     "location": "Clifton"})
+    assert draft.rejected == ("location",) and "location" in draft.missing
+    assert "location" not in draft.fields
 
 
 def test_a_stated_but_unparseable_span_leaves_the_field_missing():
@@ -310,6 +377,21 @@ def test_a_stated_but_unparseable_span_leaves_the_field_missing():
 
 
 # --- locations ---------------------------------------------------------------------------
+
+def test_an_uncertain_similarity_match_stays_unresolved_and_blocks_save():
+    # "Sports City" is only similar to "Bahria Sports City": the resolver does not accept it
+    draft = build("plot Sports City 500 gaz 1.6 crore sale",
+                  {"purpose": "sale", "property_type": "plot", "location": "Sports City",
+                   "size": "500 gaz", "price": "1.6 crore"})
+    assert draft.fields["location"]["status"] == "AMBIGUOUS"
+    assert "location_id" not in draft.fields["location"]
+    assert draft.fields["location"]["candidates"][0]["location_id"] == "btk-sports-city"
+    assert draft.blockers() == ("missing:location",)
+    sure = build("plot Bahria Sports City 500 gaz 1.6 crore sale",
+                 {"purpose": "sale", "property_type": "plot", "location": "Bahria Sports City",
+                  "size": "500 gaz", "price": "1.6 crore"})
+    assert sure.fields["location"]["location_id"] == "btk-sports-city" and not sure.blockers()
+
 
 def test_a_resolved_area_or_zone_is_a_location():
     for span, node in (("Gulshan", "gli"), ("Block 5", "clf-b5"), ("Bukhari Commercial",

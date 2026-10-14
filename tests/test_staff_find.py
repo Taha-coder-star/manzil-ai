@@ -47,10 +47,12 @@ def test_st14_a_single_portion_in_north_nazimabad():
     assert GOLD["ST-14"]["listing"] == "NNZ-101"
 
 
-def test_st15_sports_city_names_one_place_so_one_plot_is_found():
+def test_st15_a_similar_place_is_asked_about_not_assumed():
     result = find(location="Sports City", property_type="plot")
-    assert result["status"] == "single" and codes(result) == ["BTK-106"]
-    assert GOLD["ST-15"]["listing"] == "BTK-106"
+    assert result == {"error": "location_unclear", "candidates": ["btk-sports-city"]}
+    assert GOLD["ST-15"]["listing"] == "BTK-106"  # the gold wants it; the resolver does not
+    sure = find(location="Bahria Sports City", property_type="plot")  # a resolved place
+    assert sure["status"] == "single" and codes(sure) == ["BTK-106"]
 
 
 def test_st16_dha_6_houses_are_several_and_never_chosen_for_the_staff():

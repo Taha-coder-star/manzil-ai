@@ -546,27 +546,25 @@ is a 9.2 item and should log field names only.
 5. **Q5 Wording and live run.** Approve the section 8 templates; decide when the live model
    measurement runs (provider quota, the free tier trains on data, spend).
 
-## 15. Pending fixes for the consolidated final pass (recorded 2026-10-14)
+## 15. The three Slice 2 limits: fixed (2026-10-14)
 
-Slice 2 (`app/staff_normalise.py`) is implemented with these known limits; the owner asked to
-fix them together at the end, not slice by slice:
+1. **Asking price next to an advance.** A keyword like advance / deposit / token now belongs to
+   the amount it introduces ("advance 5 lakh"); after an amount it belongs to that amount only
+   when no amount follows ("5 lakh advance"). "8 crore advance 5 lakh" keeps 8 crore; reversed
+   order and advance-only text are tested (advance only: no asking price, so it is missing).
+   Limit: the money parser reads an unseparated "5 lakh 8 crore" as ONE amount (8.05 crore);
+   separate the amounts with a comma or "and".
+2. **"House with upper portion".** A level-qualified portion (upper / lower / ground / first /
+   second / top / "upar") next to another type is part of it, not a second type, unless the text
+   says "ya" / "or"; "ghar ya flat" and "plot or portion" still conflict.
+3. **Re-extraction after a rejected span.** For purpose, type, size, price, bedrooms and bathrooms
+   the backend takes the one phrase of the draft's own text that states it, when there is exactly
+   one value; the field carries `provenance: source_text` and the draft the warning
+   `re_extracted`. Two values (or none) stay conflicted / missing. A rejected location is never
+   guessed (it stays missing). A price span that only names an advance is treated the same way.
 
-1. **Asking price next to an advance.** An amount is excluded as "not asking" when advance /
-   deposit / token / ... is in its clause tail or is the first word after it, so "8 crore advance
-   5 lakh" (the advance word right after the real price) drops the 8 crore. Needs word-order
-   awareness (a keyword binds to the amount it introduces, not the one before it).
-2. **"House with upper portion".** The type-conflict scan treats any second core type word in the
-   text as a second listing type, so "ghar ... upper portion" raises a `property_type` conflict.
-   Needs a portion-level reading ("upper / lower / ground portion" of a house) before the
-   conflict is raised.
-3. **Re-extraction after a rejected span.** Spec section 2.3 step 3 says a rejected span is
-   re-extracted by the backend from the verified source text; slice 2 deliberately gives a
-   rejected span no value (the field is missing). Add the re-extraction from the bound source
-   message only (never from another draft's text), with the same conflict rules, and a test
-   that a rejected span's own words are never trusted.
-
-Slice 3 (duplicates and proposed codes) is implemented as specified; the ST-01 `duplicate_of`
-disagreement with the gold (Q1) is asserted in `tests/test_staff_codes.py` and left open.
+Slice 3 (duplicates and proposed codes) is as specified; the ST-01 `duplicate_of` disagreement
+with the gold (Q1) is asserted in `tests/test_staff_codes.py` and reported by the benchmark.
 
 ## 16. Implementation status and handoff (2026-10-14)
 
@@ -592,3 +590,23 @@ Remaining: (1) the 20-item benchmark runner `app/staff_bench.py` (section 10) wi
 Q1-Q5; (4) `peers` for the `price_unusual` draft warning is not wired (needs the live price band);
 (5) 9.2: Save / Edit / Cancel / Confirm, the real code allocation, photo attach (cards carry no
 buttons); (6) applying 016 to RDS (snapshot first) and the live Gemini run.
+
+
+## 17. Final pass (2026-10-14)
+
+- **Fixture benchmark** (`python -m app.staff_bench`, `bench/staff_spans.json`, hand-written spans,
+  backend rules only, NOT a model score): 19 of 20 items exact (draft 11/11, update 5/6,
+  disambiguation 3/3); 92 of 94 critical fields; 33 of 33 workflow checks. ST-15 misses on purpose:
+  "Sports City" is only similar to "Bahria Sports City", the resolver does not accept it
+  (AMBIGUOUS), so the backend asks ("Kya aap Bahria Sports City keh rahe hain?") and Save stays
+  blocked for a draft. The ST-01 `duplicate_of` disagreement with the gold is reported under
+  `known_gold_disagreements`; the gold is unchanged (sha256 pinned in the test).
+- **price_unusual** is wired: for a draft with purpose, type, place and price, the prices of the
+  agency's ACTIVE listings of that purpose and type inside the place (tenant-scoped rows from
+  `load_listings`) give a band [0.3 x min, 3 x max] (R17 4.7); outside it the draft gets the
+  warning, shown on the card, never a blocker. No inventory, no warning.
+- **Locations:** a similarity match is used only when `location.resolve` returns RESOLVED
+  (its score / margin / length rules); anything else is AMBIGUOUS or UNKNOWN, stays unresolved,
+  and blocks Save (draft) or asks (find_listings). This replaces the single-candidate shortcut of 4b.
+- Still not done: 9.2 (Save / Edit / Cancel / Confirm, code allocation, photo attach); applying 016
+  to RDS; the live model run; owner answers Q1-Q5 and wording approval.

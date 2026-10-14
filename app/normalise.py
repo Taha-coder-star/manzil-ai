@@ -663,6 +663,22 @@ def parse_purpose(text, *, source="text"):
     return Purpose(NONE)
 
 
+def purpose_words(text):
+    """{purpose: the words that state it} for every explicit purpose a text names."""
+    text, found = text or "", {}
+    for value, patterns in (("rent", _RENT), ("sale", _SALE)):
+        for pattern in patterns:
+            match = pattern.search(text)
+            if match:
+                found[value] = match.group()
+                break
+    if "rent" not in found:
+        monthly = _MONTHLY.search(text)
+        if monthly:
+            found["rent"] = monthly.group()
+    return found
+
+
 def purposes_in(text):
     """Every explicit purpose a text names ({"sale"}, {"rent"} or both); a monthly marker
     counts as rent. parse_purpose returns only the first."""

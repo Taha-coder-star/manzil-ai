@@ -32,6 +32,8 @@ WORDING = {
     "update": "{code}: {changes}.",
     "update_note": "Review: tabdeeli abhi save nahi hui.",
     "unusual": "Qeemat purani qeemat se bohat alag hai - dobara check karein.",
+    "price_unusual": "Qeemat is area ki aam qeemat se bohat alag hai - dobara check karein.",
+    "place_hint": "Location: kya {places}? Poora naam likh kar bhejein.",
     "pick_head": "Kaunsi property? {n} listings milin:",
     "pick_tail": "Listing code likh kar dobara bhejein, jaise #{code} sold.",
 }
@@ -48,6 +50,8 @@ NOTICES = {
     "staff_update_none": "Is description se koi listing nahi mili.",
     "staff_update_not_found": "{code} nahi mili.",
     "staff_update_invalid": "{code}: {reason}.",
+    "staff_find_confirm_place": ("Kya aap {place} keh rahe hain? Poora naam likh kar dobara "
+                                 "bhejein."),
     "staff_update_pick": "Kaunsi listing? Listing code likh kar dobara bhejein.",
     "staff_one_at_a_time": "Ek waqt mein sirf ek listing ki tabdeeli ho sakti hai.",
     "staff_find_unclear": ("Description samajh nahi aayi (jagah, type ya size). Listing code "
@@ -120,9 +124,18 @@ def draft_card(stored, total, gazetteer, photos):
         lines.append(WORDING["conflict"].format(
             label=FIELD_LABELS.get(conflict["field"], conflict["field"]),
             values=_conflict_values(conflict)))
+    where_field = fields.get("location") or {}
+    if where_field.get("candidates"):
+        ids = requirements.id_map(gazetteer)
+        names = [gazetteer.places[ids[str(c["location_id"])]].display_name
+                 for c in where_field["candidates"] if str(c["location_id"]) in ids]
+        if names:
+            lines.append(WORDING["place_hint"].format(places=" ya ".join(names)))
     if payload["missing"]:
         lines.append(WORDING["missing"].format(
             fields=", ".join(FIELD_LABELS.get(f, f) for f in payload["missing"])))
+    if "price_unusual" in payload.get("warnings", ()):
+        lines.append(WORDING["price_unusual"])
     if payload["duplicates"]:
         lines.append(WORDING["duplicate"].format(codes=", ".join(
             d["code"] if "code" in d else f"draft {d['draft']}" for d in payload["duplicates"])))

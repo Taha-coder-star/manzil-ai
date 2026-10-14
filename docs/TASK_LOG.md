@@ -229,3 +229,5 @@ Entries are historical snapshots; later entries supersede earlier status stateme
 2026-10-14: Task 8.2 slice 4a implemented locally (uncommitted): migration 016_listing_draft_turn_identity.sql (superseded status, source_turn_id + ordinal, FK, CHECKs, partial unique index; 001-015 byte-identical), app/staff_tools.save_drafts, staff_normalise.to_payload. Not applied anywhere but disposable PostgreSQL; production application needs the owner (snapshot first).
 
 2026-10-14: Task 8.2 slices 4b (find_listings / propose_update, supersede + retry identity) and 4c (text-only staff cards, engine wiring, overlong-message refusal) implemented locally; migration 016 not applied to RDS; no live call. Handoff in docs/STAFF_EXTRACTION.md section 16.
+
+2026-10-14: Task 8.2 final pass: Slice 2 limits fixed, fixture benchmark runner (19/20 exact, ST-15 unresolved on purpose, ST-01 duplicate disagreement reported), price_unusual wired, similarity locations stay unresolved. See docs/STAFF_EXTRACTION.md sections 15 and 17.

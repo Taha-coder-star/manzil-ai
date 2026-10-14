@@ -78,12 +78,42 @@ def _head(text, end):
     return words[0] if words else ""
 
 
+_LEVEL_PORTION = re.compile(
+    r"\b(?:upper|lower|ground|first|second|top)\s+portion\b|\bupar\s+(?:ka\s+)?portion\b",
+    re.IGNORECASE)
+_EITHER = re.compile(r"\b(?:ya|or)\b", re.IGNORECASE)
+
+
+def _types(text):
+    """Property types a text names. "house with upper portion" is one house (the upper
+    portion is part of it); "ghar ya upper portion" still names two."""
+    found = requirements.parse_types(text)
+    if ("portion" in found and len(found) > 1 and _LEVEL_PORTION.search(text or "")
+            and not _EITHER.search(text or "")):
+        found = [kind for kind in found if kind != "portion"]
+    return found
+
+
+def _clause_start(text, start):
+    last = 0
+    for delimiter in _DELIMITERS.finditer(text, 0, start):
+        last = delimiter.end()
+    return last
+
+
 def _amounts(text):
-    """[(pkr, raw)] asking-price candidates of a text."""
-    out = []
-    for m in normalise.find_money(text):
-        around = _tail(text, m.start) + " " + _head(text, m.end)
-        if not any(word in around for word in _NOT_ASKING):
+    """[(pkr, raw)] asking-price candidates of a text. A word like advance / deposit / token
+    belongs to the amount it introduces ("advance 5 lakh"), or, after the amount, to that
+    amount ("5 lakh advance") unless another amount follows it ("8 crore advance 5 lakh":
+    the 8 crore is still the asking price)."""
+    found, out = normalise.find_money(text), []
+    for i, m in enumerate(found):
+        previous = found[i - 1].end if i else 0
+        lead = text[max(_clause_start(text, m.start), previous):m.start].casefold()
+        later = found[i + 1].start if i + 1 < len(found) else None
+        trailing = any(word in _head(text, m.end) for word in _NOT_ASKING) and not (
+            later is not None and any(w in text[m.end:later].casefold() for w in _NOT_ASKING))
+        if not (any(word in lead for word in _NOT_ASKING) or trailing):
             out.append((int(m.value.to_integral_value()), m.text))
     return out
 
@@ -252,15 +282,71 @@ def _normalise_size(span, kind, marla_sqft, texts):
     return field, None, (("unit_assumed",) if area.unit_source == "default" else ())
 
 
+REEXTRACT = {"purpose": "purpose", "property_type": "property_type", "size": "size",
+             "price": "price_pkr", "bedrooms": "bedrooms", "bathrooms": "bathrooms"}
+
+
+def _reextract(name, scan, marla_sqft):
+    """The one phrase of the draft's own text that gives `name`, else None: two different
+    values (or none) are left to the conflict scan and the missing list."""
+    if name == "price":
+        found = {pkr: raw for t in scan for pkr, raw in _amounts(t)}
+        return next(iter(found.values())) if len(found) == 1 else None
+    if name == "size":
+        areas = [a for t in scan for a in _areas(t, marla_sqft)]
+        _, clash, _ = _normalise_size(None, None, marla_sqft, scan)
+        return areas[0]["raw"] if areas and clash is None else None
+    if name in ("bedrooms", "bathrooms"):
+        key = "bed" if name == "bedrooms" else "bath"
+        rooms = [r for t in scan for r in find_rooms(t)[key]]
+        return rooms[0][0] if rooms and not _distinct(rooms) else None
+    if name == "purpose":
+        words = {}
+        for t in scan:
+            words.update(normalise.purpose_words(t))
+        return next(iter(words.values())) if len(words) == 1 else None
+    kinds = {k for t in scan for k in _types(t)} & CORE_TYPES
+    if len(kinds) == 1:
+        for t in scan:
+            for word in re.findall(r"[^\W\d_]+", t):
+                if _types(word) and _types(word)[0] in kinds:
+                    return word
+    return None
+
+
+def _rebuild_spans(spans, rejected, scan, marla_sqft):
+    """Fill the spans a rejected model span left empty from the verified source text, or
+    drop a price span that only names an advance. Returns the names re-extracted."""
+    redo = {name for name in rejected if name in REEXTRACT}
+    if "price" in spans:
+        asked = {pkr for t in scan for pkr, _ in _amounts(t)}
+        if not {pkr for pkr, _ in _amounts(spans["price"])} & asked:
+            spans.pop("price")
+            redo.add("price")
+    again = set()
+    for name in sorted(redo):
+        raw = _reextract(name, scan, marla_sqft)
+        if raw:
+            spans[name], again = raw, again | {name}
+    return again
+
+
+def _unusual(price, peers):
+    return bool(price and peers and not (
+        requirements.PLAUSIBLE_LOW * min(peers) <= price <= requirements.PLAUSIBLE_HIGH
+        * max(peers)))
+
+
 def normalise_draft(bound, gazetteer, *, marla_sqft=225, city_code="KHI", peers=None):
     """A BoundDraft -> Draft. Only verified spans give values (a rejected span gives
     none); the draft's own text is scanned independently for conflicting values (R-12).
     peers: prices of live listings of that purpose / type / place, for price_unusual."""
-    spans, scan = bound.spans, bound.scan
+    spans, scan = dict(bound.spans), bound.scan
     fields, conflicts, warnings = {}, [], []
+    again = _rebuild_spans(spans, bound.rejected, scan, marla_sqft)
 
-    named = requirements.parse_types(spans.get("property_type", ""))
-    kinds = ({k for t in scan for k in requirements.parse_types(t)} & CORE_TYPES) | set(named)
+    named = _types(spans.get("property_type", ""))
+    kinds = ({k for t in scan for k in _types(t)} & CORE_TYPES) | set(named)
     kind = None
     if len(kinds) > 1:
         conflicts.append(_conflict("property_type", [(k, k) for k in sorted(kinds)]))
@@ -335,9 +421,12 @@ def normalise_draft(bound, gazetteer, *, marla_sqft=225, city_code="KHI", peers=
                                      "removed": len(removed)}
 
     price = (fields.get("price_pkr") or {}).get("value")
-    if price and peers and not (requirements.PLAUSIBLE_LOW * min(peers)
-                                <= price <= requirements.PLAUSIBLE_HIGH * max(peers)):
+    if _unusual(price, peers):
         warnings.append("price_unusual")
+    for name in again:  # provenance: this value came from the source text, not a model span
+        if REEXTRACT[name] in fields:
+            fields[REEXTRACT[name]]["provenance"] = "source_text"
+            warnings.append("re_extracted")
     return Draft(bound.ordinal, bound.source_message, fields,
                  missing_fields(fields, conflicts), tuple(conflicts), tuple(dict.fromkeys(warnings)), bound.rejected)
 
@@ -438,6 +527,22 @@ def proposed_codes(drafts, listing_codes, gazetteer):
     return out
 
 
+def _peers(draft, listings, gazetteer):
+    """Prices of the agency's ACTIVE listings of the draft's purpose and type within its
+    place (R17 4.7); [] when the draft lacks one of them."""
+    f = draft.fields
+    node = (f.get("location") or {}).get("location_id")
+    kind, purpose = (f.get("property_type") or {}).get("value"), (f.get("purpose") or {}).get(
+        "value")
+    if not (node and kind and purpose):
+        return []
+    return [r["price_pkr"] for r in listings
+            if r["status"] == "active" and r["purpose"] == purpose
+            and r["property_type"] == kind and r["price_pkr"] and r["location_id"] is not None
+            and (gazetteer.is_within(r["location_id"], node)
+                 or gazetteer.is_within(node, r["location_id"]))]
+
+
 def annotate(drafts, listings, gazetteer):
     """The drafts with their duplicate warnings (against the listings and against each
     other) and proposed codes. Duplicates never change the save blockers."""
@@ -451,9 +556,13 @@ def annotate(drafts, listings, gazetteer):
                 reasons = _match(rows[draft.ordinal], rows[other.ordinal], gazetteer)
                 if reasons:
                     found.append({"draft": other.ordinal, "reasons": reasons})
+        extra = (("duplicate",) if found else ()) + (
+            ("price_unusual",) if "price_unusual" not in draft.warnings and _unusual(
+                (draft.fields.get("price_pkr") or {}).get("value"),
+                _peers(draft, listings, gazetteer)) else ())
         out.append(replace(
             draft, duplicates=tuple(found), proposed_code=codes.get(draft.ordinal),
-            warnings=draft.warnings + (("duplicate",) if found else ())))
+            warnings=draft.warnings + extra))
     return out
 
 
@@ -507,10 +616,7 @@ def find_candidates(criteria, rows, gazetteer, *, marla_sqft=225, city_code="KHI
     node = kind = purpose = size = price = beds = None
     if "location" in criteria:
         field = _normalise_location(criteria["location"], gazetteer, city_code)
-        node = field.get("location_id")
-        if node is None and field["status"] == location.AMBIGUOUS \
-                and len(field.get("candidates", ())) == 1:
-            node = field["candidates"][0]["location_id"]  # one place, matched by similarity
+        node = field.get("location_id")  # only a RESOLVED place; a similarity guess is asked
         if node is None and field.get("reason") != "too_broad":
             return {"error": "location_unclear", "candidates": [
                 c["location_id"] for c in field.get("candidates", ())]}
@@ -595,3 +701,33 @@ def check_update(prop, changes):
             return {"error": "rented_needs_rent"}
         out["status"] = {"from": prop["status"], "to": new}
     return {"changes": out, "warnings": warnings}
+
+
+def parse_changes(verified):
+    """The verified change spans of a proposal as values: {"changes": {"price_pkr": int,
+    "status": str}, "raw": {...}} or {"error": "invalid_change"} (a span that names no single
+    amount or status)."""
+    changes, raw = {}, {}
+    for item in verified:
+        if item["field"] == "price":
+            amounts = {pkr for pkr, _ in _amounts(item["span"])}
+            key, value = "price_pkr", (amounts.pop() if len(amounts) == 1 else None)
+        else:
+            key, value = "status", parse_status(item["span"])
+        if value is None:
+            return {"error": "invalid_change"}
+        changes[key], raw[key] = value, item["span"]
+    return {"changes": changes, "raw": raw}
+
+
+def resolve_target(result, found):
+    """None when a proposal's target may be used, else why not: a code the staff member wrote
+    is used; one they did not write only when it was the single candidate of the same turn;
+    a code taken from a choice of several is never accepted."""
+    if result["target_in_text"]:
+        return None
+    status = (found or {}).get("status")
+    if status in ("single", "direct") and result["target"] in {
+            r["code"] for r in found["candidates"]}:
+        return None
+    return "ambiguous_target" if status in ("several", "too_many") else "target_not_in_text"

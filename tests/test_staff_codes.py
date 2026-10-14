@@ -292,3 +292,17 @@ def test_annotate_adds_codes_and_duplicates_without_changing_blockers():
     assert [bool(d.duplicates) for d in out] == [True, False]
     assert out[0].blockers() == () and out[1].blockers() == (
         "missing:price_pkr", "missing:bedrooms")
+
+
+def test_a_price_far_from_the_agencys_active_prices_is_a_warning_and_never_a_blocker():
+    spans = dict(ST["ST-02"][1], price="100 crore")
+    text = ST["ST-02"][0].replace("1 crore 5 lakh", "100 crore")
+    [odd] = sn.annotate([build(text, spans)], ROWS, GAZETTEER)  # Bahria houses: 1.1 - 3.2 crore
+    assert "price_unusual" in odd.warnings and odd.blockers() == ()
+    [fine] = sn.annotate([build(*ST["ST-02"])], ROWS, GAZETTEER)
+    assert "price_unusual" not in fine.warnings
+    # only active listings of the same purpose, type and place count; with none, no guard
+    other = [r for r in ROWS if r["location_id"] != "btk-p10" and r["property_type"] != "house"]
+    assert "price_unusual" not in sn.annotate([build(text, spans)], other, GAZETTEER)[0].warnings
+    sold = [dict(r, status="sold") for r in ROWS]
+    assert "price_unusual" not in sn.annotate([build(text, spans)], sold, GAZETTEER)[0].warnings

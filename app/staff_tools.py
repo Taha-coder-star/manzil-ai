@@ -240,6 +240,10 @@ class StaffBinding:
         return ai_tools.ToolResult("draft_listing", True, response, payloads=payloads,
                                    trusted_codes=codes)
 
+    def _place(self, location_id):
+        ids = {str(place_id): place_id for place_id in self.gazetteer.places}
+        return self.gazetteer.places[ids[str(location_id)]].display_name
+
     def _stored(self, kind):
         with tenant_transaction(self.conn, self.turn.agency_id):
             self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
@@ -252,6 +256,10 @@ class StaffBinding:
         found = staff_normalise.find_candidates(
             result["spans"], load_listings(self.conn, self.turn.agency_id), self.gazetteer,
             marla_sqft=self.marla_sqft, city_code=self.city_code)
+        if found.get("error") == "location_unclear" and len(found["candidates"]) == 1:
+            place = self._place(found["candidates"][0])  # one similar place: ask, don't assume
+            return self._fail("find_listings", "location_unclear", ai_tools.Notice(
+                "staff_find_confirm_place", (("place", place),)))
         if "error" in found:
             return self._fail("find_listings", found["error"], "staff_find_unclear")
         self.found = found
@@ -276,23 +284,16 @@ class StaffBinding:
         if "error" in result:
             return ai_tools._error("propose_update", result["error"])
         code = result["target"]
-        if not result["target_in_text"]:
-            only = self.found and self.found["status"] in ("single", "direct")
-            if not only or code not in {r["code"] for r in self.found["candidates"]}:
-                several = self.found and self.found["status"] in ("several", "too_many")
-                return self._fail(
-                    "propose_update", "ambiguous_target" if several else "target_not_in_text",
-                    None if several else "staff_update_pick")  # a list was already sent
-        changes, raw = {}, {}
-        for item in result["verified"]:
-            field, span = item["field"], item["span"]
-            amounts = {pkr for pkr, _ in staff_normalise._amounts(span)}
-            value = (amounts.pop() if len(amounts) == 1 else None) if field == "price"                 else staff_normalise.parse_status(span)
-            if value is None:
-                return self._invalid(code, "invalid_change")
-            key = "price_pkr" if field == "price" else "status"
-            changes[key], raw[key] = value, span
-        outcome = propose_update_draft(self.conn, self.turn, code, changes, raw)
+        refused = staff_normalise.resolve_target(result, self.found)
+        if refused:
+            return self._fail("propose_update", refused,
+                              None if refused == "ambiguous_target"  # a list was already sent
+                              else "staff_update_pick")
+        parsed = staff_normalise.parse_changes(result["verified"])
+        if "error" in parsed:
+            return self._invalid(code, parsed["error"])
+        outcome = propose_update_draft(self.conn, self.turn, code, parsed["changes"],
+                                       parsed["raw"])
         if outcome.get("error") == "target_not_found":
             return self._fail("propose_update", "target_not_found",
                               ai_tools.Notice("staff_update_not_found", (("code", code),)),
