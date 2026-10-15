@@ -17,6 +17,10 @@ read timeout.
 
 Residual gate window: a control-state change that commits after step 1 but
 before Meta accepts the call is not seen; it is bounded by one HTTP call.
+
+Templates (Task 11.1: new_lead_alert) are the only messages Meta delivers outside the
+24 h window, so a template payload skips the window check. It must be sent with
+ai_generated=False: templates carry handoff notices, never model output.
 """
 
 import logging
@@ -59,7 +63,10 @@ def send_message(
     'unknown' (ambiguous). Raises RetryableSendError after putting the row back
     to 'pending', and PermanentSendError after recording 'failed'.
     media_source: (table, id) of the stored image an image payload shows (app.media).
+    A template payload needs ai_generated=False (ValueError otherwise).
     """
+    if payload["type"] == "template" and ai_generated:
+        raise ValueError("a template is a system message: pass ai_generated=False")
     outbound_id, status = _prepare(
         conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated,
         media_source,
@@ -155,8 +162,8 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
         if ai_generated and mode != "ai":
             _set_status(conn, outbound_id, "cancelled", error_code="control_gate")
             return outbound_id, "cancelled"
-        if not in_window:
-            # Session messages need an open 24 h window; templates come later.
+        if not in_window and payload["type"] != "template":
+            # Session messages need an open 24 h window; a template does not.
             _set_status(conn, outbound_id, "failed", error_code="outside_window")
             return outbound_id, "failed"
 

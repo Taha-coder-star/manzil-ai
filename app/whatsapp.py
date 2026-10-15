@@ -9,6 +9,7 @@ Never log the access token, request or response bodies, or recipient numbers.
 
 import hashlib
 import logging
+import re
 from urllib.parse import urlsplit
 
 import httpx
@@ -34,6 +35,8 @@ ROW_TITLE_MAX = 24
 ROW_DESCRIPTION_MAX = 72
 SECTION_TITLE_MAX = 24
 CTA_DISPLAY_TEXT_MAX = 20
+TEMPLATE_NAME = re.compile(r"[a-z0-9_]{1,512}")
+TEMPLATE_PARAM_REFUSED = re.compile(r"[\n\t]| {5,}")
 # Interactive media carousel (Meta docs read 2026-10-10; docs/DECISIONS.md).
 CAROUSEL_CARDS_MIN = 2
 CAROUSEL_CARDS_MAX = 10
@@ -277,9 +280,32 @@ def cta_url(body, display_text, url, *, header=None, footer=None):
     return {"type": "interactive", "interactive": _decorate(interactive, header, footer)}
 
 
+def template(name, language, body_params=()):
+    """An approved message template (Task 11.1: new_lead_alert to a broker whose 24 h
+    window is closed). body_params fill {{1}}, {{2}}, ... in order; Meta refuses a
+    parameter with a line break, a tab or more than four spaces in a row (132018)."""
+    if not TEMPLATE_NAME.fullmatch(name or ""):
+        raise ValueError("template name must be lowercase letters, digits and underscores")
+    _check_text(language, "template language", 15)
+    content = {"name": name, "language": {"code": language}}
+    params = []
+    for value in body_params:
+        _check_text(value, "template parameter", INTERACTIVE_BODY_MAX)
+        if TEMPLATE_PARAM_REFUSED.search(value):
+            raise ValueError("template parameter has a line break, tab or long space run")
+        params.append({"type": "text", "text": value})
+    if params:
+        content["components"] = [{"type": "body", "parameters": params}]
+    return {"type": "template", "template": content}
+
+
 def summary(payload):
     """The human-readable text of a built payload, for the message log."""
     kind = payload["type"]
+    if kind == "template":
+        params = [p["text"] for c in payload["template"].get("components", ())
+                  for p in c.get("parameters", ())]
+        return " · ".join([f"[template {payload['template']['name']}]", *params])
     if kind == "text":
         return payload["text"]["body"]
     if kind == "image":

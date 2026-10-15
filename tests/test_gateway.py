@@ -199,6 +199,37 @@ def test_closed_window_blocks_session_messages(gw):
     ]
 
 
+def test_template_is_sent_outside_the_window_and_past_the_gate(gw):
+    # Task 11.1: new_lead_alert reaches a broker whose window is closed, even while
+    # their conversation is not with the AI; it is never an AI message.
+    gw.deliver(messages=[text_message("wamid.IN1")])
+    gw.drain()
+    conv = conversation_id(gw)
+    gw.query(
+        "UPDATE conversation SET last_customer_message_at = now() - interval '25 hours', "
+        "mode = 'human' RETURNING id"
+    )
+    alert = whatsapp.template("new_lead_alert", "en", ["L-01"])
+    with pytest.raises(ValueError):
+        outbound.send_message(gw.conn, gw.client, gw.agency, conv, CUSTOMER, alert, "t0")
+    result = outbound.send_message(
+        gw.conn, gw.client, gw.agency, conv, CUSTOMER, alert, "t1", ai_generated=False
+    )
+    assert result.status == "sent"
+    assert gw.client.sent[-1] == (CUSTOMER, alert)
+    assert gw.query(
+        "SELECT o.status, m.message_type, m.text_body FROM outbound_message o "
+        "JOIN message m ON m.id = o.message_id WHERE o.dedupe_key = 't1'"
+    ) == [("sent", "template", "[template new_lead_alert] · L-01")]
+    assert gw.query("SELECT count(*) FROM outbound_message WHERE dedupe_key = 't0'") == [(0,)]
+    # A session message to the same closed window still fails.
+    session = outbound.send_message(
+        gw.conn, gw.client, gw.agency, conv, CUSTOMER, whatsapp.text("card"), "t2",
+        ai_generated=False,
+    )
+    assert session.status == "failed"
+
+
 def test_retryable_error_requeues_then_sends_once(gw):
     gw.client.outcomes = [whatsapp.RetryableSendError("http_500")]
     gw.deliver(messages=[text_message("wamid.IN1")])
