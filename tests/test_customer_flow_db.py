@@ -262,14 +262,9 @@ def test_a_question_about_a_listing_is_answered_from_its_row_or_the_agent(st):
     assert button_ids(reply) == ["handoff:request"]
 
 
-def test_the_agent_button_says_truthfully_that_no_agent_was_told(st):
+def test_listing_taps_are_answered_in_code(st):
+    # visit: and handoff:request open a handoff (Task 11.1, tests/test_handoff_db.py).
     scenario_2(st)
-    assert sent_text(tap(st, "handoff:request")) == TEMPLATES["handoff_unavailable"]
-
-
-def test_visit_and_listing_taps_are_answered_in_code(st):
-    scenario_2(st)
-    assert sent_text(tap(st, "visit:DH6-101")) == TEMPLATES["visit_unavailable"]
     assert "DH6-102" in sent_text(tap(st, "listing:DH6-102"))
 
 

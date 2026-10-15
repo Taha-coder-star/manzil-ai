@@ -837,6 +837,7 @@ def test_every_reply_is_an_approved_template_without_listing_codes():
         "draft_listing": {"drafts": [{"size": "x"}]}, "find_listings": {"location": "x"},
         "propose_update": {"target": {"code": "DH6-101"},
                            "changes": [{"field": "status", "span": "x"}]},
+        "request_handoff": {"reason": "visit"},
     }
 
     def context(route, name):

@@ -16,6 +16,12 @@ code paths of the customer's button taps (tap(), never the model):
   been sent yet (media_sent), in sort order, captioned "#n · CODE".
 - get_property: a question about one listing, answered from its public row (app.details);
   the fields come from the customer's own words (details.field_for), never the model.
+- request_handoff (Task 11.1, R-31): the listing(s) the customer means, then app.handoff
+  opens the lead and the pending handoff. Only the customer's own reference (a quoted
+  card, a code, a position or description in their words, a tapped button) names a
+  listing; focus does not, so "visit karni hai" after several cards asks "Kaunsi property
+  ke liye visit?" with every shown listing and "Sab". The reply is one SYSTEM entry (the
+  handoff message with the wa.me CTA); everything else of that turn is dropped.
 
 Every customer-visible fact is rendered from a re-fetched DB row; facts collects what was
 rendered for the engine's grounding check (app.grounding.check_payloads). The model sees
@@ -32,6 +38,7 @@ from app import (
     customer_reply,
     details,
     grounding,
+    handoff,
     references,
     render,
     requirements,
@@ -59,14 +66,22 @@ QUESTION_ORDER = ("location_ambiguous", "location_confirm", "location_reask", "p
                   "type_unclear", "size_unit_ask", "size_ask", "budget_operator_ask",
                   "budget_unclear", "budget_implausible", "budget_ask")
 ECHO_TAP = re.compile(r"echo:(?:yes:(\d{1,9})|edit)")
+# Task 11.1: a row of the "which property" question: the reason it was asked for, then
+# the listing or "all" (the shown ones, R-31 "Dono").
+_REASONS = "|".join(handoff.REASONS)
+HANDOFF_TAP = re.compile(r"handoff:(" + _REASONS + r"):([A-Z0-9]{2,4}-[0-9]{3}|all)")
 TAP = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})"
                  r"|clarify:(location):(\d{1,2}|none)|clarify:(purpose):(sale|rent)"
-                 r"|(nomatch):(nearby|budget)|(handoff):(request)|echo:(?:yes:\d{1,9}|edit)")
+                 r"|(nomatch):(nearby|budget)|(handoff):(request)|echo:(?:yes:\d{1,9}|edit)"
+                 r"|handoff:(?:" + _REASONS + r"):(?:[A-Z0-9]{2,4}-[0-9]{3}|all)")
 
 # New customer wording of 10.1 (awaits owner approval; docs/RENDERER.md section 2).
 TEXT = {
-    ENGLISH: {"which": "Which property do you mean?", "choose": "Choose"},
-    render.ROMAN_URDU: {"which": "Aap kaunsi property keh rahe hain?", "choose": "Chunein"},
+    ENGLISH: {"which": "Which property do you mean?", "choose": "Choose",
+              # Task 11.1 (awaits owner approval)
+              "which_visit": "Which property is the visit for?", "all": "All of them"},
+    render.ROMAN_URDU: {"which": "Aap kaunsi property keh rahe hain?", "choose": "Chunein",
+                        "which_visit": "Kaunsi property ke liye visit?", "all": "Sab"},
 }
 
 
@@ -106,6 +121,7 @@ class CustomerBinding:
         self.asked = False      # a clarification with answer buttons is in the reply
         self.echoed = False     # the voice echo question is in the reply (Task 10.2)
         self.results = False    # listings or the honest no-match are in the reply
+        self.handoff = None     # Task 11.1: the SYSTEM entry of a handoff in this turn
         self.facts = grounding.Facts()
         self._language = language
 
@@ -308,6 +324,68 @@ class CustomerBinding:
         return self._result("get_property", {"status": "ok"}, [payload],
                             self._listing_facts(item), [item.code])
 
+    # -- request_handoff (Task 11.1) --
+
+    def request_handoff(self, args, context, items=None, reason=None):
+        reason = reason or args.get("reason") or "agent"
+        if items is None:
+            # Only the customer's words name a listing here (R-31): no model position, no
+            # focus. Several shown and nothing named -> ask.
+            ref = self._resolve({"description": args.get("description")})
+            if ref.status == references.FOUND and ref.via in ("quote", "position",
+                                                               "description"):
+                items = ref.items
+            elif ref.status == references.AMBIGUOUS and (self.wamids
+                                                          or args.get("description")):
+                return self._which_handoff(ref.items, reason)
+            else:
+                items = self._shown()
+                if len(items) > 1:
+                    return self._which_handoff(items, reason)
+        with tenant_transaction(self.conn, self.turn.agency_id):
+            opened = handoff.open_handoff(self.conn, self.turn.conversation_id, items, reason)
+        if opened.status == handoff.NO_AGENT:
+            return self._result("request_handoff", {"status": "no_agent"},
+                                notice="handoff_no_agent")
+        self.handoff = customer_reply.system_entry(
+            handoff.customer_message(opened, self.language))
+        return self._result("request_handoff", {"status": opened.status,
+                                                "lead": opened.lead_code},
+                            [self.handoff], codes=[i.code for i in items])
+
+    def _shown(self):
+        with tenant_transaction(self.conn, self.turn.agency_id):
+            self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+            return references.shown_items(self.conn, self.turn.conversation_id)
+
+    def _which_handoff(self, items, reason):
+        """R-31: "Kaunsi property ke liye visit?" with every option and "Sab"."""
+        words = TEXT[self.language]
+        rows = [(f"handoff:{reason}:{i.code}", ref_text(i), None)
+                for i in items[:whatsapp.LIST_ROWS_MAX - 1]]
+        rows.append((f"handoff:{reason}:all", words["all"], None))
+        pairs = {i.position: i.code for i in items if i.position}
+        facts = grounding.Facts(codes=frozenset(i.code for i in items),
+                                positions=frozenset(pairs), position_codes=pairs)
+        question = words["which_visit"] if reason == "visit" else words["which"]
+        payload = whatsapp.list_message(question, words["choose"], [(None, rows)])
+        self.asked = True
+        return self._result("request_handoff", {"status": "ambiguous", "options": [
+            {"position": i.position, "code": i.code} for i in items]},
+            [payload], facts, [i.code for i in items])
+
+    def _handoff_tap(self, reason, target):
+        if target == "all":
+            items = self._shown()
+        else:
+            ref = references.resolve(self.conn, self.turn.agency_id,
+                                     self.turn.conversation_id, text=target)
+            if ref.status != references.FOUND:
+                return [self._result("request_handoff", {"status": "not_found"},
+                                     notice="listing_unknown")]
+            items = ref.items
+        return [self.request_handoff({}, None, items=items, reason=reason)]
+
     # -- taps (handled in code, never sent to the model) --
 
     def tap(self, reply_id, service):
@@ -316,6 +394,9 @@ class CustomerBinding:
         match = TAP.fullmatch(reply_id or "")
         if match is None:
             return None
+        chosen = HANDOFF_TAP.fullmatch(reply_id)
+        if chosen:
+            return self._handoff_tap(*chosen.groups())
         echo = ECHO_TAP.fullmatch(reply_id)
         if echo and echo.group(1) is None:   # [Badlein]: the customer sends the correction
             return [self._result("echo", {"status": "edit"}, notice="echo_edit")]
@@ -340,11 +421,12 @@ class CustomerBinding:
                 return [self.send_property_photos({}, None, ref.item)]
             if card == "listing":
                 return [self.details_card(ref.item)]
+            if card == "visit":   # the card's own button names the listing (R-31)
+                return [self.request_handoff({}, None, items=ref.items, reason="visit")]
             return [self._result(card, {"status": "not_available"},
                                  notice=f"{card}_unavailable")]
-        if handoff:
-            return [self._result("request_handoff", dict(ai_tools.STUB_RESPONSE),
-                                 notice="handoff_unavailable")]
+        if handoff:   # [Agent se baat]: the same resolution as the model's request
+            return [self.request_handoff({}, None)]
         if nomatch and step == "budget":
             # "Budget barhayein": ask for the new maximum; never move it by a percentage.
             slots, _, _ = self._state()

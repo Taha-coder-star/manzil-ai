@@ -179,6 +179,11 @@ def find(conn, conversation_id, *, text="", wamids=(), position=None, descriptio
     return Ref(NONE)
 
 
+def shown_items(conn, conversation_id):
+    """Inside a tenant transaction: the latest search's shown listings, in position order."""
+    return tuple(_item(i) for i in _latest_run(conn, conversation_id).items)
+
+
 def resolve(conn, agency_id, conversation_id, **kwargs):
     """find() in its own tenant transaction; a hit named by the customer becomes the
     conversation's focus (selected_via)."""
