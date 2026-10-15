@@ -1173,10 +1173,13 @@ class RequirementService:
         return None
 
     def _shown(self, conn, turn):
+        # Task 8.1: the latest search whose results were shown (app.search.record_shown);
+        # a no-match or unsent search never hides what the customer last saw.
         run = conn.execute(
-            f"SELECT id FROM search_run WHERE conversation_id = %s "
-            f"AND created_at > now() - interval '{SHOWN_WINDOW}' "
-            f"ORDER BY created_at DESC LIMIT 1", (turn.conversation_id,)).fetchone()
+            f"SELECT r.id FROM search_run r WHERE r.conversation_id = %s "
+            f"AND r.created_at > now() - interval '{SHOWN_WINDOW}' "
+            f"AND EXISTS (SELECT 1 FROM shown_item si WHERE si.search_run_id = r.id) "
+            f"ORDER BY r.created_at DESC LIMIT 1", (turn.conversation_id,)).fetchone()
         if run is None:
             return None
         rows = conn.execute(
