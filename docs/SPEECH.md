@@ -127,5 +127,6 @@ Findings for the Day 8 benchmark:
 3. Silent control: "Awaaz clear nahi aayi. Dobara bhej dein ..."; a single Scribe row
    (`no_speech`) and no Gemini row.
 
-Out of scope here: the voice-critical echo-confirm (10.2), voice-then-text ordering tests
-(12.2), the fault-injection suite (13.3), the STT benchmark (Day 8), staff voice.
+Out of scope here: voice-then-text ordering tests beyond 10.2's (12.2), the fault-injection
+suite (13.3), the STT benchmark (Day 8), staff voice. The voice-critical echo before a search is
+Task 10.2: docs/VOICE_TURN.md.

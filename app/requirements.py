@@ -44,7 +44,7 @@ from datetime import timedelta
 import psycopg
 from psycopg.types.json import Jsonb
 
-from app import ai_tools, location, normalise
+from app import ai_tools, cards, location, normalise
 from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.gazetteer import GazetteerUnavailable
@@ -174,6 +174,26 @@ class Evidence:
     source: str
     weak: bool = False
     reextracted: bool = False
+    flags: tuple = ()    # voice only: extra echo reasons (llm_uncertain)
+    after: tuple = ()    # the message text right after each occurrence of the span
+    #                      (Task 10.2: an operator the model left out, "8 crore" + "tak")
+
+
+def evidence(src, *, reextracted=False, uncertain=False, span=None):
+    """The Evidence of a verified span's message; uncertain: the model marked the op
+    uncertain (R16 7.4 b), which only counts for a heard value (it can only add an echo)."""
+    flags = ("llm_uncertain",) if src.kind == "voice" and uncertain else ()
+    return Evidence(src.kind, src.weak, reextracted, flags, _after(span, src.text))
+
+
+def _after(span, text):
+    """The text after each occurrence of span in text (matched as span_in_turn does: case-
+    and whitespace-insensitive), in order; () when there is none."""
+    words = (span or "").split()
+    if not words:
+        return ()
+    pattern = r"\s+".join(map(re.escape, words))
+    return tuple(text[m.end():] for m in re.finditer(pattern, text or "", re.IGNORECASE))
 
 
 def verify_span(span, sources):
@@ -189,7 +209,9 @@ def verify_span(span, sources):
 def verify_ops(ops, sources):
     """One Evidence per op (None = the span is not in the turn, R-22)."""
     found = [verify_span(op["raw_span"], sources) for op in ops]
-    return [Evidence(src.kind, src.weak) if src else None for src in found]
+    return [evidence(src, uncertain=op.get("uncertain") is True, span=op["raw_span"])
+            if src else None
+            for op, src in zip(ops, found, strict=True)]
 
 
 def stt_weak(meta):
@@ -198,6 +220,29 @@ def stt_weak(meta):
     meta = meta or {}
     return bool(meta.get("fallback_reason") or meta.get("rejected_transcript")
                 or meta.get("truncated"))
+
+
+# Task 10.2: a 7.3 question about these slots keeps the search waiting until it is answered
+# (an applied or cleared value; no expiry: an old question is asked again, never dropped);
+# asked in this order (7.3's own order: type before the rest, the budget last). Location /
+# purpose use pending_clarification.
+HOLD_SLOTS = ("property_types", "size", "budget")
+
+
+# Task 10.2 (R16 7.4, Demo Scope C4): the voice-critical slots, and the echo reasons that
+# make a heard one uncertain. An inferred purpose alone is not one of them: scenario 2
+# ("echo only if uncertain") answers it with the purpose_inferred note, not a question.
+VOICE_CRITICAL = ("purpose", "location", "size", "budget")
+UNCERTAIN = frozenset({"voice_weak", "voice_numbers", "fuzzy", "implausible",
+                       "llm_uncertain"})
+
+
+def uncertain_slots(slots):
+    """The heard, unconfirmed voice-critical slots that must be echoed before a search."""
+    return [name for name in VOICE_CRITICAL
+            if isinstance(slots.get(name), dict) and slots[name].get("source") == "voice"
+            and not slots[name].get("confirmed", True)
+            and UNCERTAIN & set(slots[name].get("echo") or ())]
 
 
 # --- locations ---------------------------------------------------------------------------
@@ -347,6 +392,7 @@ def make_entry(value, raw, ev, ctx, *, base=1.0, confirmed=True, **extra):
         confirmed = False
         if ev.weak:
             echo.append("voice_weak")
+        echo += ev.flags
     entry = {"value": value, "raw": raw, "source": source,
              "confidence": _confidence(base, ev), "confirmed": bool(confirmed),
              "updated_at": ctx.now.isoformat()}
@@ -378,6 +424,8 @@ class Patch:
                 notices=(), **extra):
         entry = {"slot": slot or op["slot"], "op": op["op"], "raw_span": op["raw_span"],
                  "call": self.ctx.call_id, "turn": self.ctx.turn_id, "status": status}
+        if op.get("uncertain") is True:
+            entry["uncertain"] = True   # the model's mark (audit); echoed only when heard
         if detail:
             entry["detail"] = detail
         if before is not None:
@@ -485,7 +533,7 @@ class Patch:
                 p = normalise.parse_purpose(src.text, source=src.kind)
                 spans = [p.raw] if p.status == normalise.OK and p.raw else []
             for span in spans:
-                hits[span.casefold()] = (span, Evidence(src.kind, src.weak, True))
+                hits[span.casefold()] = (span, evidence(src, reextracted=True, span=span))
         return next(iter(hits.values())) if len(hits) == 1 else None
 
     # -- purpose / types --
@@ -529,6 +577,10 @@ class Patch:
             if not found or not set(found) & set(current):
                 return self._reject(op, "not_present")
             types = [t for t in current if t not in found]
+        elif not found and normalise.NON_LATIN.search(op["raw_span"]):
+            # Task 10.2: a type in words the normaliser cannot read ("घर") is asked, so the
+            # search never runs over every property type instead.
+            return self._record(op, "ask", "unreadable", notices=[_notice("type_unclear")])
         elif not found:
             return self._reject(op, "unparsed")
         elif kind == "add":
@@ -742,9 +794,26 @@ class Patch:
 
     def _budget(self, op, ev, reextracted=False):
         span = op["raw_span"]
-        parsed = normalise.parse_budget(span, purpose=self._purpose_now())
+        # Read with what follows each occurrence of the span in its message: "8 crore" said
+        # twice, once with "tak", is no budget to pick an operator for (Task 10.2).
+        readings = {}
+        for after in ev.after or ("",):
+            got = normalise.parse_budget(span, purpose=self._purpose_now(), after=after)
+            readings.setdefault((got.status, got.mode, got.min, got.max, got.reason), got)
+        if len(readings) > 1:
+            return self._record(op, "ask", "repeated_amount", notices=[_notice("budget_unclear")])
+        parsed = next(iter(readings.values()))
+        span = parsed.raw   # with an operator read from right after the span (same message)
         if parsed.status == normalise.NONE:
+            if normalise.NON_LATIN.search(span):
+                # Task 10.2: a budget in words the normaliser cannot read (Devanagari) is
+                # asked about, never dropped without a word.
+                return self._record(op, "ask", "unreadable", notices=[_notice("budget_unclear")])
             return self._reject(op, "unparsed")
+        if parsed.reason == "operator_unknown":
+            amount = cards.price_text(int(parsed.stated_pkr), None).removeprefix("PKR ")
+            return self._record(op, "ask", "operator_unknown",
+                                notices=[_notice("budget_operator_ask", amount=amount)])
         if parsed.status == normalise.AMBIGUOUS:
             return self._record(op, "ask", parsed.reason or "unclear",
                                 notices=[_notice("budget_unclear")])
@@ -1414,7 +1483,7 @@ class RequirementService:
             return None
         text = next(s.text for s in sources if s.text.strip())
         op = {"slot": "location", "op": "set", "raw_span": text.strip()[:200]}
-        ev = next(Evidence(s.kind, s.weak) for s in sources if s.text.strip())
+        ev = next(evidence(s) for s in sources if s.text.strip())
         patch._answer(op, ev, pending, chosen, detail="affirmed")
         patch._finalise()
         return patch.merge
@@ -1458,6 +1527,65 @@ class RequirementService:
                         patch.merge.effects, ctx)
             return tuple(patch.merge.notices)
 
+    def open_asks(self, conn, turn):
+        """The unanswered 7.3 questions about a type, size or budget (Task 10.2), read from
+        the patch log: for each HOLD_SLOTS slot, its newest asked-or-applied entry, when that
+        is an ask, however old (an expired question is asked again, never silently dropped).
+        [(slot, notices)] in HOLD_SLOTS order; the notices are rebuilt from the stored entry
+        (the same question again). A 90-day reset clears the slots, which answers them."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            # shortcut: reads the conversation's whole patch log (a few rows per turn);
+            # upgrade to a per-slot query if conversations grow long.
+            rows = conn.execute(
+                "SELECT ops FROM requirement_patch_log WHERE conversation_id = %s "
+                "ORDER BY version DESC", (turn.conversation_id,)).fetchall()
+        latest = {}
+        for (ops,) in rows:                 # newest patch first
+            for entry in reversed(ops):     # newest op first
+                slot = entry.get("slot")
+                if (slot in HOLD_SLOTS and slot not in latest
+                        and entry.get("status") in ("ask", "applied")):
+                    latest[slot] = entry
+        return [(slot, [ai_tools.Notice(n["key"], tuple(sorted(n.get("params", {}).items())))
+                        for n in latest[slot].get("notices", ())])
+                for slot in HOLD_SLOTS if latest.get(slot, {}).get("status") == "ask"]
+
+    def confirm_echo(self, conn, turn, version, question_wamid):
+        """The [Haan] of the voice echo (Task 10.2) in this turn's conversation. Confirms
+        every unconfirmed voice-critical slot the question showed, only when the tap quotes
+        a question message this conversation was sent with this very button (question_wamid:
+        the tap's context id) less than CLARIFICATION_TTL ago, and the state is still at the
+        version that question was rendered from. The age is the message's own send time, so
+        an old message stays stale whatever is shown or refreshed later. One patch row (call
+        "echo"). Returns "confirmed", "replayed" (a retry of this tap found its row; nothing
+        written) or "stale"."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            if self._stored_call(conn, turn, "echo") is not None:
+                return "replayed"
+            ctx = self._context(conn, turn, [], "echo")
+            if ctx is None:
+                return "stale"
+            current, slots = self._lock_state(conn, turn)
+            shown = question_wamid and conn.execute(
+                "SELECT 1 FROM outbound_message WHERE conversation_id = %s "
+                "AND provider_message_id = %s AND sent_at > now() - %s "
+                "AND payload::text LIKE %s",
+                (turn.conversation_id, question_wamid, CLARIFICATION_TTL,
+                 f'%"echo:yes:{int(version)}"%')).fetchone()
+            if not shown or current != version or not uncertain_slots(slots):
+                return "stale"
+            patch = Patch(ctx, slots)
+            for name in VOICE_CRITICAL:
+                entry = patch.slots.get(name)
+                if isinstance(entry, dict) and not entry.get("confirmed", True):
+                    patch._set({"slot": name, "op": "set", "raw_span": "(echo confirmed)"},
+                               name, dict(entry, confirmed=True, confirmed_by="echo",
+                                          updated_at=ctx.now.isoformat()), detail="echo")
+            self._write(conn, turn, current, patch.slots, patch.merge.entries, [], ctx)
+            return "confirmed"
+
     def _reask(self, pending):
         if pending.slot == "purpose":
             return _notice("purpose_ask")
@@ -1480,6 +1608,9 @@ class TurnBinding:
 
     def snapshot(self):
         return self.service.snapshot(self.conn, self.turn)
+
+    def open_asks(self):
+        return self.service.open_asks(self.conn, self.turn)
 
     def finish(self):
         return self.service.finish_turn(self.conn, self.turn, self.texts)

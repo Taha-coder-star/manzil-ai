@@ -156,3 +156,5 @@ At the end of every session, update this file and docs/TASK_LOG.md so a fresh ag
 
 
 
+
+Task 10.2 (2026-10-15): voice end to end on feature/task-10-2-voice (from origin/main 7f5cd3d). Voice confirmation before search (R16 7.4), unread budget operators / amounts / types asked, Urdu-script type words, unanswered type / size / budget questions hold the search, one question per turn; no migration, no provider or setting change (docs/VOICE_TURN.md). Local full suite 3309 passed. Pending: owner approval of the policy and wording, the STT setting (7.2), the 7.2 benchmark, live scenario 2 from customer B and its latency. Release runbook: docs/RELEASE_10_2.md (layer on manzil-ai:10.1-7f5cd3d; not run). Production stays on 10.1 until review and approval.

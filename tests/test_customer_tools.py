@@ -59,10 +59,52 @@ def test_every_english_template_has_a_roman_urdu_one_with_the_same_fields():
 
 def customer(language="roman_urdu", **flags):
     return SimpleNamespace(language=language, gazetteer=None, facts=grounding.Facts(),
-                           asked=flags.get("asked", False), results=flags.get("results", False))
+                           asked=flags.get("asked", False), results=flags.get("results", False),
+                           echoed=flags.get("echoed", False))
 
 
 CARD = whatsapp.reply_buttons("Ji, ye options hain:", [("photos:DH6-101", "Aur photos")])
+
+
+def test_the_voice_echo_question_is_not_preceded_by_notes_it_already_says():
+    # Task 10.2: the echo lists the purpose, budget and the saved values.
+    echo = whatsapp.reply_buttons("Aap ne kaha: (no facts in this fake) -- sahi hai?",
+                                  [("echo:yes:3", "Haan"), ("echo:edit", "Badlein")])
+    notices = ("requirements_saved", "budget_implausible",
+               ai_tools.Notice("purpose_inferred", (("purpose", "khareedna"),)))
+    out = render_customer(Outcome("done", "stop", notices, payloads=(echo,)),
+                          customer(asked=True, echoed=True))
+    assert out == [echo]
+
+
+def test_of_several_questions_only_the_first_in_priority_is_sent():
+    # Task 10.2: one question per turn; the others stay open in the patch log.
+    operator = ai_tools.Notice("budget_operator_ask", (("amount", "8 crore"),))
+    place = ai_tools.Notice("location_ambiguous", (("options", "A ya B"),))
+    out = render_customer(Outcome("done", "stop", ("requirements_saved", operator,
+                                                   "type_unclear")), customer())
+    assert out == [whatsapp.text(TEMPLATES["requirements_saved"] + "\n\n"
+                                 + TEMPLATES["type_unclear"])]
+    out = render_customer(Outcome("done", "stop", ("budget_unclear", place)), customer())
+    assert out == [whatsapp.text(TEMPLATES["location_ambiguous"].format(options="A ya B"))]
+    one = render_customer(Outcome("done", "stop", ("budget_unclear",)), customer())
+    assert one == [whatsapp.text(TEMPLATES["budget_unclear"])]
+
+
+def test_a_question_with_buttons_replaces_every_text_question():
+    question = whatsapp.reply_buttons("Aap ka matlab kaunsi jagah hai?",
+                                      [("clarify:location:0", "DHA Phase 6")])
+    out = render_customer(Outcome("done", "stop", ("budget_unclear", "type_unclear"),
+                                  payloads=(question,)), customer(asked=True))
+    assert out == [question]
+
+
+def test_echo_tap_ids_are_customer_taps():
+    for reply_id in ("echo:yes:12", "echo:edit"):
+        assert customer_tools.TAP.fullmatch(reply_id)
+    assert customer_tools.ECHO_TAP.fullmatch("echo:yes:12").group(1) == "12"
+    assert not customer_tools.TAP.fullmatch("echo:yes:")
+    assert not customer_tools.TAP.fullmatch("echo:no")
 
 
 def test_notes_come_before_the_listings():

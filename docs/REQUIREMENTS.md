@@ -177,8 +177,10 @@ therefore also never `confirmed`, and a place the customer did not type exactly 
 Voice-only slots are `confirmed = false`; weak signals (`stt_meta` has `fallback_reason`,
 `rejected_transcript` or `truncated`) cap confidence at 0.5 and add `echo voice_weak`; two
 distinct numbers in a voice location span that still resolves add `voice_numbers` (the
-resolver itself does not guess between "6 and 8"). The echo message and its buttons are
-10.2; `echo` is the data it reads. The serialised turn, control gate, interim, failure
+resolver itself does not guess between "6 and 8"). Task 10.2 adds `llm_uncertain` (the op's optional
+`uncertain: true`, heard values only), the budget operator question (`budget_operator_ask`) and
+the confirmation question before a search (docs/VOICE_TURN.md; `requirements.uncertain_slots`,
+`RequirementService.confirm_echo`). The serialised turn, control gate, interim, failure
 notices, send-once keys and the speech notices are unchanged.
 
 ## Replay safety (no migration)

@@ -44,7 +44,10 @@ BUCKET_TOLERANCE = Decimal("0.10")
 RESIDENTIAL = frozenset({"house", "portion", "apartment", "penthouse", "plot"})
 COMMERCIAL = frozenset({"shop", "office", "showroom", "warehouse", "building", "floor"})
 _TYPE_ALIASES = {"flat": "apartment", "ghar": "house", "makaan": "house",
-                 "dukaan": "shop", "dukan": "shop"}
+                 "dukaan": "shop", "dukan": "shop",
+                 # Urdu script (R16 7.5: the normalisers cover both scripts; Task 10.2)
+                 "گھر": "house", "مکان": "house", "فلیٹ": "apartment", "پلاٹ": "plot",
+                 "دکان": "shop", "دفتر": "office"}
 
 # --- rent / sale inference by amount (Data Model 4.4; commercial sale: owner 2026-10-12)
 LAKH = 100_000
@@ -552,6 +555,38 @@ _MAX_WORDS = re.compile(r"zyada\s+se\s+zyada|ziada\s+se\s+ziada|\bunder\b|\bbelo
                         r"|\bwithin\b|تک|سے کم", re.IGNORECASE)
 _AROUND_WORDS = re.compile(r"\baround\b|\bapprox\w*|\babout\b|lag\s*bhag|\bkareeb\b|\bqareeb\b"
                            r"|taqreeban|aas\s*paas|لگ بھگ|تقریباً|قریب", re.IGNORECASE)
+# Task 10.2: letters these normalisers do not read as words (Urdu script is read only
+# through the word lists above; Devanagari not at all). A word of them where the operator
+# stands ("8 crore तक") leaves the operator unknown: asked, never taken as "around".
+NON_LATIN = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u0900-\u097F]")
+
+
+def unread_operator(rest):
+    """True when the first word of rest (the text right after an amount) is a word in a
+    script the budget markers do not cover, so the operator cannot be read."""
+    word = (rest or "").split(maxsplit=1)
+    return bool(word) and bool(NON_LATIN.search(word[0]))
+
+
+# Operators that follow the amount ("8 crore tak", "8 crore se upar"): only words the
+# _MIN_WORDS / _MAX_WORDS lists read, so the budget keeps their meaning.
+_OPERATOR_AFTER = re.compile(r"\s*(?:tak|takk|se\s+kam|se\s+upar|se\s+oopar|max(?:imum)?"
+                             r"|min(?:imum)?|تک|سے\s*کم)(?!\w)", re.IGNORECASE)
+
+
+def operator_after(rest):
+    """The operator words right after an amount in its own message ("tak", "se upar",
+    or a range's second amount "se 10 crore"); "" when none follows."""
+    rest = rest or ""
+    found = _OPERATOR_AFTER.match(rest)
+    if found:
+        return found.group(0)
+    first = next(iter(_scan(rest)), None)
+    if first is not None and first.kind == "money" and _RANGE_GAP.match(rest[:first.start]):
+        return rest[:first.end]
+    return ""
+
+
 _MONTHLY = re.compile(r"per\s+month|a\s+month|/\s*month|\bmonthly\b|\bmonth\b|\bmahana\b"
                       r"|\bmaahana\b|\bmahina\b|ماہانہ|مہینہ", re.IGNORECASE)
 
@@ -594,7 +629,7 @@ def period_for(purpose):
     return {"sale": "one_time", "rent": "monthly"}.get(purpose)
 
 
-def parse_budget(span, *, purpose=None):
+def parse_budget(span, *, purpose=None, after=""):
     """A budget span -> {mode, min, max, stated, period} (Data Model 4.3, R17 4.3).
 
     Modes: max (under / tak / max / up to ...), around (+/-10 %; also a bare amount
@@ -627,6 +662,16 @@ def parse_budget(span, *, purpose=None):
         return Budget(span, OK, mode="min", min=stated, stated_pkr=stated, period=period)
     if _MAX_WORDS.search(span):
         return Budget(span, OK, mode="max", max=stated, stated_pkr=stated, period=period)
+    if not _AROUND_WORDS.search(span):
+        # Task 10.2: the operator may stand right after the span in its message ("8 crore"
+        # + "tak"): read it there with the same rules. One that cannot be read is asked.
+        tail = span[money[0].end:]
+        extra = operator_after(after) if not tail.strip() else ""
+        if extra:
+            return parse_budget(span + extra, purpose=purpose)
+        if unread_operator(tail) or (not tail.strip() and unread_operator(after)):
+            return Budget(span, AMBIGUOUS, stated_pkr=stated, period=period,
+                          reason="operator_unknown")
     return Budget(span, OK, mode="around", min=_round(value * (1 - AROUND)),
                   max=_round(value * (1 + AROUND)), stated_pkr=stated, period=period)
 

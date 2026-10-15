@@ -28,12 +28,17 @@ from app.cards import ENGLISH, LANGUAGES, ROMAN_URDU
 
 OK, NO_MATCH, CLARIFY = "ok", "no_match", "clarification_needed"  # = app.search
 RESULTS, NO_MATCH_KIND, CLARIFICATION = "results", "no_match", "clarification"
+# Task 10.2: a question about values already stored (unconfirmed), not about a missing or
+# ambiguous one: the customer confirms or changes; nothing is searched until then.
+CONFIRMATION = "confirmation"
 
 # Button ids: the 10.1 tap handlers key on these prefixes; no location or property id is
 # put in a clarification button (the index points into the stored pending candidates).
 NEARBY, MORE_BUDGET, HANDOFF = "nomatch:nearby", "nomatch:budget", "handoff:request"
 CLARIFY_LOCATION, CLARIFY_NONE = "clarify:location:{}", "clarify:location:none"
 CLARIFY_PURPOSE = "clarify:purpose:{}"
+# Task 10.2 voice echo: [Haan] carries the requirement_state version it was rendered from.
+ECHO_YES, ECHO_EDIT = "echo:yes:{}", "echo:edit"
 
 # All customer-facing wording of this module (awaits owner approval; docs/RENDERER.md).
 TEXT = {
@@ -61,6 +66,8 @@ TEXT = {
         "location_ask": "Which area are you looking in?",
         "type_ask": "What type of property (house, flat, plot, office) and what budget?",
         "generic_ask": "Please tell me a little more about what you are looking for.",
+        "voice_echo": "You said: {facts} -- is that right?", "echo_yes": "Yes",
+        "echo_edit": "Change", "to_sale": "to buy", "to_rent": "to rent",
     },
     ROMAN_URDU: {
         "wrapper": "Ji, {place}{things}{budget} -- ye options hain:",
@@ -89,6 +96,8 @@ TEXT = {
         "type_ask": ("Kis qisam ki property chahiye (ghar, flat, plot, office) aur budget "
                      "kitna hai?"),
         "generic_ask": "Please thora aur bata dein ke aap ko kya chahiye.",
+        "voice_echo": "Aap ne kaha: {facts} -- sahi hai?", "echo_yes": "Haan",
+        "echo_edit": "Badlein", "to_sale": "khareedne ke liye", "to_rent": "kiraye par",
     },
 }
 TYPE_ONE = {ROMAN_URDU: {"house": "ghar", "apartment": "flat", "shop": "dukaan",
@@ -338,6 +347,23 @@ def _no_match(payload, language, request, gazetteer):
                                 extra_money=[lowest] if lowest else ())
     return RenderPlan([whatsapp.reply_buttons(body, buttons)], NO_MATCH_KIND, language,
                       facts=facts)
+
+
+def voice_echo(request, language, gazetteer, version):
+    """The R16 7.4 echo before a search (Task 10.2): the stored voice-critical values as
+    the wrapper writes them, and [Haan] / [Badlein]. Backend values only (R-21)."""
+    words = TEXT[language]
+    facts = [" / ".join(_place_names(request, gazetteer)), _size_text(request, language),
+             _budget_text(request, language).lstrip(", "),
+             words.get(f"to_{request.purpose}", "")]
+    body = words["voice_echo"].format(facts=", ".join(f for f in facts if f))
+    payload = whatsapp.reply_buttons(body, [(ECHO_YES.format(version), words["echo_yes"]),
+                                            (ECHO_EDIT, words["echo_edit"])])
+    facts = grounding.facts_for([], request=request, gazetteer=gazetteer)
+    found = grounding.check_payloads([payload], facts, gazetteer)
+    if found:
+        raise GroundingError(f"template stated unsupported facts: {found}")
+    return RenderPlan([payload], CONFIRMATION, language, facts=facts)
 
 
 def _candidates(pending):
