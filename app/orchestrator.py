@@ -749,9 +749,10 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
         # customer's messages (voice as its transcript) go to whoever holds it, plus one
         # holding reply; no model call and no search, "aur dikhao" included.
         if turn.route == "customer":
-            if _transcribes(turn, speech_service):
-                turn = speech_service.transcribe_turn(conn, job, turn, client)
-            handoff.forward_turn(conn, client, turn)
+            # Voice is transcribed only when someone will read it (no STT cost otherwise).
+            transcribe = ((lambda t: speech_service.transcribe_turn(conn, job, t, client))
+                          if _transcribes(turn, speech_service) else None)
+            handoff.forward_turn(conn, client, turn, transcribe)
         close_turn(conn, turn, "gated")
         logger.info("Turn %s gated (%s / %s)", turn.id, turn.control_state,
                     turn.conversation_mode)

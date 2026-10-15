@@ -438,3 +438,36 @@ def test_a_cut_call_leaves_no_descriptor_behind(slow_server):
         generate(GeminiClient(KEY, base_url=slow_server.base_url), timeout_s=0.5)
     slow_server.thread.join(timeout=5)  # the server has closed its side as well
     assert len(os.listdir("/proc/self/fd")) == before
+
+
+# --- Task 11.1: the L3 lead summary -----------------------------------------------------------
+
+def _summary_body(text, reason="STOP"):
+    return {"candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": reason}],
+            "usageMetadata": {"promptTokenCount": 30, "candidatesTokenCount": 9}}
+
+
+def test_summary_body_has_no_tools_and_asks_for_json():
+    body = llm.build_summary_body("system", "facts", "low")
+    assert "tools" not in body
+    assert body["generationConfig"]["responseMimeType"] == "application/json"
+    assert body["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "low"}
+    assert body["contents"] == [{"role": "user", "parts": [{"text": "facts"}]}]
+
+
+def test_parse_summary():
+    result = llm.parse_summary(_summary_body(json.dumps({"summary": " Wants a visit. "})))
+    assert (result.text, result.usage.input_tokens) == ("Wants a visit.", 30)
+    for bad in (_summary_body("not json"), _summary_body(json.dumps({"x": 1})),
+                _summary_body(json.dumps({"summary": "x"}), reason="MAX_TOKENS")):
+        with pytest.raises(ProviderError):
+            llm.parse_summary(bad)
+
+
+def test_summarize_fails_over_only_on_retryable_statuses():
+    def handler(request):
+        return httpx.Response(503, json={})
+    client = GeminiClient("test-key-not-a-secret", transport=httpx.MockTransport(handler))
+    with pytest.raises(ProviderError) as exc:
+        client.summarize("m", system="s", text="t", timeout_s=5)
+    assert exc.value.failover and exc.value.code == "http_503"

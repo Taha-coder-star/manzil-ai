@@ -189,9 +189,11 @@ def open_handoff(conn, conversation_id, items, reason):
         FROM requirement_state rs WHERE rs.conversation_id = %s
         """, (conversation_id,)).fetchone()
     slots, version = state if state else ({}, None)
+    # The customer's own latest words (text or voice), not a tapped button's title.
     last = conn.execute(
         "SELECT id FROM message WHERE conversation_id = %s AND direction = 'inbound' "
-        "ORDER BY created_at DESC LIMIT 1", (conversation_id,)).fetchone()
+        "ORDER BY message_type IN ('text', 'audio') DESC, created_at DESC LIMIT 1",
+        (conversation_id,)).fetchone()
     params = {"slots": Jsonb(slots), "version": version, "last": last[0] if last else None,
               "reason": reason, "staff": agent.staff_id, "c": conversation_id}
     lead = conn.execute(
@@ -308,9 +310,10 @@ def forward_text(code, customer, message):
     return f"{code} · +{customer}{label}: {body}"
 
 
-def forward_turn(conn, client, turn):
+def forward_turn(conn, client, turn, transcribe=None):
     """Forward a gated customer turn to whoever holds its handoff and send the one holding
-    reply. Returns False (nothing done) when the conversation has no open handoff."""
+    reply. Returns False (nothing done) when the conversation has no open handoff.
+    transcribe(turn) -> turn with voice notes as text; called only when there is one."""
     with tenant_transaction(conn, turn.agency_id):
         conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
         held = holder(conn, turn.conversation_id)
@@ -319,6 +322,8 @@ def forward_turn(conn, client, turn):
         staff_conv = staff_conversation(conn, held.agent.number)
         if held.status == "accepted":
             touch_release(conn, held.handoff_id)
+    if transcribe is not None:
+        turn = transcribe(turn)
     for seq, message in enumerate(turn.messages):
         try:
             result = outbound.send_message(

@@ -56,6 +56,11 @@ def staff_active(st, role, active):
                       (active, st.agency, role))
 
 
+def ctas(payloads):
+    """The customer's handoff message(s) among the sends (the broker alert goes too)."""
+    return [p for p in payloads if p.get("interactive", {}).get("type") == "cta_url"]
+
+
 def cta(payload):
     assert payload["type"] == "interactive"
     assert payload["interactive"]["type"] == "cta_url"
@@ -90,7 +95,7 @@ def test_picking_a_row_opens_the_lead_and_sends_the_honest_cta(st):
     scenario_2(st)
     turn(st, VISIT, ("request_handoff", {"reason": "visit"}))
     n = position_of(st, "DH6-102")
-    [reply] = tap(st, "handoff:visit:DH6-102")
+    [reply] = ctas(tap(st, "handoff:visit:DH6-102"))
     body, button, url = cta(reply)
     assert body == (
         "Main Manzil ka AI assistant hoon -- aapko hamare consultant Ahmed se connect kar "
@@ -107,7 +112,7 @@ def test_picking_a_row_opens_the_lead_and_sends_the_honest_cta(st):
     assert (status, due_ok, holding) == ("pending", True, None)
     # The broker alert and the 15 min accept timer are queued with the write (outbox).
     assert handoff_jobs(st) == [(handoff.TIMEOUT_JOB, "pending", True),
-                                (handoff.ALERT_JOB, "pending", False)]
+                                (handoff.ALERT_JOB, "succeeded", False)]
     # Sent past the gate as a system message, and logged.
     assert st.query("SELECT o.status FROM outbound_message o JOIN message m ON "
                     "m.id = o.message_id WHERE m.message_type = 'interactive' "
@@ -118,7 +123,7 @@ def test_sab_links_every_shown_listing(st):
     scenario_2(st)
     shown = sorted(c for _, c, _ in st.query(
         "SELECT 0, p.listing_code, 0 FROM shown_item s JOIN property p ON p.id = s.property_id"))
-    [reply] = tap(st, "handoff:visit:all")
+    [reply] = ctas(tap(st, "handoff:visit:all"))
     assert lead_codes(st) == shown
     assert all(c in cta(reply)[0] for c in shown)
 
@@ -126,15 +131,15 @@ def test_sab_links_every_shown_listing(st):
 def test_a_named_position_needs_no_question(st):
     scenario_2(st)
     n = position_of(st, "DH6-101")
-    [reply] = turn(st, f"Property {n} ki visit karni hai", ("request_handoff",
-                                                           {"reason": "visit"}))
+    [reply] = ctas(turn(st, f"Property {n} ki visit karni hai", ("request_handoff",
+                                                           {"reason": "visit"})))
     assert f"#{n} · DH6-101" in cta(reply)[0]
     assert lead_codes(st) == ["DH6-101"]
 
 
 def test_the_cards_visit_button_is_the_confirmation(st):
     scenario_2(st)
-    [reply] = tap(st, "visit:DH6-101")
+    [reply] = ctas(tap(st, "visit:DH6-101"))
     assert "DH6-101" in cta(reply)[0]
     assert lead_codes(st) == ["DH6-101"] and lead_rows(st)[0][2] == "visit"
 
@@ -144,15 +149,15 @@ def test_one_shown_listing_is_echoed_without_a_question(st):
         admin.execute("UPDATE property SET status = 'withdrawn' WHERE agency_id = %s AND "
                       "listing_code IN ('SHF-101', 'PEC-101')", (st.agency,))
     search_turn(st, SCENARIO_1, SCENARIO_1_PATCH, CUSTOMER_A)
-    [reply] = turn(st, "I want to visit it", ("request_handoff", {"reason": "visit"}),
-                   sender=CUSTOMER_A)
+    [reply] = ctas(turn(st, "I want to visit it", ("request_handoff", {"reason": "visit"}),
+                   sender=CUSTOMER_A))
     body, button, _ = cta(reply)
     assert body.startswith("I'm Manzil's AI assistant") and "#1 · DH6-108" in body
     assert button == "Chat with Ahmed"
 
 
 def test_agent_request_with_nothing_shown_opens_a_lead_without_listings(st):
-    [reply] = turn(st, "agent se baat karao", ("request_handoff", {"reason": "agent"}))
+    [reply] = ctas(turn(st, "agent se baat karao", ("request_handoff", {"reason": "agent"})))
     body = cta(reply)[0]
     assert "Property:" not in body and "L-01" in body
     assert lead_rows(st) == [("L-01", "open", "agent", "broker")] and lead_codes(st) == []

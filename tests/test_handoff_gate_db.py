@@ -144,7 +144,7 @@ def test_a_reply_drafted_before_the_handoff_landed_is_dropped(st, monkeypatch):
     monkeypatch.setattr(orchestrator, "_respond", drafted_then_handoff)
     before = len(st.client.sent)
     search_turn(st, "Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")], CUSTOMER_B)
-    assert st.client.sent[before:] == []
+    assert to(st, CUSTOMER_B, before) == []   # (the broker's alert is not an AI message)
     assert st.query("SELECT DISTINCT o.status, o.last_error_code FROM outbound_message o "
                     "JOIN conversation_turn t ON o.dedupe_key LIKE 'turn:' || t.id || ':%%' "
                     "WHERE t.id = (SELECT id FROM conversation_turn ORDER BY created_at DESC "
