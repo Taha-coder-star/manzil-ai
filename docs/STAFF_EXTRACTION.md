@@ -610,3 +610,9 @@ buttons); (6) applying 016 to RDS (snapshot first) and the live Gemini run.
   and blocks Save (draft) or asks (find_listings). This replaces the single-candidate shortcut of 4b.
 - Still not done: 9.2 (Save / Edit / Cancel / Confirm, code allocation, photo attach); applying 016
   to RDS; the live model run; owner answers Q1-Q5 and wording approval.
+
+## 18. Task 9.2 (2026-10-14)
+
+Save / Edit / Cancel / Confirm, the real code allocation, undo, the pick list and photo attach are
+built in Task 9.2: see `docs/STAFF_COMMIT.md`. The cards of section 8 now carry buttons and the cover
+image; their wording changed accordingly (still pending approval).

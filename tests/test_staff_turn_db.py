@@ -1,12 +1,13 @@
 """Task 8.2 slice 4c: the staff turn end to end (fake Gemini, disposable PostgreSQL): drafts
-are stored once and answered with text-only cards, the 7.4 media warning comes after the
-cards, an overlong message is refused instead of clipped. No live model, no WhatsApp send."""
+are stored once and answered with cards (Task 9.2: with Save / Edit / Cancel buttons), the
+7.4 media warning comes after the cards, an overlong message is refused instead of clipped.
+No live model, no WhatsApp send."""
 
 # ruff: noqa: F811  (tests take the imported ai fixture as a parameter)
 
 import pytest
 
-from app import ai_tools, demo_dataset, location, staff_drafts, staff_tools
+from app import ai_tools, demo_dataset, location, staff_drafts, staff_tools, whatsapp
 from app.db import tenant_transaction
 from app.llm import ToolCall
 from app.turn_engine import TEMPLATES, TurnEngine
@@ -44,10 +45,12 @@ def staffed(ai, monkeypatch):
 
 
 def segment_replies(ai, *messages):
+    """The bodies of every message sent for the segment, cards included, in order."""
+    before = len(ai.client.sent)
     ai.deliver(*messages)
     ai.drain()
     flush_staff_segments(ai)
-    return ai.sent_texts()
+    return [whatsapp.summary(payload) for _, payload in ai.client.sent[before:]]
 
 
 def draft_rows(ai):
@@ -68,8 +71,12 @@ def test_a_pasted_segment_gets_one_text_card_per_draft_then_the_media_warning(st
     rows = draft_rows(ai)
     assert [(r[0], r[1], r[2]) for r in rows] == [(1, "create", "open"), (2, "create", "open")]
     assert all("buttons" not in r[3] and "actions" not in r[3] for r in rows)
-    assert ai.query("SELECT DISTINCT payload->>'type' FROM outbound_message") == [("text",)]
+    assert ai.query("SELECT payload->>'type' FROM outbound_message ORDER BY created_at") == [
+        ("interactive",), ("interactive",), ("text",)]
     assert ai.query("SELECT count(*) FROM property") == [(0,)]  # nothing is saved
+    # each card is recorded for reply-to-card (migration 017)
+    assert ai.query("SELECT count(*) FROM staff_card c JOIN listing_draft d "
+                    "ON d.id = c.listing_draft_id") == [(2,)]
 
 
 def test_a_complete_draft_is_ready_and_an_incomplete_one_says_what_is_missing(staffed):
@@ -78,14 +85,14 @@ def test_a_complete_draft_is_ready_and_an_incomplete_one_says_what_is_missing(st
                         "size": "500 gaz", "price": "8 crore", "bedrooms": "4 bed"}]}
     ai.script += [tools_answer(tool("draft_listing", full, "d1")), answer()]
     [done] = segment_replies(ai, text(LINES[0], sender=AGENT)) or [None]
-    assert done.splitlines()[-1] == "Sab zaroori maloomat mil gayi. (Review: Save abhi available nahi.)"
+    assert done.splitlines()[-1] == "Sab zaroori maloomat mil gayi. Save dabayein."
 
     ai.script += [tools_answer(tool("draft_listing", {"drafts": [
         {"purpose": "sale", "property_type": "ghar", "location": "Phase 7",
          "size": "500 gaz"}]}, "d2")), answer()]
     sent = segment_replies(ai, text("Phase 7 ghar 500 gaz sale", sender=AGENT))
-    assert "Missing: Price, Bedrooms. Likh kar bhejein." in sent[-1]
-    assert "Save ke liye abhi maloomat poori nahi." in sent[-1]
+    assert "⚠ Missing: Price, Bedrooms." in sent[-1]
+    assert "Save ke liye maloomat poori karein (Edit)." in sent[-1]
 
 
 def test_an_overlong_segment_message_is_refused_never_clipped(staffed):
@@ -121,8 +128,7 @@ def test_a_retried_draft_turn_returns_the_same_cards_whatever_the_spans(inv):
                           for d in TWO["drafts"]]}
     retry = run(context(inv.conn, turn, PASTE), changed)
     assert (first.response["status"], retry.response["status"]) == ("drafted", "existing")
-    assert [p["text"]["body"] for p in retry.payloads] == [
-        p["text"]["body"] for p in first.payloads]
+    assert retry.payloads == first.payloads
     assert first.trusted_codes == retry.trusted_codes and "CLF-101" in first.trusted_codes
     with tenant_transaction(inv.conn, inv.a.agency):
         assert inv.conn.execute("SELECT count(*) FROM listing_draft WHERE source_turn_id = %s",
@@ -155,6 +161,6 @@ def test_another_agencys_listings_never_make_a_duplicate_or_a_code(inv):
     spans = dict(TWO["drafts"][1])
     spans.pop("text")
     result = run(context(inv.conn, turn, LINES[1]), {"drafts": [spans]})
-    card = result.payloads[0]["text"]["body"]
+    card = whatsapp.summary(result.payloads[0])
     assert result.ok and "Proposed ID CLF-101" in card
     assert "CLF-777" not in card and "Milti-julti" not in card

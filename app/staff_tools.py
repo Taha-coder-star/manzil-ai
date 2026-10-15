@@ -1,10 +1,12 @@
-"""Staff tools, database layer (Task 8.2).
+"""Staff tools, database layer (Task 8.2; Task 9.2 cards with buttons).
 
 Everything runs in the caller's agency: tenant_transaction sets the RLS context and
 every statement also names current_agency_id(), so another agency's listings can
 neither be compared with a draft nor take part in a code sequence. A staff turn's
 create drafts are stored once under (agency_id, source_turn_id, ordinal) (migration 016);
-nothing here writes a property, reserves a listing code or exposes a Save action (9.2).
+nothing here writes a property or reserves a listing code: the cards carry Save / Edit /
+Cancel / Confirm buttons, and only a tap, handled by app.staff_actions, commits (R-07, RFC:
+commit_change is never an LLM tool).
 Never log rows, payloads or message text.
 """
 
@@ -53,14 +55,93 @@ def agency_settings(conn, agency_id):
     return row if row else ("KHI", 225)
 
 
-def photo_count(conn, turn):
-    """Photos of the turn's segment (0 for a turn without one)."""
-    if turn.staff_segment_id is None:
-        return 0
-    with tenant_transaction(conn, turn.agency_id):
-        return conn.execute(
-            "SELECT count(*) FROM staff_segment_item WHERE agency_id = current_agency_id() "
-            "AND segment_id = %s AND is_photo", (turn.staff_segment_id,)).fetchone()[0]
+MEDIA_COLUMNS = ("id", "content_sha256", "mime_type", "original_key", "wa_image_key",
+                 "card_image_key", "public_url_card", "exif_stripped")
+_MEDIA_SELECT = ", ".join(f"m.{c}" for c in MEDIA_COLUMNS)
+
+
+def segment_media(conn, segment_id):
+    """The usable photos (stored, or a duplicate of a stored copy) of a segment, in order.
+    Inside a tenant transaction."""
+    rows = conn.execute(
+        f"""
+        SELECT {_MEDIA_SELECT} FROM staff_segment_item i
+        JOIN inbound_media m ON m.message_id = i.message_id
+            AND m.agency_id = current_agency_id()
+        WHERE i.agency_id = current_agency_id() AND i.segment_id = %s AND i.is_photo
+          AND m.status IN ('stored', 'duplicate')
+        ORDER BY i.position
+        """,
+        (segment_id,),
+    ).fetchall()
+    return [dict(zip(MEDIA_COLUMNS, row, strict=True)) for row in rows]
+
+
+def media_rows(conn, ids):
+    """Usable inbound photos by id, in the order given (unknown or unusable ids dropped).
+    Inside a tenant transaction."""
+    if not ids:
+        return []
+    rows = conn.execute(
+        f"""
+        SELECT {_MEDIA_SELECT} FROM inbound_media m
+        WHERE m.agency_id = current_agency_id() AND m.id = ANY(%s::uuid[])
+          AND m.status IN ('stored', 'duplicate')
+        """,
+        ([str(i) for i in ids],),
+    ).fetchall()
+    found = {str(row[0]): dict(zip(MEDIA_COLUMNS, row, strict=True)) for row in rows}
+    return [found[str(i)] for i in ids if str(i) in found]
+
+
+def draft_media(conn, draft_id):
+    """The photos a create draft carries: the ones attached to it (payload.photos, 9.2), else,
+    when it is the only draft of its segment turn, all the segment's photos (8.2 section 6).
+    Several drafts of one message never share photos by guess (R-08). Inside a tenant
+    transaction."""
+    row = conn.execute(
+        """
+        SELECT d.payload -> 'photos', t.staff_segment_id,
+               (SELECT count(*) FROM listing_draft o WHERE o.agency_id = d.agency_id
+                AND o.source_turn_id = d.source_turn_id)
+        FROM listing_draft d
+        LEFT JOIN conversation_turn t ON t.id = d.source_turn_id
+            AND t.agency_id = d.agency_id
+        WHERE d.agency_id = current_agency_id() AND d.id = %s AND d.kind = 'create'
+        """,
+        (draft_id,),
+    ).fetchone()
+    if row is None:
+        return []
+    attached, segment_id, siblings = row
+    if attached is not None:
+        return media_rows(conn, attached)
+    if segment_id is not None and siblings == 1:
+        return segment_media(conn, segment_id)
+    return []
+
+
+FACT_KEYS = ("id", "code", "status", "purpose", "property_type", "location_id", "area_value",
+             "area_unit", "bedrooms", "bathrooms", "price_pkr", "version", "cover_url")
+
+
+def property_facts(conn, code=None, property_id=None, *, lock=False):
+    """The facts a staff card shows for a listing (any status) with its cover's public card
+    URL, or None. lock: FOR UPDATE of the property row. Inside a tenant transaction."""
+    where, value = ("p.listing_code = %s", code) if code else ("p.id = %s", property_id)
+    row = conn.execute(
+        f"""
+        SELECT p.id, p.listing_code, p.status, p.purpose, p.property_type, p.location_id,
+               p.area_value, p.area_unit, p.bedrooms, p.bathrooms, p.price_pkr, p.version,
+               c.public_url_card
+        FROM property p
+        LEFT JOIN property_media c ON c.id = p.cover_media_id AND c.agency_id = p.agency_id
+        WHERE p.agency_id = current_agency_id() AND {where}
+        {"FOR UPDATE OF p" if lock else ""}
+        """,
+        (value,),
+    ).fetchone()
+    return dict(zip(FACT_KEYS, row, strict=True)) if row else None
 
 
 @dataclass(frozen=True)
@@ -228,9 +309,8 @@ class StaffBinding:
         return self._drafted(stored, created)
 
     def _drafted(self, stored, created):
-        photos = photo_count(self.conn, self.turn)
-        payloads = tuple(staff_cards.draft_card(d, len(stored), self.gazetteer, photos)
-                         for d in stored)
+        payloads = tuple(draft_card(self.conn, self.turn.agency_id, d, len(stored),
+                                    self.gazetteer) for d in stored)
         codes = frozenset().union(*(staff_cards.draft_codes(d) for d in stored))
         response = {"status": "drafted" if created else "existing", "drafts": [
             {"ordinal": d.ordinal, "complete": not d.payload["blockers"],
@@ -267,9 +347,13 @@ class StaffBinding:
         response = {"status": found["status"], "candidates": summaries}
         codes = frozenset(s["code"] for s in summaries)
         if found["status"] in ("several", "too_many"):  # a choice for the staff member
+            # The change the staff member asked for, read by the backend from their own text
+            # (never from the model), rides on each row; the tap re-validates it (9.2).
+            changes = staff_normalise.changes_in_text(context.staff.texts, result["spans"])
             return ai_tools.ToolResult(
                 "find_listings", True, response, trusted_codes=codes,
-                payloads=(staff_cards.candidates_reply(summaries),))
+                payloads=(staff_cards.candidates_reply(
+                    summaries, changes, more=found["status"] == "too_many"),))
         notice = "staff_update_none" if found["status"] == "none" else None
         return ai_tools.ToolResult("find_listings", True, response, notice=notice,
                                    trusted_codes=codes)
@@ -316,11 +400,31 @@ class StaffBinding:
                           ai_tools.Notice("staff_update_invalid",
                                           (("code", code), ("reason", reason))), codes=(code,))
 
-    @staticmethod
-    def _result(draft, created):
+    def _result(self, draft, created):
         response = {"status": "proposed" if created else "existing", "draft_id": str(draft.id),
                     "draft_status": draft.status, "target": draft.payload["target_code"],
                     "changes": draft.payload["changes"]}
+        card = update_card(self.conn, self.turn.agency_id, draft, self.gazetteer)
         return ai_tools.ToolResult(
-            "propose_update", True, response, payloads=(staff_cards.update_card(draft),),
+            "propose_update", True, response, payloads=(card,),
             trusted_codes=frozenset({draft.payload["target_code"]}))
+
+
+def draft_card(conn, agency_id, stored, total, gazetteer, photos=None):
+    """The card of a stored create draft with its photo count and cover (Task 9.2). photos:
+    the count to show when photos were just attached and may still be downloading."""
+    with tenant_transaction(conn, agency_id):
+        conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+        media = draft_media(conn, stored.id)
+    return staff_cards.draft_card(stored, total, gazetteer,
+                                  len(media) if photos is None else photos,
+                                  media[0]["public_url_card"] if media else None)
+
+
+def update_card(conn, agency_id, stored, gazetteer):
+    """The Confirm / Cancel card of a stored update draft with the target's facts and cover
+    (R-11: the staff member sees which listing changes)."""
+    with tenant_transaction(conn, agency_id):
+        conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+        facts = property_facts(conn, code=stored.payload["target_code"])
+    return staff_cards.update_card(stored, facts, gazetteer)

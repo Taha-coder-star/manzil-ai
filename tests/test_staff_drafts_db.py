@@ -108,8 +108,10 @@ def test_applied_migrations_are_byte_identical_and_016_follows_015():
     for name, digest in APPLIED.items():
         assert hashlib.sha256((MIGRATIONS / name).read_bytes()).hexdigest() == digest, name
     names = sorted(p.name for p in MIGRATIONS.glob("0*.sql"))
-    assert names[-2:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql"]
-    assert b"\r" not in (MIGRATIONS / names[-1]).read_bytes()
+    # 017 (Task 9.2, the staff card map) follows
+    assert names[-3:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql",
+                          "017_staff_card.sql"]
+    assert all(b"\r" not in (MIGRATIONS / n).read_bytes() for n in names[-2:])
 
 
 def test_the_migration_adds_exactly_the_planned_constraints(inv, admin):
