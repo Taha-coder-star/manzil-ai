@@ -48,7 +48,7 @@ PHOTOS_PER_ASK = 5  # one "aur pictures" sends at most this many; the next ask t
 # The 7.3 notices that ask the open question; a rendered clarification replaces them.
 QUESTIONS = frozenset({"location_ambiguous", "location_confirm", "location_reask",
                        "purpose_ask"})
-# 7.3 acknowledgements the search wrapper line already says.
+# 7.3 acknowledgements a search reply already says (the results line, the no-match text).
 SAID_BY_RESULTS = frozenset({"requirements_saved", "location_chosen"})
 TAP = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})"
                  r"|clarify:(location):(\d{1,2}|none)|clarify:(purpose):(sale|rent)"
@@ -95,7 +95,7 @@ class CustomerBinding:
         self.wamids = tuple(m.context_wamid for m in turn.messages if m.context_wamid)
         self.purpose_told = False
         self.asked = False      # a clarification with answer buttons is in the reply
-        self.results = False    # listing cards are in the reply
+        self.results = False    # listings or the honest no-match are in the reply
         self.facts = grounding.Facts()
         self._language = language
 
@@ -156,7 +156,7 @@ class CustomerBinding:
                                        {"status": "error", "error": "render_failed"},
                                        error="render_failed", notice="search_unavailable")
         self.asked |= plan.kind == render.CLARIFICATION
-        self.results |= plan.kind == render.RESULTS
+        self.results |= plan.kind in (render.RESULTS, render.NO_MATCH_KIND)
         payloads = list(plan.payloads)
         if plan.shown and result.search_run_id is not None:
             payloads.append(customer_reply.shown_entry(result.search_run_id, plan.shown))

@@ -81,7 +81,6 @@ from app import (
     details,
     grounding,
     llm,
-    normalise,
     staff_buffer,
     staff_cards,
     staff_drafts,
@@ -461,8 +460,14 @@ def render_customer(outcome, customer):
     if not keys:
         return payloads
     note = whatsapp.text("\n\n".join(_template(k, language) for k in keys))
-    if grounding.check_payloads([note], _notice_facts(keys, gazetteer), gazetteer):
-        logger.error("Notice text failed grounding (template bug); failure template sent")
+    # Notes are approved fixed templates whose parameters are backend values (gazetteer
+    # names, the "#n · CODE" echo): only a listing code no parameter supplied is checked
+    # (the property-fact checks above are for tool payloads; on template wording such as
+    # "not ready yet" or an area named "Sea View" they would misfire).
+    echoed = {c for k in keys if isinstance(k, ai_tools.Notice) for _, v in k.params
+              for c in LISTING_CODE.findall(str(v))}
+    if set(LISTING_CODE.findall(note["text"]["body"])) - echoed:
+        logger.error("Notice text held back: untrusted listing code; failure template sent")
         note = whatsapp.text(_template("failure", language))
     return [note, *payloads]
 
@@ -479,22 +484,6 @@ def _template(notice, language=None):
         params = {k: _EN_PARAMS.get(v, v.replace(" ya ", " or ")) for k, v in params.items()}
         return TEMPLATES_EN[key].format(**params)
     return TEMPLATES[key].format(**params)
-
-
-def _notice_facts(keys, gazetteer):
-    """What notice texts may state: the places their backend parameters name, the listing
-    codes and positions of an ID echo, and the example amounts of the templates."""
-    params = [str(v) for k in keys if isinstance(k, ai_tools.Notice) for _, v in k.params]
-    places = [i for v in params for _, ids in grounding.place_mentions(v, gazetteer)
-              for i in ids] if gazetteer is not None else []
-    money = [m.value for k in keys for table in (TEMPLATES, TEMPLATES_EN)
-             if _key(k) in table for m in normalise.find_money(table[_key(k)])]
-    facts = grounding.facts_for([], gazetteer=gazetteer, extra_places=places,
-                                extra_money=money)
-    codes = {c for v in params for c in LISTING_CODE.findall(v)}
-    pairs = {int(n): c for v in params for n, c in grounding.PAIRED.findall(v)}
-    return dataclasses.replace(facts, codes=frozenset(codes), positions=frozenset(pairs),
-                               position_codes=pairs)
 
 
 def ground_customer(payloads, facts, gazetteer, language):

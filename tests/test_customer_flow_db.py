@@ -26,7 +26,7 @@ from tests.test_customer_search_db import (
     shown_rows,
 )
 from tests.test_requirements_db import p, st  # noqa: F401  (st: the 7.3 worker fixture)
-from tests.test_search_db import CUSTOMER_A, CUSTOMER_B
+from tests.test_search_db import CUSTOMER_A, CUSTOMER_B, conversation
 from tests.test_turn_engine import answer, text, tool, tools_answer
 
 _n = iter(range(1, 10_000))
@@ -58,6 +58,15 @@ def turn(st, body, *calls, sender=CUSTOMER_B, context=None):
     st.deliver(message)
     st.drain()
     return [payload for _, payload in st.client.sent[before:]]
+
+
+def latest_shown(st, sender=CUSTOMER_B):
+    """[code] of the latest search with shown items, in position order."""
+    return [r[0] for r in st.query(
+        "SELECT p.listing_code FROM shown_item s JOIN property p ON p.id = s.property_id "
+        "WHERE s.search_run_id = (SELECT search_run_id FROM shown_item WHERE conversation_id "
+        "= %s ORDER BY shown_at DESC LIMIT 1) ORDER BY s.position",
+        (conversation(st, sender),))]
 
 
 def position_of(st, code, sender=CUSTOMER_B):
@@ -151,9 +160,11 @@ def test_an_ambiguous_place_is_asked_once_with_working_buttons(st):
     assert ids[0] == "clarify:location:0"
 
     reply = tap(st, ids[0])
-    assert [r[1] for r in st.pending()] == ["resolved"]
-    assert sent_text(reply).startswith("Theek hai, ") is False  # said by the results line
-    assert reply  # the search ran on the answer
+    assert st.pending()[0][1] == "resolved"
+    assert len(st.nodes()) == 1  # the chosen candidate is the location now
+    # The search ran on the answer and asks the next single question (purpose) with buttons.
+    assert [pl["type"] for pl in reply] == ["text", "interactive"]
+    assert button_ids(reply[1]) == ["clarify:purpose:sale", "clarify:purpose:rent"]
 
 
 def test_another_place_closes_the_question_and_asks_for_the_area(st):
@@ -305,7 +316,7 @@ def test_scenario_3c_phase_8_added_after_cheaper(st):
     cheaper(st)
     payloads = search_turn(st, "Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")],
                            CUSTOMER_B)
-    assert [c for _, c, _ in shown_rows(st, CUSTOMER_B)][-2:] == ["DH8-102", "DH8-101"]
+    assert latest_shown(st) == ["DH8-102", "DH8-101"]
     assert "budget se thoda upar" in sent_text(payloads)
 
 

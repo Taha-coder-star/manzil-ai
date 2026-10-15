@@ -11,7 +11,7 @@ No migration: `shown_item`, `focus`, `media_sent` and `search_run` exist since 0
 | D1 | Tools | `get_property` (details around `load_known`), `send_property_photos`; `send_location` deferred (not registered); `request_handoff` stays a stub that says no agent was told |
 | D2 | When search runs | the model calls `search_properties` after `update_requirements`; the 8.1 gate decides |
 | D3 | References | `app/references.py`: quote, code, position, description, focus; ambiguous -> one list question; every hit echoes `#n · CODE` |
-| D4 | Grounding | every customer payload (cards, buttons, list rows, photo captions, notes) through `grounding.check_payloads` |
+| D4 | Grounding | every tool payload (cards, buttons, list rows, detail answers, photo captions) through `grounding.check_payloads`; notes (approved templates with backend parameters) are checked for listing codes no parameter supplied |
 | D5 | Echo | `echo=False` when 7.3 sent `purpose_inferred` in the same turn |
 | D6 | Language | `render.detect_language` per turn; a tap uses the customer's latest typed message; `preferred_language` stays unwritten |
 | D7 | Card ids | the internal `message.id` of each sent card (looked up by dedupe key) goes to `shown_item.card_message_id` |
