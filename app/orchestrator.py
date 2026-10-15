@@ -785,7 +785,10 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
                 turn = dataclasses.replace(turn, messages=tuple(rest))
             if transcribes:
                 turn = speech_service.transcribe_turn(conn, job, turn, client)
-            payloads = tap_reply(turn)
+            # Task 10.1: a customer tap is answered in code, never by the model.
+            payloads = engine.tap(conn, turn) if engine is not None else None
+            if payloads is None:
+                payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
             _send(conn, client, turn, [*actions, *payloads], storage)

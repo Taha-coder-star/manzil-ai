@@ -805,7 +805,10 @@ class Patch:
             self._purpose_now())
         extra = {}
         if relative == "cheaper":
-            value = {"min": None, "max": normalise.cheaper_max(shown.prices), "mode": "max",
+            # Below what was shown and never above the stated maximum (owner 2026-10-15).
+            top = (current or {}).get("value", {}).get("max")
+            cheaper = normalise.cheaper_max(shown.prices)
+            value = {"min": None, "max": min(cheaper, top) if top else cheaper, "mode": "max",
                      "period": period, "relative": "cheaper", "no_budget_relaxation": True,
                      "cheapest_shown": min(shown.prices)}
             self._exclude(shown)
@@ -1415,6 +1418,45 @@ class RequirementService:
         patch._answer(op, ev, pending, chosen, detail="affirmed")
         patch._finalise()
         return patch.merge
+
+    def choose(self, conn, turn, slot, choice):
+        """A clarification button (Task 10.1, render CLARIFY_*): choice is the index of a
+        stored location candidate, "sale" / "rent", or None ("another place": the question
+        closes, the location stays as it was). Same lock order and patch row as apply
+        (call "tap"). Returns the notices, or None when the question is no longer open or
+        the choice is not one of its options (the tap changes nothing)."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            stored = self._stored_call(conn, turn, "tap")
+            if stored is not None:
+                return tuple(self.replay_notices(stored[1]))
+            ctx = self._context(conn, turn, [], "tap")
+            if ctx is None:
+                return None
+            version, slots = self._lock_state(conn, turn)
+            pending = self._pending(conn, turn)
+            if pending is None or pending.slot != slot or pending.expires_at <= ctx.now:
+                return None
+            ctx.pending = pending
+            patch = Patch(ctx, slots)
+            if slot == "purpose" and choice in ("sale", "rent"):
+                patch._purpose({"slot": "purpose", "op": "set", "raw_span": choice},
+                               Evidence("text"))
+            elif slot == "location" and choice is None:
+                patch._record({"slot": "location", "op": "set", "raw_span": "(another place)"},
+                              "rejected", "another_place")
+                patch.merge.effects.append(("close", pending.id, "cancelled"))
+            elif slot == "location" and isinstance(choice, int) and 0 <= choice < len(
+                    pending.candidates) and pending.ids()[choice] in ctx.ids:
+                name = pending.candidates[choice].get("name") or ""
+                patch._answer({"slot": "location", "op": "set", "raw_span": name},
+                              Evidence("text"), pending, pending.ids()[choice], detail="tap")
+            else:
+                return None
+            patch._finalise()
+            self._write(conn, turn, version, patch.merge.slots, patch.merge.entries,
+                        patch.merge.effects, ctx)
+            return tuple(patch.merge.notices)
 
     def _reask(self, pending):
         if pending.slot == "purpose":

@@ -179,9 +179,9 @@ them).
 
 ## 6. Limits and open items
 
-- Nothing is wired: 10.1 calls `render_search` from `search_properties`, sends the plan, then calls
-  `record_shown`. It also handles the `nomatch:*` / `clarify:*` / `handoff:request` taps and
-  registers a detail tool around `details`.
+- Wired by Task 10.1 (docs/CUSTOMER_TURN.md): `search_properties` renders and sends the plan,
+  then calls `record_shown`; the `nomatch:*` / `clarify:*` / `handoff:request` taps are handled
+  in code; `get_property` wraps `details`. Detail answers echo "#2 · DH6-102".
 - Wording awaits owner approval. The "Nearby area" button stays English in Roman Urdu, as in Demo
   Scope 3b.
 - The Roman Urdu kind word is "Ghar · sale". Urdu-script replies are not rendered (cut list).

@@ -268,7 +268,7 @@ def answer_detail(known, fields, language, position=None):
     if known is None or not fields:
         return [whatsapp.reply_buttons(words["unknown"], agent)]
     facts = known_fields(known, language)
-    ref = f"#{position} {known.code}" if position is not None else known.code
+    ref = f"#{position} · {known.code}" if position is not None else known.code  # D3 echo
     lines = [words["fact"].format(ref=ref, fact=facts[f]) for f in fields if f in facts]
     if len(lines) == len(fields):
         return [whatsapp.text("\n".join(lines))]

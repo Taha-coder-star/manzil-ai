@@ -6,7 +6,8 @@ execute() re-checks the route and validates the arguments before any tool body
 runs, so a tool the model was not offered (or invented) never executes:
 
 - customer: update_requirements, search_properties, send_property_photos,
-  request_handoff
+  get_property (Task 10.1), request_handoff (a stub until 11.1: it says no agent was
+  told)
 - staff (admin / agent): draft_listing, find_listings, propose_update, list_my_listings
 - broker: none (the engine makes no provider call for brokers)
 
@@ -70,6 +71,20 @@ _TOOLS = {
         "description": (
             "Send more photos of a listing the customer was shown, referred to by its "
             "position in the last results (1-10) or by the customer's own description."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "position": {"type": "integer", "minimum": 1, "maximum": 10},
+                "description": {"type": "string", "minLength": 1, "maxLength": 200},
+            },
+        },
+    },
+    "get_property": {
+        "description": (
+            "Answer the customer's question about one listing they were shown (a feature, "
+            "parking, floor, possession, documents, ...), referred to by its position in "
+            "the last results (1-10) or by the customer's own description."
         ),
         "parameters": {
             "type": "object",
@@ -163,7 +178,7 @@ _TOOLS = {
 
 REGISTRY = {
     "customer": ("update_requirements", "search_properties", "send_property_photos",
-                 "request_handoff"),
+                 "get_property", "request_handoff"),
     "staff": ("draft_listing", "find_listings", "propose_update", "list_my_listings"),
     "broker": (),
 }
@@ -332,6 +347,7 @@ _STUBS = {
     "update_requirements": _update_requirements,
     "search_properties": _customer_tool("search_properties", "search_unavailable"),
     "send_property_photos": _customer_tool("send_property_photos", "photos_unavailable"),
+    "get_property": _customer_tool("get_property", "details_unavailable"),
     "request_handoff": _make_stub("request_handoff", "handoff_unavailable"),
     "draft_listing": _staff_stub("draft_listing", "draft_unavailable",
                                  staff_drafts.verify_draft_listing),
