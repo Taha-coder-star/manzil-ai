@@ -250,7 +250,7 @@ def test_the_prompt_and_tool_prefix_is_stable_across_turns(ai):
 
 @pytest.mark.parametrize(("sender", "operation", "names"), [
     (CUSTOMER, "L1", ["update_requirements", "search_properties", "send_property_photos",
-                      "request_handoff"]),
+                      "get_property", "request_handoff"]),
     (AGENT, "L2", ["draft_listing", "find_listings", "propose_update", "list_my_listings"]),
     (ADMIN, "L2", ["draft_listing", "find_listings", "propose_update", "list_my_listings"]),
 ])
@@ -848,7 +848,7 @@ def test_every_reply_is_an_approved_template_without_listing_codes():
                          context(route, name)).notice
         for route, names in ai_tools.REGISTRY.items() for name in names
     }
-    assert None not in notices and len(notices) == 8 and notices <= set(TEMPLATES)
+    assert None not in notices and len(notices) == 9 and notices <= set(TEMPLATES)
     for value in TEMPLATES.values():
         assert len(value) <= 1024 and not turn_engine.LISTING_CODE.search(value)
 
