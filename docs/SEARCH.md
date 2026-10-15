@@ -69,7 +69,7 @@ Order inside scenario 2 follows R17 ("under budget and close to max is best": 8.
 
 - Echo flags do not block the search: an unconfirmed slot (inferred purpose, voice,
   implausible budget) is listed in `echo` for the wrapper; the voice-critical echo before a
-  search is Task 10.2. 7.3 keeps even a restated implausible budget unconfirmed, so a
+  search is Task 10.2 (docs/VOICE_TURN.md: `CustomerBinding.search_properties` asks first). 7.3 keeps even a restated implausible budget unconfirmed, so a
   blocking gate would never open.
 - After injected invalid rows the ladder may have stopped early; the assertion only removes
   rows (tested: 2 valid results remain). It is the last line of defence, not a filter.

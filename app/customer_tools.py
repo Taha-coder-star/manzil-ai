@@ -50,9 +50,18 @@ QUESTIONS = frozenset({"location_ambiguous", "location_confirm", "location_reask
                        "purpose_ask"})
 # 7.3 acknowledgements a search reply already says (the results line, the no-match text).
 SAID_BY_RESULTS = frozenset({"requirements_saved", "location_chosen"})
+# 7.3 notes the voice echo question already says (Task 10.2): it lists the values.
+SAID_BY_ECHO = frozenset({"requirements_saved", "purpose_inferred", "budget_implausible"})
+# One question per turn (Task 10.2): the 7.3 questions in the existing priority (the search
+# gate: an open location / purpose question first; then 7.3's slot order: type, size,
+# budget). Only the first one present is sent; the others stay open and are asked later.
+QUESTION_ORDER = ("location_ambiguous", "location_confirm", "location_reask", "purpose_ask",
+                  "type_unclear", "size_unit_ask", "size_ask", "budget_operator_ask",
+                  "budget_unclear", "budget_implausible", "budget_ask")
+ECHO_TAP = re.compile(r"echo:(?:yes:(\d{1,9})|edit)")
 TAP = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})"
                  r"|clarify:(location):(\d{1,2}|none)|clarify:(purpose):(sale|rent)"
-                 r"|(nomatch):(nearby|budget)|(handoff):(request)")
+                 r"|(nomatch):(nearby|budget)|(handoff):(request)|echo:(?:yes:\d{1,9}|edit)")
 
 # New customer wording of 10.1 (awaits owner approval; docs/RENDERER.md section 2).
 TEXT = {
@@ -95,6 +104,7 @@ class CustomerBinding:
         self.wamids = tuple(m.context_wamid for m in turn.messages if m.context_wamid)
         self.purpose_told = False
         self.asked = False      # a clarification with answer buttons is in the reply
+        self.echoed = False     # the voice echo question is in the reply (Task 10.2)
         self.results = False    # listings or the honest no-match are in the reply
         self.facts = grounding.Facts()
         self._language = language
@@ -120,20 +130,33 @@ class CustomerBinding:
     # -- search_properties --
 
     def _state(self):
-        """(slots, open requirements.Pending or None) of the conversation."""
+        """(slots, open requirements.Pending or None, state version) of the conversation."""
         with tenant_transaction(self.conn, self.turn.agency_id):
             self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
             state = self.conn.execute(
-                "SELECT slots FROM requirement_state WHERE conversation_id = %s",
+                "SELECT slots, version FROM requirement_state WHERE conversation_id = %s",
                 (self.turn.conversation_id,)).fetchone()
             row = self.conn.execute(
                 "SELECT id, slot, candidates, created_at, expires_at, unanswered_turns "
                 "FROM pending_clarification WHERE conversation_id = %s AND status = 'open'",
                 (self.turn.conversation_id,)).fetchone()
-        return (state[0] if state else {}), (requirements.Pending(*row) if row else None)
+        return ((state[0] if state else {}), (requirements.Pending(*row) if row else None),
+                state[1] if state else None)
 
     def search_properties(self, args, context, nearby=False):
         turn, gz = self.turn, self.gazetteer
+        slots, pending, version = self._state()
+        if pending is None:
+            # Task 10.2: an unanswered type / size / budget question (this turn or an
+            # earlier one) is asked, never searched past with an older or missing value.
+            asks = self.requirements.open_asks()
+            if asks:
+                return self._result("search_properties",
+                                    {"status": "answer_first",
+                                     "needs_answer": [slot for slot, _ in asks]},
+                                    notice=tuple(asks[0][1]))
+            if requirements.uncertain_slots(slots):
+                return self._voice_echo(slots, version)
         result = search.search_conversation(self.conn, turn.agency_id, turn.conversation_id,
                                             gz, nearby=nearby)
         if result.no_neighbours:
@@ -142,7 +165,7 @@ class CustomerBinding:
         data = result.payload(gz)
         response = {"status": data["status"], "total_matches": data["total_matches"],
                     "missing": data["missing"]}
-        slots, pending = self._state()
+        slots, pending, _ = self._state()
         listings = cards.load_listings(self.conn, turn.agency_id,
                                        [r["listing_code"] for r in data["results"]])
         fallback = cards.fallback_status(self.conn, turn.agency_id, turn.conversation_id)[0]
@@ -164,6 +187,21 @@ class CustomerBinding:
                                for position, _, code in plan.shown]
         return self._result("search_properties", response, payloads, plan.facts,
                             plan.trusted_codes)
+
+    def _voice_echo(self, slots, version):
+        """R16 7.4: a heard, uncertain price / size / location / purpose is echoed with
+        [Haan] / [Badlein] before any search; no search_run, nothing shown."""
+        try:
+            plan = render.voice_echo(search.Request.from_slots(slots), self.language,
+                                     self.gazetteer, version)
+        except render.GroundingError:
+            logger.error("Turn %s: voice echo failed grounding; not sent", self.turn.id)
+            return ai_tools.ToolResult("search_properties", False,
+                                       {"status": "error", "error": "render_failed"},
+                                       error="render_failed", notice="search_unavailable")
+        self.asked = self.echoed = True
+        return self._result("search_properties", {"status": "confirm_first"}, plan.payloads,
+                            plan.facts)
 
     # -- references --
 
@@ -278,6 +316,17 @@ class CustomerBinding:
         match = TAP.fullmatch(reply_id or "")
         if match is None:
             return None
+        echo = ECHO_TAP.fullmatch(reply_id)
+        if echo and echo.group(1) is None:   # [Badlein]: the customer sends the correction
+            return [self._result("echo", {"status": "edit"}, notice="echo_edit")]
+        if echo:
+            # [Haan]: confirm what the question showed, then search. A tap on an older
+            # question (the values changed, it was already answered, or its message was
+            # sent over 24 h ago) confirms nothing and searches nothing.
+            quoted = self.turn.messages[-1].context_wamid   # the question message tapped
+            if service.confirm_echo(self.conn, self.turn, int(echo.group(1)), quoted) == "stale":
+                return [self._result("echo", {"status": "stale"}, notice="echo_stale")]
+            return [self.search_properties({}, None)]
         card, code, loc, choice, purpose, value, nomatch, step, handoff, _ = match.groups()
         if card:
             ref = references.resolve(self.conn, self.turn.agency_id, self.turn.conversation_id,
@@ -298,7 +347,7 @@ class CustomerBinding:
                                  notice="handoff_unavailable")]
         if nomatch and step == "budget":
             # "Budget barhayein": ask for the new maximum; never move it by a percentage.
-            slots, _ = self._state()
+            slots, _, _ = self._state()
             purpose = (slots.get("purpose") or {}).get("value")
             key = {"rent": "budget_ask_rent", "sale": "budget_ask_sale"}.get(purpose,
                                                                               "budget_ask")

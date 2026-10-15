@@ -42,7 +42,8 @@ _TOOLS = {
             "Record changes to the customer's property requirements. Each change names "
             "an R17 slot, an operation and raw_span: the exact words copied from the "
             "customer's current messages that state it. Never paraphrase or convert "
-            "values; never invent a span."
+            "values; never invent a span. Set uncertain to true when a voice-note "
+            "transcript makes the value doubtful (garbled, cut off, contradictory)."
         ),
         "parameters": {
             "type": "object",
@@ -55,6 +56,8 @@ _TOOLS = {
                             "slot": {"type": "string", "enum": list(SLOTS)},
                             "op": {"type": "string", "enum": list(OPS)},
                             "raw_span": {"type": "string", "minLength": 1, "maxLength": 200},
+                            # R16 7.4 (b); only a heard value is echoed for it (Task 10.2)
+                            "uncertain": {"type": "boolean"},
                         },
                         "required": ["slot", "op", "raw_span"],
                     },
@@ -270,6 +273,8 @@ def _valid(value, schema, depth=0):
     if kind == "integer":
         return (isinstance(value, int) and not isinstance(value, bool)
                 and schema.get("minimum", value) <= value <= schema.get("maximum", value))
+    if kind == "boolean":
+        return isinstance(value, bool)
     return False
 
 

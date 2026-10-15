@@ -205,6 +205,15 @@ TEMPLATES = {
                             "koi search nahi hui."),
     "details_unavailable": ("Property ki tafseelat ka feature abhi tayyar ho raha hai; abhi "
                             "koi jawab nahi diya gaya."),
+    # Task 10.2 (wording pending owner approval): the voice echo's [Badlein], a stale or
+    # expired [Haan], and a budget whose tak / aas paas could not be read.
+    "echo_edit": "Theek hai, sahi detail likh kar ya bol kar bhej dein.",
+    "echo_stale": ("Ye sawal ab purana ho gaya hai. Kuch badalna ho to likh kar ya bol kar "
+                   "bata dein."),
+    "budget_operator_ask": ("Budget {amount} tak hai ya {amount} ke aas paas? Please likh kar "
+                            "bata dein (jaise \"{amount} tak\")."),
+    "type_unclear": ("Property ki qisam samajh nahi aayi: ghar, flat, plot ya office? Please "
+                     "likh kar bata dein."),
 }
 
 # English versions of the customer notices (Task 10.1, D15: the reply follows the
@@ -256,6 +265,13 @@ TEMPLATES_EN = {
     "visit_unavailable": "Booking a visit is not ready yet; no visit was booked.",
     "similar_unavailable": "Similar listings are not ready yet; no search was run.",
     "details_unavailable": "Property details are not ready yet; no answer was given.",
+    "echo_edit": "Okay, please type or say the correct details.",
+    "echo_stale": ("That question is out of date. If you want to change something, please "
+                   "type or say it."),
+    "budget_operator_ask": ("Is your budget up to {amount}, or around {amount}? Please type it "
+                            "(for example \"up to {amount}\")."),
+    "type_unclear": ("I couldn't understand the property type: house, flat, plot or office? "
+                     "Please type it."),
 }
 _EN_PARAMS = {"khareedna": "to buy", "kiraye par lena": "to rent"}
 
@@ -452,8 +468,16 @@ def render_customer(outcome, customer):
     keys = list(dict.fromkeys(outcome.notices))
     if customer.asked:  # one question per turn: the clarification with answer buttons
         keys = [k for k in keys if _key(k) not in customer_tools.QUESTIONS]
+        keys = [k for k in keys if _key(k) not in customer_tools.QUESTION_ORDER]
+    else:  # Task 10.2: of several text questions, the first in priority; the rest wait
+        asked = [k for k in keys if _key(k) in customer_tools.QUESTION_ORDER]
+        if len({_key(k) for k in asked}) > 1:
+            first = min(asked, key=lambda k: customer_tools.QUESTION_ORDER.index(_key(k)))
+            keys = [k for k in keys if k == first or k not in asked]
     if customer.results:
         keys = [k for k in keys if _key(k) not in customer_tools.SAID_BY_RESULTS]
+    if customer.echoed:  # Task 10.2: the voice echo lists the values these notes repeat
+        keys = [k for k in keys if _key(k) not in customer_tools.SAID_BY_ECHO]
     payloads = ground_customer(list(outcome.payloads), customer.facts, gazetteer, language)
     if not keys and not customer_reply.visible(payloads):
         keys = ["customer_default"]

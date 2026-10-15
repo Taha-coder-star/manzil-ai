@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app import ai_tools, demo_dataset, location, requirements
+from app import ai_tools, demo_dataset, location, normalise, requirements
 from app.requirements import (
     Context,
     Evidence,
@@ -951,6 +951,211 @@ def test_a_transcript_with_both_numbers_asks_for_an_echo(gz):
         assert "voice_numbers" in merge.slots["location"]["echo"]
     else:
         assert statuses(merge)[0][1] in {"unknown", "clarify"}
+
+
+def run_sources(gz, slots, patch, sources):
+    ctx = make_ctx(gz, [])
+    ctx.sources = sources
+    return merge_patch(ctx, slots, patch, verify_ops(patch, sources))
+
+
+SCENARIO_2_DEVANAGARI = "DHA phase 6 में 500 gaz का घर, budget 8 crore तक का।"
+
+
+def test_a_transcript_in_another_script_is_not_uncertain_by_itself(gz):
+    # Task 10.2: script alone is no proof of a transcription error (R16 7.3: Devanagari is
+    # accepted); only a value the normalisers cannot read is asked about.
+    patch = [op("location", "set", "DHA phase 6"), op("size", "set", "500 gaz")]
+    heard = run_sources(gz, {}, patch, [Source("v", "voice", SCENARIO_2_DEVANAGARI)])
+    assert all("echo" not in heard.slots[s] for s in ("location", "size"))
+    assert requirements.uncertain_slots(heard.slots) == []
+
+
+@pytest.mark.parametrize(("span", "mode", "maximum"), [
+    ("8 crore tak", "max", 80_000_000),
+    ("8 crore تک", "max", 80_000_000),            # Urdu script: read (R16: both scripts)
+    ("8 کروڑ تک", "max", 80_000_000),
+    ("8 crore", "around", 88_000_000),            # bare amount: around (owner 2026-10-12)
+])
+def test_budget_operators_the_normaliser_reads(span, mode, maximum):
+    parsed = normalise.parse_budget(span, purpose="sale")
+    assert (parsed.status, parsed.mode, parsed.max) == ("ok", mode, maximum)
+
+
+@pytest.mark.parametrize("span", ["8 crore तक", "budget 8 crore तक का"])
+def test_an_unread_operator_is_never_taken_as_around(span):
+    parsed = normalise.parse_budget(span, purpose="sale")
+    assert (parsed.status, parsed.reason, parsed.stated_pkr) == (
+        "ambiguous", "operator_unknown", 80_000_000)
+
+
+@pytest.mark.parametrize(("text", "span"), [
+    ("budget 8 crore तक है", "8 crore tak"),     # not in the turn: re-extracted (R-22)
+    ("budget 8 crore तक है", "8 crore तक"),
+    ("budget 8 crore तक है", "8 crore"),          # the model left the operator out
+])
+def test_a_budget_with_an_unread_operator_is_asked_with_the_amount(gz, text, span):
+    merge = run(gz, {}, [op("budget", "set", span)], [("voice", text, False)])
+    assert "budget" not in merge.slots and "purpose" not in merge.slots
+    assert statuses(merge) == [("budget", "ask", "operator_unknown")]
+    [notice] = merge.notices
+    assert notice == ai_tools.Notice("budget_operator_ask", (("amount", "8 crore"),))
+
+
+def test_a_typed_budget_without_an_operator_stays_around(gz):
+    # Text path unchanged: a Latin word (or none) after a bare amount keeps the owner's rule.
+    for text in ("budget 8 crore", "budget 8 crore hai"):
+        merge = run(gz, {}, [op("budget", "set", "8 crore")], [("text", text)])
+        assert merge.slots["budget"]["value"]["mode"] == "around"
+
+
+def test_an_amount_the_normaliser_cannot_read_is_asked_not_dropped(gz):
+    merge = run(gz, {}, [op("budget", "set", "8 करोड़ तक")], [("voice", "budget 8 करोड़ तक")])
+    assert statuses(merge) == [("budget", "ask", "unreadable")]
+    assert keys(merge) == {"budget_unclear"}
+    plain = run(gz, {}, [op("budget", "set", "ghar")], [("text", "ghar")])
+    assert statuses(plain) == [("budget", "rejected", "unparsed")]   # unchanged
+
+
+@pytest.mark.parametrize("kind", ["text", "voice"])
+@pytest.mark.parametrize(("message", "span", "mode", "low", "high", "raw"), [
+    ("budget 8 crore tak hai", "8 crore", "max", None, 80_000_000, "8 crore tak"),
+    ("budget 8 crore se upar", "8 crore", "min", 80_000_000, None, "8 crore se upar"),
+    ("8 crore se 10 crore tak", "8 crore", "range", 80_000_000, 100_000_000,
+     "8 crore se 10 crore"),
+    ("budget 8 crore تک", "8 crore", "max", None, 80_000_000, "8 crore تک"),
+    ("budget 8 crore hai", "8 crore", "around", 72_000_000, 88_000_000, "8 crore"),
+    ("8 crore ke aas paas tak", "8 crore ke aas paas", "around", 72_000_000, 88_000_000,
+     "8 crore ke aas paas"),
+])
+def test_an_operator_right_after_the_span_is_read_with_its_meaning(gz, kind, message, span,
+                                                                    mode, low, high, raw):
+    # Task 10.2: the model copied "8 crore" but the customer said "8 crore tak": the operator
+    # in the same message is read (never defaulted to around); a stated around stays around.
+    merge = run(gz, {}, [op("budget", "set", span)], [(kind, message, False)])
+    budget = merge.slots["budget"]
+    assert (budget["value"]["mode"], budget["value"].get("min"), budget["value"].get("max")) == (
+        mode, low, high)
+    assert budget["raw"] == raw
+
+
+@pytest.mark.parametrize("kind", ["text", "voice"])
+def test_a_repeated_amount_takes_no_operator_from_the_other_occurrence(gz, kind):
+    # Task 10.2: "8 crore" twice, only one followed by "tak": which one the span is cannot be
+    # told, so the budget is asked, never read as max (or around) from the wrong one.
+    message = "pehle 8 crore socha tha, ab 8 crore tak hai"
+    merge = run(gz, {}, [op("budget", "set", "8 crore")], [(kind, message, False)])
+    assert statuses(merge) == [("budget", "ask", "repeated_amount")]
+    assert keys(merge) == {"budget_unclear"} and "budget" not in merge.slots
+    same = run(gz, {}, [op("budget", "set", "8 crore")],
+               [(kind, "8 crore tak, haan 8 crore tak", False)])
+    assert (same.slots["budget"]["value"]["mode"], same.slots["budget"]["value"]["max"]) == (
+        "max", 80_000_000)
+    stated = run(gz, {}, [op("budget", "set", "8 crore tak")],
+                 [(kind, "pehle 8 crore socha tha, ab 8 crore tak hai", False)])
+    assert stated.slots["budget"]["value"]["mode"] == "max"   # the span holds its operator
+
+
+def test_urdu_script_type_words_are_read():
+    assert requirements.parse_types("گھر") == ["house"]
+    assert requirements.parse_types("مکان") == ["house"]
+    assert requirements.parse_types("فلیٹ") == ["apartment"]
+
+
+def test_a_type_or_budget_in_unread_words_is_asked_not_dropped(gz):
+    merge = run(gz, {}, [op("property_types", "set", "घर"),
+                         op("budget", "set", "आठ करोड़ तक")],
+                [("voice", "घर चाहिए, बजट आठ करोड़ तक", False)])
+    assert statuses(merge) == [("property_types", "ask", "unreadable"),
+                               ("budget", "ask", "unreadable")]
+    assert keys(merge) == {"type_unclear", "budget_unclear"}
+    assert "property_types" not in merge.slots and "budget" not in merge.slots
+
+
+SCENARIO_2_SPEECH = {
+    # script: (transcript, the spans a model copies from it)
+    "roman": (("Assalam o alaikum, mujhe DHA Phase 6 mein 500 gaz ka ghar chahiye, budget "
+               "aath crore tak hai."),
+              ["DHA Phase 6", "500 gaz", "ghar", "budget aath crore tak"]),
+    "urdu": ("السلام علیکم، مجھے ڈی ایچ اے فیز 6 میں 500 گز کا گھر چاہیے، بجٹ آٹھ کروڑ تک ہے۔",
+             ["ڈی ایچ اے فیز 6", "500 گز", "گھر", "آٹھ کروڑ تک"]),
+    "mixed_devanagari": (SCENARIO_2_DEVANAGARI.replace("budget 8 crore तक का।",
+                                                       "budget 8 crore तक है।"),
+                         ["DHA phase 6", "500 gaz", "घर", "8 crore"]),
+    "devanagari": ("मुझे डीएचए फेज 6 में 500 गज का घर चाहिए, बजट आठ करोड़ तक है।",
+                   ["डीएचए फेज 6", "500 गज", "घर", "आठ करोड़ तक"]),
+}
+
+
+def scenario_2_patch(spans):
+    return [op(slot, "set", span) for slot, span in zip(
+        ("location", "size", "property_types", "budget"), spans, strict=True)]
+
+
+@pytest.mark.parametrize("script", ["roman", "urdu"])
+def test_scenario_2_in_a_supported_script_keeps_every_critical_slot(gz, script):
+    text, spans = SCENARIO_2_SPEECH[script]
+    merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
+    s = merge.slots
+    assert s["location"]["value"]["nodes"] == ["dha-ph6"]
+    assert (s["size"]["value"]["value"], s["size"]["value"]["unit"]) == (500, "sq_yd")
+    assert s["property_types"]["value"] == ["house"]
+    assert (s["budget"]["value"]["mode"], s["budget"]["value"]["max"]) == ("max", 80_000_000)
+    assert (s["purpose"]["value"], s["purpose"]["source"]) == ("sale", "inferred")
+    assert requirements.uncertain_slots(s) == []          # clean voice: no confirmation
+
+
+def test_scenario_2_from_scribe_mixed_devanagari_asks_type_and_operator(gz):
+    text, spans = SCENARIO_2_SPEECH["mixed_devanagari"]
+    merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
+    assert statuses(merge) == [
+        ("property_types", "ask", "unreadable"), ("location", "applied", None),
+        ("size", "applied", None), ("budget", "ask", "operator_unknown")]
+    assert keys(merge) == {"type_unclear", "budget_operator_ask"}
+    assert "budget" not in merge.slots and "purpose" not in merge.slots
+
+
+def test_scenario_2_in_devanagari_asks_instead_of_guessing(gz):
+    text, spans = SCENARIO_2_SPEECH["devanagari"]
+    merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
+    by_slot = {slot: (status, detail) for slot, status, detail in statuses(merge)}
+    assert by_slot["property_types"] == ("ask", "unreadable")
+    assert by_slot["budget"] == ("ask", "unreadable")
+    assert by_slot["location"][0] in {"unknown", "rejected"}   # no Devanagari place names
+    assert {"type_unclear", "budget_unclear"} <= keys(merge)
+    assert not {"location", "property_types", "budget", "purpose"} & set(merge.slots)
+
+
+def test_the_model_can_mark_a_heard_value_uncertain_but_not_a_typed_one(gz):
+    patch = [dict(op("budget", "set", "8 crore tak"), uncertain=True)]
+    heard = run(gz, {}, patch, [("voice", "8 crore tak", False)])
+    assert heard.slots["budget"]["echo"] == ["llm_uncertain"]
+    assert heard.entries[0]["uncertain"] is True   # audit of the model's mark
+    typed = run(gz, {}, patch, [("text", "8 crore tak")])
+    assert "echo" not in typed.slots["budget"] and typed.slots["budget"]["confirmed"] is True
+    assert ai_tools.validate_args("update_requirements", {"patch": patch})
+    assert not ai_tools.validate_args(
+        "update_requirements", {"patch": [dict(patch[0], uncertain="yes")]})
+
+
+def test_a_clean_heard_inquiry_is_not_uncertain(gz):
+    # Demo Scope scenario 2: "echo only if uncertain"; an inferred purpose alone is not.
+    merge = run(gz, {}, [op("location", "set", "DHA Phase 6"), op("size", "set", "500 gaz"),
+                         op("budget", "set", "aath crore tak")],
+                [("voice", "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak", False)])
+    assert merge.slots["purpose"]["source"] == "inferred"
+    assert merge.slots["budget"]["confirmed"] is False
+    assert requirements.uncertain_slots(merge.slots) == []
+
+
+@pytest.mark.parametrize("reason", sorted(requirements.UNCERTAIN))
+def test_each_uncertain_reason_on_a_heard_critical_slot_needs_the_echo(reason):
+    heard = dict(slot_entry({"min": None, "max": 1}, source="voice"), confirmed=False,
+                 echo=[reason])
+    assert requirements.uncertain_slots({"budget": heard}) == ["budget"]
+    assert requirements.uncertain_slots({"budget": dict(heard, confirmed=True)}) == []
+    assert requirements.uncertain_slots({"beds_min": heard}) == []   # not voice-critical
+    assert requirements.uncertain_slots({"budget": dict(heard, echo=["inferred"])}) == []
 
 
 # --- R-22 re-extraction -----------------------------------------------------------------------

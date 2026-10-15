@@ -162,6 +162,20 @@ def test_the_echo_can_be_left_to_the_caller():
     assert "khareedne" not in joined(plan)
 
 
+def test_the_voice_echo_states_the_heard_values_with_yes_and_change():
+    # Task 10.2, R16 7.4: "Aapne kaha: DHA Phase 6, 500 gaz, 8 crore tak -- sahi?"
+    plan = render.voice_echo(S2, ROMAN_URDU, G, 7)
+    [payload] = plan.payloads
+    assert payload["interactive"]["body"]["text"] == (
+        "Aap ne kaha: DHA Phase 6, 500 gaz, 8 crore tak, khareedne ke liye -- sahi hai?")
+    assert [(b["reply"]["id"], b["reply"]["title"])
+            for b in payload["interactive"]["action"]["buttons"]] == [
+        ("echo:yes:7", "Haan"), ("echo:edit", "Badlein")]
+    assert plan.kind == render.CONFIRMATION != render.CLARIFICATION and not plan.shown
+    english = render.voice_echo(S2, ENGLISH, G, 7).payloads[0]["interactive"]["body"]["text"]
+    assert english == "You said: DHA Phase 6, 500 sq yd, up to 8 crore, to buy -- is that right?"
+
+
 # --- scenario 3b / 3c ----------------------------------------------------------------------
 
 def test_scenario_3b_is_an_honest_no_match_with_three_options():
