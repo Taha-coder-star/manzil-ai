@@ -23,6 +23,7 @@ from app import (
     cards,
     echo,
     handoff,
+    handoff_actions,
     handoff_alert,
     media,
     orchestrator,
@@ -244,8 +245,12 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
     def accept_timeout(conn, job):
         handoff_alert.accept_timeout(conn, job, client_factory, place_names())
 
+    def release(conn, job):
+        handoff_actions.release(conn, job, client_factory)
+
     handlers[handoff.ALERT_JOB] = lead_alert
     handlers[handoff.TIMEOUT_JOB] = accept_timeout
+    handlers[handoff.RELEASE_JOB] = release
 
     if storage is not None:
         def fetch_voice(conn, job):

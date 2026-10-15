@@ -19,13 +19,16 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import orchestrator, staff_buffer, webhook, whatsapp
+from app import handoff_actions, orchestrator, staff_buffer, webhook, whatsapp
 from app.db import tenant_transaction
 from app.handlers import make_handlers
 from app.ingest import store_event
 from app.provision_agency import create_agency
 from app.worker import Worker
 from tests.test_media import FakeChannel, FakeStorage, photo
+
+# Task 11.2: what a broker gets for anything that is not a lead command (R-15).
+BROKER_HELP = handoff_actions.TEXT["help"] + "\n\n" + handoff_actions.TEXT["none_open"]
 
 PNID_A, PNID_B = "100000000000001", "100000000000002"
 AGENT, AGENT_2, BROKER, CUSTOMER = (
@@ -450,6 +453,6 @@ def test_customer_and_broker_turns_are_not_buffered(sb):
 
     assert segments(sb) == []
     assert sorted(p["text"]["body"] for p in sb.channel.sent) == [
-        "Broker mode (stub) · 1 message in this turn",
         "Customer mode (stub) · 1 message in this turn",
+        BROKER_HELP,   # Task 11.2: the lead-command help, never extraction (R-15)
     ]

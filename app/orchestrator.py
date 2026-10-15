@@ -67,6 +67,7 @@ from app import (
     customer_reply,
     echo,
     handoff,
+    handoff_actions,
     outbound,
     speech,
     staff_actions,
@@ -774,6 +775,24 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
             demo(turn, command, f"turn:{turn.id}")
         else:
             actions = []
+            if turn.route in ("staff", "broker") and turn.staff_id is not None:
+                # Task 11.1: a lead card that could not reach this staff member (closed
+                # window) goes now that they wrote; lead-card taps are answered in code
+                # before the staff buffer, the engine and any model.
+                gazetteer = _gazetteer(engine)
+                handoff_actions.resend_cards(conn, client, turn, gazetteer)
+                taps, others = handoff_actions.split(turn)
+                if taps:
+                    actions = handoff_actions.respond(conn, client, turn, taps, gazetteer)
+                    if not others:
+                        _send(conn, client, turn, actions)
+                        return
+                    turn = dataclasses.replace(turn, messages=tuple(others))
+                if turn.route == "broker":
+                    # Task 11.2 (R-15): anything else a broker sends gets the help reply,
+                    # never listing extraction or a model call.
+                    _send(conn, client, turn, [*actions, *handoff_actions.help_reply(conn, turn)])
+                    return
             if turn.route == "staff" and turn.staff_id is not None:
                 # Task 9.2: confirmations, corrections, undo and photo attach first.
                 mine, others = staff_actions.split(conn, turn)
@@ -781,7 +800,8 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
                 rest = staff_buffer.absorb(
                     conn, dataclasses.replace(turn, messages=tuple(others))) if others else []
                 if mine:
-                    actions = staff_actions.respond(staff_context(conn, turn, engine), mine)
+                    actions = actions + staff_actions.respond(
+                        staff_context(conn, turn, engine), mine)
                 if not rest:
                     if actions:
                         _send(conn, client, turn, actions)
@@ -806,6 +826,15 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
         close_turn(conn, turn, "replied")
         raise PermanentJobError(exc.code) from None
     close_turn(conn, turn, "replied")
+
+
+def _gazetteer(engine):
+    """The worker's gazetteer (place names on lead cards), or None."""
+    service = getattr(engine, "requirements", None)
+    try:
+        return service.cache.get() if service is not None else None
+    except GazetteerUnavailable:
+        return None
 
 
 def _send(conn, client, turn, payloads, storage=None):

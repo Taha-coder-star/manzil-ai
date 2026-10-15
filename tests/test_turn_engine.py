@@ -284,7 +284,9 @@ def test_broker_turns_make_no_provider_call(ai):
     ai.deliver(text("lead ka kya hua?", sender=BROKER))
     ai.drain()
     assert ai.requests == [] and ai.usage() == []
-    assert ai.sent_texts() == [TEMPLATES["broker_help"]]
+    # Task 11.2 (R-15): the lead-command help, answered in code before the engine.
+    [reply] = ai.sent_texts()
+    assert reply.startswith("Manzil lead commands:")
 
 
 def test_tools_of_other_roles_never_run_whatever_the_message_says(ai, monkeypatch):
