@@ -66,6 +66,7 @@ from psycopg.pq import TransactionStatus
 from app import (
     customer_reply,
     echo,
+    handoff,
     outbound,
     speech,
     staff_actions,
@@ -744,7 +745,13 @@ def answer_turn(conn, client, job, turn, *, engine=None):
 
 def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, storage=None):
     if not turn.ai_allowed:
-        # Control-state gate stub: no AI output; forwarding is Task 11.x.
+        # Control-state gate: no AI output. Task 11.2 (R-28): while a handoff is open, a
+        # customer's messages (voice as its transcript) go to whoever holds it, plus one
+        # holding reply; no model call and no search, "aur dikhao" included.
+        if turn.route == "customer":
+            if _transcribes(turn, speech_service):
+                turn = speech_service.transcribe_turn(conn, job, turn, client)
+            handoff.forward_turn(conn, client, turn)
         close_turn(conn, turn, "gated")
         logger.info("Turn %s gated (%s / %s)", turn.id, turn.control_state,
                     turn.conversation_mode)

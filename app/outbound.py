@@ -5,7 +5,13 @@ so a retried job never sends the same reply twice:
 
 1. One tenant transaction inserts (or finds) the message + outbound_message rows,
    applies the send-time control gate (R-28) and the 24 h window check, then
-   marks the row 'sending'.
+   marks the row 'sending'. The gate (Task 11.2) re-reads the conversation in that
+   transaction: an AI message goes out only while mode = 'ai', control_state =
+   'ai_active' and ai_muted_until is not in the future. A reply drafted before a
+   handoff (or an Accept) landed is therefore cancelled here, whatever the turn saw.
+   Messages sent with ai_generated=False (handoff messages, the holding reply,
+   forwards, broker cards, templates) are the only exemption; app code chooses it,
+   never model output.
 2. The HTTP call runs outside any transaction.
 3. A second transaction records 'sent' / 'failed' / 'unknown', or puts the row
    back to 'pending' for a retry.
@@ -111,7 +117,8 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
         _set_timeout(conn)
         conversation = conn.execute(
             """
-            SELECT mode,
+            SELECT mode = 'ai' AND control_state = 'ai_active'
+                       AND (ai_muted_until IS NULL OR ai_muted_until <= now()),
                    last_customer_message_at > now() - make_interval(hours => %s)
             FROM conversation WHERE id = %s
             FOR SHARE
@@ -120,7 +127,7 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
         ).fetchone()
         if conversation is None:
             raise LookupError("conversation not found")
-        mode, in_window = conversation
+        ai_open, in_window = conversation
 
         row = conn.execute(
             "SELECT id, status FROM outbound_message WHERE dedupe_key = %s FOR UPDATE",
@@ -159,7 +166,7 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
             ).fetchone()[0]
 
         # Send-time gate (R-28): after a handoff the AI never speaks.
-        if ai_generated and mode != "ai":
+        if ai_generated and not ai_open:
             _set_status(conn, outbound_id, "cancelled", error_code="control_gate")
             return outbound_id, "cancelled"
         if not in_window and payload["type"] != "template":

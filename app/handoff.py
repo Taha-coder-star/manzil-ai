@@ -13,9 +13,17 @@ handoffs, then an active admin (R-29: the demo has one broker; ADMIN covers the 
 
 The customer message (customer_message) is backend wording around backend values only:
 an honest AI disclosure, never the broker's voice (R6, FR-C10), and a wa.me CTA to the
-broker with the lead code. Never log names, numbers or message text.
+broker with the lead code.
+
+forward_turn (Task 11.2, R-28 / RFC 9b): while a handoff is open (pending or accepted)
+the AI is silent; each customer message (a voice note as its transcript) goes one way
+to the assigned staff member's own conversation, and the customer gets one holding reply
+per handoff (its dedupe key is the handoff's, so it is sent at most once ever). An
+accepted handoff's 48 h release moves with every forwarded message. Never log names,
+numbers or message text.
 """
 
+import logging
 import os
 import re
 from dataclasses import dataclass
@@ -23,13 +31,19 @@ from urllib.parse import quote
 
 from psycopg.types.json import Jsonb
 
-from app import queue, whatsapp
+from app import outbound, queue, render, whatsapp
 from app.cards import ENGLISH, ROMAN_URDU
+from app.db import tenant_transaction
+
+logger = logging.getLogger(__name__)
 
 STATEMENT_TIMEOUT = "5s"
 ACCEPT_MINUTES_DEFAULT = 15   # RFC 7.6 "X min (config, e.g. 15)"; owner 2026-10-15
 ALERT_JOB = "handoff_alert"
 TIMEOUT_JOB = "handoff_accept_timeout"
+RELEASE_JOB = "handoff_release"
+RELEASE_HOURS = 48            # R6 / RFC 7: release after 48 h without activity
+FORWARD_CHARS = 3500          # a forward stays one WhatsApp text (4096)
 REASONS = ("visit", "negotiation", "agent", "legal", "frustration")
 OPENED, ALREADY_OPEN, NO_AGENT = "opened", "already_open", "no_agent"
 
@@ -42,6 +56,8 @@ TEXT = {
         "lead": "Aapka reference: {code}",
         "chat": "Chat with {name}",
         "chat_short": "Agent se chat",
+        # Task 11.2 holding reply (R6 "Ahmed ko aapka message bhej diya hai")
+        "holding": "{name} ko aapka message bhej diya hai; woh jald jawab denge.",
     },
     ENGLISH: {
         "connect": ("I'm Manzil's AI assistant -- I'm connecting you with our consultant "
@@ -50,6 +66,7 @@ TEXT = {
         "lead": "Your reference: {code}",
         "chat": "Chat with {name}",
         "chat_short": "Chat with agent",
+        "holding": "I've passed your message to {name}; they will reply soon.",
     },
 }
 
@@ -244,3 +261,102 @@ def customer_message(opened, language):
         button = words["chat_short"]
     url = f"https://wa.me/{opened.agent.number}?text={quote('Ref ' + opened.lead_code)}"
     return whatsapp.cta_url("\n".join(lines), button, url)
+
+
+# -- Task 11.2: forwarding and the holding reply ---------------------------------------------
+
+@dataclass(frozen=True)
+class Holder:
+    handoff_id: str
+    status: str                 # pending | accepted
+    lead_code: str
+    agent: Agent | None
+
+
+def holder(conn, conversation_id):
+    """Inside a tenant transaction: the conversation's open handoff, or None."""
+    row = conn.execute(
+        """
+        SELECT h.id::text, h.status, l.code, s.id, s.name, s.whatsapp_number FROM handoff h
+        JOIN lead l ON l.id = h.lead_id
+        LEFT JOIN staff s ON s.id = h.assigned_staff_id
+        WHERE h.conversation_id = %s AND h.status IN ('pending', 'accepted')
+        """, (conversation_id,)).fetchone()
+    if row is None:
+        return None
+    return Holder(row[0], row[1], row[2], _agent(row[3:]) if row[3] else None)
+
+
+def staff_conversation(conn, number):
+    """Inside a tenant transaction: the id of the staff member's own conversation with the
+    business number (created when they never wrote), so their 24 h window and gate apply
+    to what they are sent, never the customer's."""
+    return conn.execute(
+        """
+        INSERT INTO conversation (agency_id, customer_wa_id) VALUES (current_agency_id(), %s)
+        ON CONFLICT (agency_id, customer_wa_id) DO UPDATE SET updated_at = conversation.updated_at
+        RETURNING id
+        """, (number,)).fetchone()[0]
+
+
+def forward_text(code, customer, message):
+    """Broker-facing (English, D15): "L-07 · +923000000102: price kam ho sakti hai?"."""
+    label = {"text": "", "audio": " (voice)"}.get(message.type, f" ({message.type})")
+    body = (message.text or "").strip() or f"[{message.type}]"
+    if len(body) > FORWARD_CHARS:
+        body = body[:FORWARD_CHARS - 1] + "…"
+    return f"{code} · +{customer}{label}: {body}"
+
+
+def forward_turn(conn, client, turn):
+    """Forward a gated customer turn to whoever holds its handoff and send the one holding
+    reply. Returns False (nothing done) when the conversation has no open handoff."""
+    with tenant_transaction(conn, turn.agency_id):
+        conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+        held = holder(conn, turn.conversation_id)
+        if held is None or held.agent is None:
+            return False
+        staff_conv = staff_conversation(conn, held.agent.number)
+        if held.status == "accepted":
+            touch_release(conn, held.handoff_id)
+    for seq, message in enumerate(turn.messages):
+        try:
+            result = outbound.send_message(
+                conn, client, turn.agency_id, staff_conv, held.agent.number,
+                whatsapp.text(forward_text(held.lead_code, turn.sender_wa_id, message)),
+                f"turn:{turn.id}:fwd:{seq}", ai_generated=False)
+        except whatsapp.PermanentSendError as exc:
+            result = outbound.SendResult(f"failed:{exc.code}")
+        if result.status != "sent":
+            # Recorded on its outbound_message row; the holding reply still goes out.
+            logger.warning("Handoff %s: forward not sent (%s)", held.handoff_id,
+                           result.status)
+    language = render.detect_language(" ".join(m.text or "" for m in turn.messages))
+    words = TEXT.get(language, TEXT[ROMAN_URDU])
+    name = first_name(held.agent.name) or words["chat_short"]
+    sent = outbound.send_message(
+        conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+        whatsapp.text(words["holding"].format(name=name)),
+        f"handoff:{held.handoff_id}:holding", ai_generated=False)
+    if sent.status == "sent":
+        with tenant_transaction(conn, turn.agency_id):
+            conn.execute(
+                "UPDATE handoff SET holding_reply_sent_at = now(), updated_at = now() "
+                "WHERE id = %s AND holding_reply_sent_at IS NULL", (held.handoff_id,))
+    return True
+
+
+def touch_release(conn, handoff_id):
+    """Inside a tenant transaction: an accepted handoff is released 48 h after its latest
+    activity; each move queues a release job keyed by the new deadline (older jobs find a
+    later deadline and do nothing)."""
+    due = conn.execute(
+        """
+        UPDATE handoff SET release_due_at = now() + make_interval(hours => %s),
+            updated_at = now()
+        WHERE id = %s AND status = 'accepted'
+        RETURNING extract(epoch FROM release_due_at)::bigint
+        """, (RELEASE_HOURS, handoff_id)).fetchone()
+    if due is not None:
+        queue.enqueue_job(conn, RELEASE_JOB, f"handoff-release:{handoff_id}:{due[0]}",
+                          {"handoff_id": handoff_id}, delay_seconds=RELEASE_HOURS * 3600)
