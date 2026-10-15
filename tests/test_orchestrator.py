@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import orchestrator, webhook, whatsapp
+from app import handoff_actions, orchestrator, webhook, whatsapp
 from app.db import tenant_transaction
 from app.handlers import make_handlers, record_event
 from app.ingest import store_event
@@ -26,6 +26,9 @@ AGENT, ADMIN, BROKER, FORMER = "923000000011", "923000000012", "923000000013", "
 
 
 def reply(route, count=1):
+    if route == "Broker":   # Task 11.2 (R-15): a broker gets the lead-command help
+        return whatsapp.text(
+            handoff_actions.TEXT["help"] + "\n\n" + handoff_actions.TEXT["none_open"])
     noun = "message" if count == 1 else "messages"
     return whatsapp.text(f"{route} mode (stub) · {count} {noun} in this turn")
 
