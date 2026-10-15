@@ -409,6 +409,7 @@ class Result:
     lowest_price_pkr: int | None = None
     search_run_id: object = None
     dropped: int = 0
+    no_neighbours: bool = False   # nearby was asked for, but none is configured
 
     @property
     def codes(self):
@@ -543,9 +544,12 @@ def check(hit, request, requested, near, city):
 
 
 def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
-        pending_open=False, city_code="KHI"):
+        pending_open=False, city_code="KHI", nearby=False):
     """One search for a conversation's stored requirements, inside the caller's tenant
-    transaction. Writes one search_run unless the gate stops it."""
+    transaction. Writes one search_run unless the gate stops it. nearby (the no-match
+    "Nearby area" tap, Task 10.1): the curated neighbours are searched from the start,
+    next to the requested place and with every other requirement kept; with none
+    configured nothing is searched (no_neighbours)."""
     missing = gate(slots, pending_open)
     request = Request.from_slots(slots)
     if missing:
@@ -563,6 +567,8 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     else:
         requested = subtree(gazetteer, nodes) & city
         near = (subtree(gazetteer, neighbours(conn, gazetteer, nodes)) & city) - requested
+    if nearby and not near:
+        return Result(NO_MATCH, no_neighbours=True)
     now = conn.execute("SELECT now()").fetchone()[0]
     rows = fetch_rows(conn, request, requested | near)
     shown = shown_ids(conn, conversation_id)
@@ -589,8 +595,8 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
         "neighbour": bool(near),
         "beds": bool(request.beds_min),
     }
-    enabled = set()
-    hits = [h for h in candidates if not h.needed]
+    enabled = {"neighbour"} if nearby else set()
+    hits = [h for h in candidates if set(h.needed) <= enabled]
     for step in LADDER:
         if len(hits) >= MIN_RESULTS:
             break
@@ -642,7 +648,7 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     return result
 
 
-def search_conversation(conn, agency_id, conversation_id, gazetteer):
+def search_conversation(conn, agency_id, conversation_id, gazetteer, nearby=False):
     """run() for a conversation's stored state in its own tenant transaction."""
     with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
@@ -662,7 +668,7 @@ def search_conversation(conn, agency_id, conversation_id, gazetteer):
             return Result(CLARIFY, missing=gate({}, pending))
         return run(conn, gazetteer, conversation_id=conversation_id,
                    requirement_version=version, slots=slots, pending_open=pending,
-                   city_code=(city[0] if city and city[0] else "KHI"))
+                   city_code=(city[0] if city and city[0] else "KHI"), nearby=nearby)
 
 
 def record_shown(conn, agency_id, conversation_id, search_run_id, property_ids,

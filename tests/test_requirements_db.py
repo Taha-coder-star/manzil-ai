@@ -786,14 +786,14 @@ def test_the_24_hour_cap_is_exact_enough(st):
 
 def _crash_once(monkeypatch):
     failures = [RuntimeError("crash after the state write, before the plan is stored")]
-    original = turn_engine.ground_reply
+    original = turn_engine.render_customer  # the step between the state write and the plan
 
-    def crash(payloads, *args):
+    def crash(outcome, customer):
         if failures:
             raise failures.pop()
-        return original(payloads, *args)
+        return original(outcome, customer)
 
-    monkeypatch.setattr(turn_engine, "ground_reply", crash)
+    monkeypatch.setattr(turn_engine, "render_customer", crash)
 
 
 def _setup_cross_area(st):

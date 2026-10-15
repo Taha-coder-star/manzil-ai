@@ -23,7 +23,11 @@ search.record_shown(conn, agency_id, conversation_id, result.search_run_id,
 ```
 
 `search.run(conn, gazetteer, conversation_id=, requirement_version=, slots=,
-pending_open=, city_code=)` is the same inside the caller's tenant transaction.
+pending_open=, city_code=, nearby=)` is the same inside the caller's tenant transaction.
+`nearby=True` (the no-match "Nearby area" tap, Task 10.1) enables the neighbour step from the
+start, next to the requested place and with every other requirement kept; with no curated
+neighbour it searches nothing and sets `Result.no_neighbours`. A relative "cheaper" never sets
+a maximum above the stated one (owner decision 2026-10-15).
 
 ## Rules
 

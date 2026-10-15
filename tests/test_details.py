@@ -67,15 +67,15 @@ def test_a_listing_no_longer_public_takes_the_agent_path():
 # --- known fields -> template facts --------------------------------------------------------
 
 @pytest.mark.parametrize(("known", "question", "expected"), [
-    (DH6_102, "corner hai?", "#2 DH6-102: corner hai."),
-    (DH6_102, "basement hai kya", "#2 DH6-102: basement hai."),
-    (DH6_101, "parking kitni hai?", "#2 DH6-101: 2 parking hain."),
-    (DH6_101, "kis taraf facing hai", "#2 DH6-101: west open hai."),
-    (DH6_101, "ghar tayyar hai?", "#2 DH6-101: tayyar hai."),
+    (DH6_102, "corner hai?", "#2 · DH6-102: corner hai."),
+    (DH6_102, "basement hai kya", "#2 · DH6-102: basement hai."),
+    (DH6_101, "parking kitni hai?", "#2 · DH6-101: 2 parking hain."),
+    (DH6_101, "kis taraf facing hai", "#2 · DH6-101: west open hai."),
+    (DH6_101, "ghar tayyar hai?", "#2 · DH6-101: tayyar hai."),
     (DH6_108, "lift aur generator hai?",
-     "#2 DH6-108: lift hai.\n#2 DH6-108: generator backup hai."),
-    (DH6_108, "security deposit kitna hai", "#2 DH6-108: security deposit PKR 10 lakh."),
-    (DH6_108, "maintenance?", "#2 DH6-108: maintenance PKR 15,000 mahana."),
+     "#2 · DH6-108: lift hai.\n#2 · DH6-108: generator backup hai."),
+    (DH6_108, "security deposit kitna hai", "#2 · DH6-108: security deposit PKR 10 lakh."),
+    (DH6_108, "maintenance?", "#2 · DH6-108: maintenance PKR 15,000 mahana."),
 ])
 def test_known_fields_are_answered_from_the_row(known, question, expected):
     reply = answer_detail(known, field_for(question), ROMAN_URDU, position=2)

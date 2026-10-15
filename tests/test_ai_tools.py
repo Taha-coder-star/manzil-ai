@@ -7,7 +7,7 @@ from app.ai_tools import ToolContext, execute
 from app.llm import ToolCall
 
 CUSTOMER_TOOLS = ["update_requirements", "search_properties", "send_property_photos",
-                  "request_handoff"]
+                  "get_property", "request_handoff"]
 STAFF_TOOLS = ["draft_listing", "find_listings", "propose_update", "list_my_listings"]
 CUSTOMER = ToolContext("customer", "DHA phase 6 mein 500 gaz ka ghar, budget  8 crore tak")
 STAFF = ToolContext("staff", "DH6-101 sold ho gaya",
@@ -81,6 +81,7 @@ def test_bad_arguments_are_refused(context, name, args):
 @pytest.mark.parametrize(("context", "name", "args", "notice"), [
     (CUSTOMER, "search_properties", None, "search_unavailable"),
     (CUSTOMER, "send_property_photos", {"position": 2}, "photos_unavailable"),
+    (CUSTOMER, "get_property", {"position": 1}, "details_unavailable"),
     (CUSTOMER, "request_handoff", {}, "handoff_unavailable"),
     (SEGMENT, "draft_listing", {"drafts": [{"size": "500 gaz"}]}, "draft_unavailable"),
     (STAFF, "find_listings", {"location": "DH6"}, "find_unavailable"),
