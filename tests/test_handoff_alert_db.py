@@ -116,14 +116,25 @@ def test_a_lead_without_listings_or_requirements_says_not_stated(st):
 
 # --- the closed window and failed delivery --------------------------------------------------
 
-def test_a_closed_window_sends_the_template_instead(st, monkeypatch):
-    monkeypatch.setenv("LEAD_ALERT_PARAMS", "lead,reason")
+def test_a_closed_window_sends_the_template_instead(st):
+    # The submitted new_lead_alert: {{1}} = property, {{2}} = inquiry reference.
     before = len(st.client.sent)
     visit_with_summary(st)            # the broker never wrote: window closed
     assert cards_to(st, BROKER_NUMBER, before) == []
     [alert] = templates_to(st, BROKER_NUMBER, before)
-    assert alert == whatsapp.template("new_lead_alert", "en", ["L-01", "visit"])
+    assert alert == whatsapp.template("new_lead_alert", "en", ["DH6-101", "L-01"])
     assert st.query("SELECT escalated_at FROM handoff") == [(None,)]
+
+
+def test_the_template_says_when_no_property_was_chosen(st, monkeypatch):
+    monkeypatch.setenv("LEAD_ALERT_LANGUAGE", "en_US")
+    before = len(st.client.sent)
+    st.script.extend([tools_answer(tool("request_handoff", {"reason": "agent"})), answer(),
+                      summary("Customer asked to talk to an agent.")])
+    st.deliver(text("agent se baat karao", sender=CUSTOMER_B))
+    st.drain()
+    [alert] = templates_to(st, BROKER_NUMBER, before)
+    assert alert == whatsapp.template("new_lead_alert", "en_US", ["not yet chosen", "L-01"])
 
 
 def test_nothing_delivered_escalates_to_the_admin_at_once(st):

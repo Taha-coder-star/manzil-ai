@@ -68,15 +68,22 @@ SUMMARY_SYSTEM = (
 )
 
 
+# The submitted new_lead_alert (Task 1.3, seen in WhatsApp Manager 2026-10-16): "A customer
+# has requested agent assistance for property {{1}}. Inquiry reference: {{2}}. Please
+# review this customer inquiry." -> {{1}} = property, {{2}} = lead.
+DEFAULT_TEMPLATE_PARAMS = "property,lead"
+NO_PROPERTY = "not yet chosen"
+
+
 def template_settings():
     """(name, language, [parameter fields]) of the broker alert template: LEAD_ALERT_TEMPLATE
     (default new_lead_alert), LEAD_ALERT_LANGUAGE (default en) and LEAD_ALERT_PARAMS, a
     comma list of lead, reason, customer, wants, property in the template's {{n}} order
-    (default none: set it to the approved template's variables)."""
+    (default property,lead: the submitted template)."""
     name = os.environ.get("LEAD_ALERT_TEMPLATE", "").strip() or "new_lead_alert"
     language = os.environ.get("LEAD_ALERT_LANGUAGE", "").strip() or "en"
-    params = [p.strip() for p in os.environ.get("LEAD_ALERT_PARAMS", "").split(",")
-              if p.strip()]
+    raw = os.environ.get("LEAD_ALERT_PARAMS", "").strip() or DEFAULT_TEMPLATE_PARAMS
+    params = [p.strip() for p in raw.split(",") if p.strip()]
     unknown = set(params) - {"lead", "reason", "customer", "wants", "property"}
     if unknown:
         raise ValueError(f"LEAD_ALERT_PARAMS: unknown field(s) {sorted(unknown)}")
@@ -223,7 +230,7 @@ def template_alert(packet):
         "reason": packet.reason or NOT_STATED,
         "customer": f"+{packet.customer_number}",
         "wants": _clip(packet.wants or NOT_STATED, 200),
-        "property": ", ".join(li.code for li in packet.listings) or "none chosen",
+        "property": ", ".join(li.code for li in packet.listings) or NO_PROPERTY,
     }
     return whatsapp.template(name, language, [values[f] for f in fields])
 
