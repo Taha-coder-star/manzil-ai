@@ -856,6 +856,9 @@ class Patch:
         entry = make_entry(value, span, ev, self.ctx, echo=echo, confirmed=not echo,
                            **self._flags(ev, reextracted))
         self.budget_given = True
+        # Live 2026-10-17: after "Kuch sasta dikhao", a restated "budget aath crore tak" still
+        # hid the listings the cheaper rule had excluded. A stated amount starts a new search.
+        self.slots.pop("excluded_property_ids", None)
         self._set(op, "budget", entry, notices)
 
     def _implausible(self, stated):

@@ -5,6 +5,7 @@ Gemini is a fake transport; WhatsApp is the FakeClient. All data is fictional.""
 
 # ruff: noqa: F811  (tests take the imported st fixture as a parameter)
 
+import json
 import threading
 import time
 from types import SimpleNamespace
@@ -274,6 +275,14 @@ def cheaper(st):
     scenario_2(st)
     return search_turn(st, "Kuch sasta dikhao", [p("budget", "relative", "Kuch sasta")],
                        CUSTOMER_B)
+
+
+def test_a_restated_budget_after_cheaper_shows_the_listings_again(st):
+    """Live 2026-10-17: after 3b, the typed scenario 2 found nothing (still excluded)."""
+    cheaper(st)
+    again = search_turn(st, SCENARIO_2, SCENARIO_2_PATCH, CUSTOMER_B)
+    said = " ".join(json.dumps(pl, ensure_ascii=False) for pl in again)
+    assert "DH6-101" in said and "DH6-102" in said
 
 
 def test_scenario_3b_cheaper_is_an_honest_no_match_with_three_buttons(st):

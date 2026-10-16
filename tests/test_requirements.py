@@ -604,6 +604,23 @@ def test_cheaper_uses_the_shown_prices_excludes_them_and_skips_budget_relaxation
     assert again.slots["excluded_property_ids"]["value"] == ["a", "b", "c", "d"]
 
 
+def test_a_stated_budget_after_cheaper_ends_the_exclusion(gz):
+    """Live 2026-10-17: "Kuch sasta dikhao", then the restated "budget aath crore tak" still
+    hid the three listings. A stated amount starts a new search; relative ones keep it."""
+    shown = Shown(("a", "b", "c"), (75_000_000, 78_000_000, 80_000_000), (500, 500, 500))
+    cheap = run(gz, {"purpose": slot_entry("sale")}, [op("budget", "relative", "Kuch sasta")],
+                [("text", "Kuch sasta dikhao")], shown=shown)
+    assert cheap.slots["excluded_property_ids"]["value"] == ["a", "b", "c"]
+    other = run(gz, cheap.slots, [op("location", "add", "Phase 8")],
+                [("text", "Phase 8 mein bhi dekho")])
+    assert other.slots["excluded_property_ids"]["value"] == ["a", "b", "c"]   # 3c unchanged
+    stated = run(gz, cheap.slots, [op("budget", "set", "budget aath crore tak")],
+                 [("text", "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak")])
+    assert "excluded_property_ids" not in stated.slots
+    assert value(stated, "budget")["max"] == 80_000_000
+    assert "no_budget_relaxation" not in value(stated, "budget")
+
+
 def test_a_relative_phrase_with_no_prior_search_invents_no_amount(gz):
     merge = run(gz, {}, [op("budget", "relative", "kuch sasta")], [("text", "kuch sasta")])
     assert "budget" not in merge.slots
