@@ -79,32 +79,57 @@ plan = render.render_search(
 
 Rendered from the tests' demo rows (`app/render.py` `TEXT`, `app/cards.py` `WORDS`).
 
+**Layout (2026-10-16, owner request after the live screenshots):** WhatsApp `*bold*` for the
+heading, each listing code and each price; a blank line between blocks; each summary entry on two
+lines (code and kind, then 📍 place and price); 👉 before the reply hint; "—" instead of "--".
+The single card adds 📍 / 📐 / 💰 lines. A carousel card body stays 3 lines (≤ 160 characters,
+≤ 2 line breaks), so it gets bold only. Only `*` and symbol emojis are used: never `_` (a word
+character, it would move `\b` boundaries next to codes), never keycap digits (the validator would
+read them as numbers), never a mark between `#` and its number (`grounding.PAIRED` / `POSITION`).
+`tests/test_grounding.py::test_the_bold_layout_is_checked_like_plain_text` pins this. The wording
+itself is unchanged.
+
 ```
 S1 EN  Here are offices for rent in Karachi, around 5 lakh per month:
-       3 matching listings:
-       #1 DH6-108 · Office for rent · Bukhari Commercial · PKR 5 lakh / month
-       ...
-       Reply with a number, or tap a card.
-       card: #1 DH6-108 · Office for rent / Bukhari Commercial · 1200 sq ft /
-             PKR 5 lakh / month · Ready      [More photos] [Visit / Details]
 
-S2 RU  Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:
-       Ye khareedne ke options hain -- agar kiraye par chahiye to bata dein.
-       3 options:
-       #1 DH6-102 · Ghar · sale · DHA Phase 6 · PKR 8 crore
-       #2 DH6-101 · Ghar · sale · DHA Phase 6 · PKR 7.8 crore
-       #3 DH7-101 · Ghar · sale · DHA Phase 7 · PKR 7.5 crore · Phase 7 -- qareeb
-       Number likh kar jawab dein, ya card par tap karein.
-       card: #3 DH7-101 · Ghar · sale / DHA Phase 7 · 500 sq yd · 4 bed / 5 bath /
-             PKR 7.5 crore · Tayyar · Phase 7 -- qareeb      [Aur photos] [Visit / Detail]
+       *3 matching listings:*
+
+       *#1 DH6-108* · Office for rent
+       📍 Bukhari Commercial · *PKR 5 lakh / month*
+       ...
+
+       👉 Reply with a number, or tap a card.
+       card: *#1 DH6-108* · Office for rent / Bukhari Commercial · 1200 sq ft /
+             *PKR 5 lakh / month* · Ready      [More photos] [Visit / Details]
+
+S2 RU  Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:
+       Ye khareedne ke options hain — agar kiraye par chahiye to bata dein.
+
+       *3 options:*
+
+       *#1 DH6-102* · Ghar · sale
+       📍 DHA Phase 6 · *PKR 8 crore*
+
+       *#2 DH6-101* · Ghar · sale
+       📍 DHA Phase 6 · *PKR 7.8 crore*
+
+       *#3 DH7-101* · Ghar · sale
+       📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb
+
+       👉 Number likh kar jawab dein, ya card par tap karein.
+       card: *#3 DH7-101* · Ghar · sale / DHA Phase 7 · 500 sq yd · 4 bed / 5 bath /
+             *PKR 7.5 crore* · Tayyar · Phase 7 — qareeb      [Aur photos] [Visit / Detail]
+
+Single *DH6-101* · Ghar · sale / 📍 DHA Phase 6 / 📐 500 sq yd · 4 bed / 5 bath /
+       💰 *PKR 7.8 crore* · Tayyar     [Aur photos] [Visit / Detail] [Milti-julti]
 
 S3b RU DHA Phase 6 mein is se kam price ka 500 gaz ghar abhi available nahi. Yahan price
        9.5 crore se shuru hoti hai.   [Nearby area] [Budget barhayein] [Agent se baat]
 S3b EN No cheaper 500 sq yd houses for sale in DHA Phase 6 are available right now. Prices
        there start from 9.5 crore.    [Nearby area] [Raise budget] [Talk to agent]
 
-S3c RU Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz, pehle se kam price par -- ye options hain:
-       #2 DH8-101 · Ghar · sale · DHA Phase 8 · PKR 7.4 crore · budget se thoda upar
+S3c RU Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz, pehle se kam price par — ye options hain:
+       *#2 DH8-101* · Ghar · sale / 📍 DHA Phase 8 · *PKR 7.4 crore* · budget se thoda upar
 
 Unknown (R-05)  Ye maloomat mere paas nahi -- agent confirm kar denge.   [Agent se baat]
                 I don't have that information -- the agent will confirm it. [Talk to agent]

@@ -103,6 +103,14 @@ def test_units_counts_positions_codes_and_places():
     assert kinds("Bahria Town mein") == ["place"]
 
 
+def test_the_bold_layout_is_checked_like_plain_text():
+    """WhatsApp marks (*bold*, 📍) never hide a fact: a wrong pair or price is still found."""
+    assert kinds("*#1 DH6-102* · Ghar · sale\n📍 DHA Phase 6 · *PKR 8 crore*") == []
+    assert kinds("*#1 DH6-101* · Ghar · sale") == ["position"]     # #1 is DH6-102
+    assert kinds("*#2 DH6-101* · Ghar\n📍 DHA Phase 6 · *PKR 7.6 crore*") == ["money"]
+    assert kinds("💰 *PKR 9 crore*") == ["money"]
+
+
 def test_rent_amounts_and_large_bare_numbers():
     facts = grounding.facts_for(OFFICES, positions=(1, 2, 3), request=S1, gazetteer=G)
     assert kinds("DH6-108: PKR 5 lakh / month, around 5 lakh", facts) == []

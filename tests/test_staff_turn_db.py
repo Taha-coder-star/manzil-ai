@@ -64,8 +64,8 @@ def test_a_pasted_segment_gets_one_text_card_per_draft_then_the_media_warning(st
     sent = segment_replies(ai, text(PASTE, sender=AGENT), media("image", sender=AGENT))
 
     assert len(sent) == 3
-    assert sent[0].startswith("Draft 1 of 2 · Proposed ID DH6-101")
-    assert sent[1].startswith("Draft 2 of 2 · Proposed ID CLF-101")
+    assert sent[0].startswith("📝 *Draft 1 of 2* · Proposed ID *DH6-101*")
+    assert sent[1].startswith("📝 *Draft 2 of 2* · Proposed ID *CLF-101*")
     assert all("Photos ke liye is card ko reply karke photos bhejein." in s for s in sent[:2])
     assert sent[2] == TEMPLATES["staff_media_missing"]  # 7.4's warning stays after the cards
     rows = draft_rows(ai)
@@ -85,14 +85,14 @@ def test_a_complete_draft_is_ready_and_an_incomplete_one_says_what_is_missing(st
                         "size": "500 gaz", "price": "8 crore", "bedrooms": "4 bed"}]}
     ai.script += [tools_answer(tool("draft_listing", full, "d1")), answer()]
     [done] = segment_replies(ai, text(LINES[0], sender=AGENT)) or [None]
-    assert done.splitlines()[-1] == "Sab zaroori maloomat mil gayi. Save dabayein."
+    assert done.splitlines()[-1] == "✅ Sab zaroori maloomat mil gayi. *Save* dabayein."
 
     ai.script += [tools_answer(tool("draft_listing", {"drafts": [
         {"purpose": "sale", "property_type": "ghar", "location": "Phase 7",
          "size": "500 gaz"}]}, "d2")), answer()]
     sent = segment_replies(ai, text("Phase 7 ghar 500 gaz sale", sender=AGENT))
-    assert "⚠ Missing: Price, Bedrooms." in sent[-1]
-    assert "Save ke liye maloomat poori karein (Edit)." in sent[-1]
+    assert "⚠️ *Missing:* Price, Bedrooms." in sent[-1]
+    assert "Save ke liye maloomat poori karein (*Edit*)." in sent[-1]
 
 
 def test_an_overlong_segment_message_is_refused_never_clipped(staffed):
@@ -162,5 +162,5 @@ def test_another_agencys_listings_never_make_a_duplicate_or_a_code(inv):
     spans.pop("text")
     result = run(context(inv.conn, turn, LINES[1]), {"drafts": [spans]})
     card = whatsapp.summary(result.payloads[0])
-    assert result.ok and "Proposed ID CLF-101" in card
+    assert result.ok and "Proposed ID *CLF-101*" in card
     assert "CLF-777" not in card and "Milti-julti" not in card

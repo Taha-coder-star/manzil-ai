@@ -108,12 +108,12 @@ def test_scenario_1_is_an_english_carousel_of_exactly_the_three_offices():
         "Here are offices for rent in Karachi, around 5 lakh per month:")
     cards_ = plan.payloads[0]["interactive"]["action"]["cards"]
     assert [c["body"]["text"] for c in cards_] == [
-        ("#1 DH6-108 · Office for rent\nBukhari Commercial · 1200 sq ft\n"
-         "PKR 5 lakh / month · Ready"),
-        ("#2 SHF-101 · Office for rent\nShahrah-e-Faisal · 1500 sq ft\n"
-         "PKR 4.5 lakh / month · Ready"),
-        ("#3 PEC-101 · Office for rent\nPECHS Block 6 · 2000 sq ft\n"
-         "PKR 5.5 lakh / month · Ready"),
+        ("*#1 DH6-108* · Office for rent\nBukhari Commercial · 1200 sq ft\n"
+         "*PKR 5 lakh / month* · Ready"),
+        ("*#2 SHF-101* · Office for rent\nShahrah-e-Faisal · 1500 sq ft\n"
+         "*PKR 4.5 lakh / month* · Ready"),
+        ("*#3 PEC-101* · Office for rent\nPECHS Block 6 · 2000 sq ft\n"
+         "*PKR 5.5 lakh / month* · Ready"),
     ]
     assert plan.shown == [(1, "id-DH6-108", "DH6-108"), (2, "id-SHF-101", "SHF-101"),
                           (3, "id-PEC-101", "PEC-101")]
@@ -136,17 +136,18 @@ def scenario_2():
 def test_scenario_2_wrapper_neighbour_label_and_positions():
     plan = scenario_2()
     body = plan.payloads[0]["interactive"]["body"]["text"].splitlines()
-    assert body[0] == "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:"
-    assert body[1] == ("Ye khareedne ke options hain -- agar kiraye par chahiye to "
+    assert body[0] == "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:"
+    assert body[1] == ("Ye khareedne ke options hain — agar kiraye par chahiye to "
                        "bata dein.")  # inferred purpose is echoed, never blocking
-    assert body[2] == "3 options:"
-    assert body[3].startswith("#1 DH6-102 · Ghar · sale · DHA Phase 6 · PKR 8 crore")
-    assert body[5] == ("#3 DH7-101 · Ghar · sale · DHA Phase 7 · PKR 7.5 crore · "
-                       "Phase 7 -- qareeb")
+    assert body[2] == "" and body[3] == "*3 options:*"
+    assert body[5:7] == ["*#1 DH6-102* · Ghar · sale", "📍 DHA Phase 6 · *PKR 8 crore*"]
+    assert body[11:13] == ["*#3 DH7-101* · Ghar · sale",
+                           "📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb"]
+    assert body[-1] == "👉 Number likh kar jawab dein, ya card par tap karein."
     cards_ = plan.payloads[0]["interactive"]["action"]["cards"]
     assert cards_[2]["body"]["text"] == (
-        "#3 DH7-101 · Ghar · sale\nDHA Phase 7 · 500 sq yd · 4 bed / 5 bath\n"
-        "PKR 7.5 crore · Tayyar · Phase 7 -- qareeb")
+        "*#3 DH7-101* · Ghar · sale\nDHA Phase 7 · 500 sq yd · 4 bed / 5 bath\n"
+        "*PKR 7.5 crore* · Tayyar · Phase 7 — qareeb")
     assert [code for _, _, code in plan.shown] == ["DH6-102", "DH6-101", "DH7-101"]
     assert [b["quick_reply"]["title"] for b in cards_[0]["action"]["buttons"]] == [
         "Aur photos", "Visit / Detail"]
@@ -167,13 +168,13 @@ def test_the_voice_echo_states_the_heard_values_with_yes_and_change():
     plan = render.voice_echo(S2, ROMAN_URDU, G, 7)
     [payload] = plan.payloads
     assert payload["interactive"]["body"]["text"] == (
-        "Aap ne kaha: DHA Phase 6, 500 gaz, 8 crore tak, khareedne ke liye -- sahi hai?")
+        "Aap ne kaha: DHA Phase 6, 500 gaz, 8 crore tak, khareedne ke liye — sahi hai?")
     assert [(b["reply"]["id"], b["reply"]["title"])
             for b in payload["interactive"]["action"]["buttons"]] == [
         ("echo:yes:7", "Haan"), ("echo:edit", "Badlein")]
     assert plan.kind == render.CONFIRMATION != render.CLARIFICATION and not plan.shown
     english = render.voice_echo(S2, ENGLISH, G, 7).payloads[0]["interactive"]["body"]["text"]
-    assert english == "You said: DHA Phase 6, 500 sq yd, up to 8 crore, to buy -- is that right?"
+    assert english == "You said: DHA Phase 6, 500 sq yd, up to 8 crore, to buy — is that right?"
 
 
 # --- scenario 3b / 3c ----------------------------------------------------------------------
@@ -208,10 +209,10 @@ def test_scenario_3c_labels_the_above_budget_card():
                                 ROMAN_URDU, request=S3C, gazetteer=G)
     body = plan.payloads[0]["interactive"]["body"]["text"].splitlines()
     assert body[0] == ("Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz, pehle se kam price par "
-                       "-- ye options hain:")
+                       "— ye options hain:")
     cards_ = plan.payloads[0]["interactive"]["action"]["cards"]
-    assert cards_[0]["body"]["text"].endswith("PKR 6.9 crore")  # DH8-102 has no status
-    assert cards_[1]["body"]["text"].endswith("PKR 7.4 crore · Tayyar · budget se thoda upar")
+    assert cards_[0]["body"]["text"].endswith("*PKR 6.9 crore*")  # DH8-102 has no status
+    assert cards_[1]["body"]["text"].endswith("*PKR 7.4 crore* · Tayyar · budget se thoda upar")
     assert [code for _, _, code in plan.shown] == ["DH8-102", "DH8-101"]
 
 
@@ -225,7 +226,7 @@ def test_a_listing_gone_since_the_search_is_dropped_and_positions_renumbered():
     assert plan.shown == [(1, "id-DH6-101", "DH6-101"), (2, "id-DH7-101", "DH7-101")]
     assert "DH6-102" not in joined(plan)
     assert plan.payloads[0]["interactive"]["action"]["cards"][0]["body"]["text"].startswith(
-        "#1 DH6-101")
+        "*#1 DH6-101*")
 
 
 def test_card_facts_come_from_the_refetched_row_not_the_payload():
@@ -248,7 +249,7 @@ def test_one_result_is_a_single_card_with_the_wrapper_in_its_body():
     [card] = plan.payloads
     assert card["interactive"]["type"] == "button"
     text = card["interactive"]["body"]["text"]
-    assert text.startswith("Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:\n\n"
+    assert text.startswith("Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:\n\n"
                            "*DH6-101* · Ghar · sale")
     assert [b["reply"]["title"] for b in card["interactive"]["action"]["buttons"]] == [
         "Aur photos", "Visit / Detail", "Milti-julti"]
@@ -299,7 +300,7 @@ def test_the_payload_of_a_real_search_result_renders():
     plan = render.render_search(found.payload(G), [DH6_101, DH7_101], ROMAN_URDU, request=S2,
                                 gazetteer=G)
     assert [code for _, _, code in plan.shown] == ["DH6-101", "DH7-101"]
-    assert "Phase 7 -- qareeb" in joined(plan)
+    assert "Phase 7 — qareeb" in joined(plan)
 
 
 # --- clarification gate ------------------------------------------------------------------

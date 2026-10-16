@@ -61,13 +61,14 @@ def test_the_broker_gets_a_complete_card_with_three_buttons(st):
     [card] = cards_to(st, BROKER_NUMBER, before)
     body = card["interactive"]["body"]["text"]
     lines = body.split("\n")
-    assert lines[0] == "New lead L-01 (visit)"
-    assert lines[1] == f"Customer: +{CUSTOMER_B}"
-    assert lines[2].startswith("Wants: ") and "DHA Phase 6" in lines[2]
-    assert lines[3].startswith("Property: #") and "DH6-101" in lines[3]
-    assert lines[4] == f'Last message: "{SCENARIO_2}"'   # the words, not the tap title
-    assert "Summary: Customer wants to visit DH6-101 tomorrow evening." in lines
-    assert lines[-1] == "Tap Accept within 15 min."
+    assert lines[0] == "🔔 *New lead L-01* (visit)" and lines[1] == ""
+    assert lines[2] == f"👤 *Customer:* +{CUSTOMER_B}"
+    assert lines[3].startswith("🏠 *Wants:* ") and "DHA Phase 6" in lines[3]
+    assert lines[5] == "📍 *Property:*"
+    assert lines[6].startswith("- #") and "DH6-101" in lines[6]
+    assert lines[8] == f'💬 *Last message:* "{SCENARIO_2}"'   # the words, not the tap title
+    assert "📝 *Summary:* Customer wants to visit DH6-101 tomorrow evening." in lines
+    assert lines[-1] == "⏰ Tap *Accept* within 15 min."
     hid = handoff_id(st)
     assert [b["reply"]["id"] for b in card["interactive"]["action"]["buttons"]] == [
         f"ho:accept:{hid}", f"ho:pass:{hid}", f"ho:called:{hid}"]
@@ -109,7 +110,7 @@ def test_a_lead_without_listings_or_requirements_says_not_stated(st):
     st.drain()
     [card] = cards_to(st, BROKER_NUMBER, before)
     body = card["interactive"]["body"]["text"]
-    assert "Wants: not stated" in body and "Property: none chosen" in body
+    assert "*Wants:* not stated" in body and "*Property:*\n- none chosen" in body
     assert handoff_alert.missing_fields(handoff_alert.load_packet(
         st.conn, st.agency, handoff_id(st))) == ["requirements"]
 

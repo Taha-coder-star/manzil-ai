@@ -58,6 +58,9 @@ RESULTS_MAX = SHOWN_MAX + whatsapp.LIST_ROWS_MAX
 NO_COVER = "photos coming soon"
 UNITS = {"sq_yd": "sq yd", "sq_ft": "sq ft", "marla": "marla", "kanal": "kanal"}
 STATUSES = {"ready": "Ready", "under_construction": "Under construction", "off_plan": "Off-plan"}
+# Layout marks (symbols only: never keycap digits, which the grounding validator would read
+# as numbers; never a mark between "#" and its position number).
+PIN, RULER, MONEY, POINT = "📍", "📐", "💰", "👉"
 ENGLISH, ROMAN_URDU = "english", "roman_urdu"
 LANGUAGES = (ENGLISH, ROMAN_URDU)
 # Customer-facing words around the facts (Task 9.1; wording awaits owner approval).
@@ -234,19 +237,24 @@ def _join(parts):
     return " · ".join(part for part in parts if part)
 
 
+def _bold(text):
+    """WhatsApp bold; None stays None (a missing fact is left out, never "**")."""
+    return f"*{text}*" if text else None
+
+
 def _fit(text, limit):
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 def card_body(rank, listing, language=ENGLISH, labels=()):
-    """Key facts in at most 160 characters and 2 line breaks (a carousel card body).
-    labels (Task 9.1: "budget se thoda upar", "Phase 7 -- qareeb") end the price line;
-    the location line is shortened first when the body is too long."""
+    """Key facts in at most 160 characters and 2 line breaks (a carousel card body), the
+    code and the price in bold. labels (Task 9.1: "budget se thoda upar", "Phase 7 —
+    qareeb") end the price line; the location line is shortened first when too long."""
+    price = price_text(listing.price_pkr, listing.purpose)
     lines = [
-        f"#{rank} {listing.code} · {kind_text(listing, language)}",
+        f"*#{rank} {listing.code}* · {kind_text(listing, language)}",
         _join([listing.location, area_text(listing), rooms_text(listing)]),
-        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing, language),
-               *labels]),
+        _join([_bold(price), status_text(listing, language), *labels]),
     ]
     lines = [line for line in lines if line]
     spare = whatsapp.CARD_BODY_MAX - sum(len(line) for line in lines) - (len(lines) - 1)
@@ -256,13 +264,15 @@ def card_body(rank, listing, language=ENGLISH, labels=()):
 
 
 def details(listing, language=ENGLISH, labels=()):
-    """Full details for the single-result card."""
+    """Full details for the single-result card: the code bold, one fact group per line."""
+    size = _join([area_text(listing), rooms_text(listing)])
+    price = _join([_bold(price_text(listing.price_pkr, listing.purpose)),
+                   status_text(listing, language), *labels])
     lines = [
         f"*{listing.code}* · {kind_text(listing, language)}",
-        listing.location,
-        _join([area_text(listing), rooms_text(listing)]),
-        _join([price_text(listing.price_pkr, listing.purpose), status_text(listing, language),
-               *labels]),
+        f"{PIN} {listing.location}" if listing.location else None,
+        f"{RULER} {size}" if size else None,
+        f"{MONEY} {price}" if price else None,
     ]
     if listing.cover_url is None:
         lines.append(f"({WORDS[language]['no_cover']})")
@@ -270,21 +280,26 @@ def details(listing, language=ENGLISH, labels=()):
 
 
 def index_line(rank, listing, language=ENGLISH, labels=()):
-    line = _join([f"#{rank} {listing.code}", kind_text(listing, language), listing.location,
-                  price_text(listing.price_pkr, listing.purpose), *labels])
-    return line + (f" ({WORDS[language]['no_cover']})" if listing.cover_url is None else "")
+    """One summary entry: "*#1 DH6-101* · Ghar · sale", then place and the bold price."""
+    head = f"*#{rank} {listing.code}* · {kind_text(listing, language)}"
+    if listing.cover_url is None:
+        head += f" ({WORDS[language]['no_cover']})"
+    facts = _join([f"{PIN} {listing.location}" if listing.location else None,
+                   _bold(price_text(listing.price_pkr, listing.purpose)), *labels])
+    return f"{head}\n{facts}" if facts else head
 
 
 def summary(listings, shown, *, tap_hint, language=ENGLISH, labels=None, note=None):
-    """The numbered summary. tap_hint is a WORDS key ("tap_card" / "tap_button")."""
+    """The numbered summary, one block per listing with blank lines between blocks.
+    tap_hint is a WORDS key ("tap_card" / "tap_button")."""
     words, labels = WORDS[language], labels or {}
-    lines = ([note] if note else []) + [words["count"].format(n=len(listings))]
-    lines += [index_line(rank, listing, language, labels.get(listing.code, ()))
-              for rank, listing in enumerate(shown, 1)]
+    blocks = ([note] if note else []) + [f"*{words['count'].format(n=len(listings))}*"]
+    blocks += [index_line(rank, listing, language, labels.get(listing.code, ()))
+               for rank, listing in enumerate(shown, 1)]
     if len(listings) > len(shown):
-        lines.append(words["in_list"].format(a=len(shown) + 1, b=len(listings)))
-    lines.append(words["reply"].format(hint=words[tap_hint]))
-    return _fit("\n".join(lines), whatsapp.INTERACTIVE_BODY_MAX)
+        blocks.append(words["in_list"].format(a=len(shown) + 1, b=len(listings)))
+    blocks.append(f"{POINT} " + words["reply"].format(hint=words[tap_hint]))
+    return _fit("\n\n".join(blocks), whatsapp.INTERACTIVE_BODY_MAX)
 
 
 # --- payloads -------------------------------------------------------------------------

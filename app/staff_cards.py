@@ -24,34 +24,35 @@ SOURCES = {"owner_direct": "Owner direct", "sub_agent": "Sub agent",
 STATUS_LABELS = {"active": "ACTIVE", "reserved": "RESERVED", "on_hold": "ON HOLD",
                  "sold": "SOLD", "rented": "RENTED", "withdrawn": "WITHDRAWN",
                  "archived": "ARCHIVED"}
+NOTE = "📝 Note: "
 WORDING = {
-    "head": "Draft {n} of {total} · Proposed ID {code}",
-    "head_no_code": "Draft {n} of {total}",
-    "inferred": "* purpose price se samjha gaya",
-    "missing": "⚠ Missing: {fields}. Edit dabayein aur likh kar bhejein.",
-    "conflict": "⚠ Check - {label}: {values}?",
-    "duplicate": "Milti-julti listing pehle se hai: {codes}.",
+    "head": "📝 *Draft {n} of {total}* · Proposed ID *{code}*",
+    "head_no_code": "📝 *Draft {n} of {total}*",
+    "inferred": "ℹ️ Purpose price se samjha gaya",
+    "missing": "⚠️ *Missing:* {fields}. Edit dabayein aur likh kar bhejein.",
+    "conflict": "⚠️ *Check* - {label}: {values}?",
+    "duplicate": "⚠️ Milti-julti listing pehle se hai: {codes}.",
     "sanitised": "Description se {n} line hata di gayi (instruction jaisi).",
-    "photos": "Photos: {n}",
-    "photos_multi": "Photos ke liye is card ko reply karke photos bhejein.",
-    "ready": "Sab zaroori maloomat mil gayi. Save dabayein.",
-    "not_ready": "Save ke liye maloomat poori karein (Edit).",
-    "update": "{code}: {changes}. Confirm?",
+    "photos": "📷 Photos: {n}",
+    "photos_multi": "📷 Photos ke liye is card ko reply karke photos bhejein.",
+    "ready": "✅ Sab zaroori maloomat mil gayi. *Save* dabayein.",
+    "not_ready": "Save ke liye maloomat poori karein (*Edit*).",
+    "update": "✏️ *{code}*: {changes}\n*Confirm?*",
     "unusual": "Qeemat purani qeemat se bohat alag hai - dobara check karein.",
     "price_unusual": "Qeemat is area ki aam qeemat se bohat alag hai - dobara check karein.",
     "place_hint": "Location: kya {places}? Edit dabayein aur poora naam likhein.",
     "pick_head": "Kaunsi property? {n} listings milin. List se chunein.",
     "pick_more": "Sirf pehli {n} dikhayi hain; area ya size likh kar chhota karein.",
-    "saved": "✅ Saved as {code}. Listing ab active hai.",
-    "updated": "✅ {code} updated: {changes}.",
-    "marked": "✅ {code} marked {status}.",
-    "undo_ask": "Undo {code}: {changes}?",
+    "saved": "✅ Saved as *{code}*. Listing ab active hai.",
+    "updated": "✅ *{code}* updated: {changes}.",
+    "marked": "✅ *{code}* marked *{status}*.",
+    "undo_ask": "↩ *Undo {code}*: {changes}?",
     "undo_created": "listing hata di jayegi (WITHDRAWN)",
-    "undone": "↩ Undo ho gaya: {code} {changes}.",
-    "undone_created": "↩ Undo ho gaya: {code} ab WITHDRAWN hai.",
-    "attach_head": "Ye {n} photos kis listing ki hain? List se chunein.",
-    "attach_ask": "{code}: {n} photos add karein?",
-    "attached": "✅ {code}: {n} photos add ho gayin.",
+    "undone": "↩ Undo ho gaya: *{code}* {changes}.",
+    "undone_created": "↩ Undo ho gaya: *{code}* ab WITHDRAWN hai.",
+    "attach_head": "📷 Ye {n} photos kis listing ki hain? List se chunein.",
+    "attach_ask": "📷 *{code}*: {n} photos add karein?",
+    "attached": "✅ *{code}*: {n} photos add ho gayin.",
 }
 # Sentences the engine and app.staff_actions send as approved templates
 # (app.turn_engine.TEMPLATES). {code} values come from database rows, never from the model.
@@ -179,19 +180,31 @@ def _conflict_values(conflict):
 
 
 def _fit(lines, limit=whatsapp.INTERACTIVE_BODY_MAX):
-    """Join the lines; drop the optional Note line, then cut, to stay within the limit."""
-    body = "\n".join(lines)
+    """Join the lines (an empty line is a blank line between sections, never two in a row
+    or at an end); drop the optional Note line, then cut, to stay within the limit."""
+    body = _join(lines)
     if len(body) > limit:
-        body = "\n".join(line for line in lines if not line.startswith("Note: "))
+        body = _join([line for line in lines if not line.startswith(NOTE)])
     return body if len(body) <= limit else body[: limit - 1] + "…"
+
+
+def _join(lines):
+    out = []
+    for line in lines:
+        if line or (out and out[-1]):
+            out.append(line)
+    while out and not out[-1]:
+        out.pop()
+    return "\n".join(out)
 
 
 def listing_lines(facts, gazetteer):
     """Key facts of a property row (R-11: shown on a status-change card so a wrong pick is
     visible): type · purpose · status, then place · size · rooms, then price."""
     kind, purpose = facts.get("property_type"), facts.get("purpose")
-    lines = [" · ".join(x for x in ((kind or "").upper(), (purpose or "").upper(),
-                                     STATUS_LABELS.get(facts.get("status"), "")) if x)]
+    head = " · ".join(x for x in ((kind or "").upper(), (purpose or "").upper(),
+                                   STATUS_LABELS.get(facts.get("status"), "")) if x)
+    lines = [f"🏠 *{head}*" if head else ""]
     size = (f"{cards._number(facts['area_value'])} "
             f"{UNITS.get(facts['area_unit'], facts['area_unit'])}"
             if facts.get("area_value") is not None else None)
@@ -201,10 +214,10 @@ def listing_lines(facts, gazetteer):
     where = " · ".join(x for x in (place_name(facts.get("location_id"), gazetteer), size,
                                     rooms or None) if x)
     if where:
-        lines.append(where)
+        lines.append(f"📍 {where}")
     price = cards.price_text(facts.get("price_pkr"), purpose)
     if price:
-        lines.append(price)
+        lines.append(f"💰 *{price}*")
     return [line for line in lines if line]
 
 
@@ -227,10 +240,11 @@ def draft_card(stored, total, gazetteer, photos, cover_url=None):
     lines = [WORDING["head"].format(n=stored.ordinal, total=total, code=code) if code
              else WORDING["head_no_code"].format(n=stored.ordinal, total=total)]
     kind, purpose = _value(fields.get("property_type")), _value(fields.get("purpose"))
-    star = "*" if (fields.get("purpose") or {}).get("source") == "inferred" else ""
+    inferred = (fields.get("purpose") or {}).get("source") == "inferred"
+    lines.append("")
     if kind or purpose:
-        lines.append(" · ".join(x for x in (
-            (kind or "").upper(), f"{purpose.upper()}{star}" if purpose else "") if x))
+        head = " · ".join(x for x in ((kind or "").upper(), (purpose or "").upper()) if x)
+        lines.append(f"🏠 *{head}*" + (" (inferred)" if inferred and purpose else ""))
     rooms = " / ".join(x for x in (
         f"{_value(fields['bedrooms'])} bed" if "bedrooms" in fields else None,
         f"{_value(fields['bathrooms'])} bath" if "bathrooms" in fields else None) if x)
@@ -238,19 +252,22 @@ def draft_card(stored, total, gazetteer, photos, cover_url=None):
         _place(fields.get("location"), gazetteer),
         _size(fields["size"]) if "size" in fields else None, rooms or None) if x)
     if where:
-        lines.append(where)
+        lines.append(f"📍 {where}")
     price = cards.price_text(_value(fields.get("price_pkr")), purpose)
     source = SOURCES.get(_value(fields.get("source_type")))
     if price or source:
-        lines.append(" · ".join(x for x in (price, source) if x))
+        lines.append("💰 " + " · ".join(x for x in (f"*{price}*" if price else None, source)
+                                          if x))
+    lines.append("")
     if "description" in fields:
-        lines.append(f"Note: {fields['description']['value']}")
+        lines.append(f"{NOTE}{fields['description']['value']}")
     attached = payload.get("photos") is not None
     if photos and (total == 1 or attached):
         lines.append(WORDING["photos"].format(n=photos))
     elif total > 1:
         lines.append(WORDING["photos_multi"])
-    if star:
+    lines.append("")
+    if inferred:
         lines.append(WORDING["inferred"])
     for conflict in payload["conflicts"]:
         lines.append(WORDING["conflict"].format(
@@ -274,7 +291,7 @@ def draft_card(stored, total, gazetteer, photos, cover_url=None):
     if fields.get("description", {}).get("removed"):
         lines.append(WORDING["sanitised"].format(n=fields["description"]["removed"]))
     ready = not payload["blockers"]
-    lines.append(WORDING["ready" if ready else "not_ready"])
+    lines += ["", WORDING["ready" if ready else "not_ready"]]
     buttons = [(draft_button("save", stored.id, stored.version), "Save")] if ready else []
     buttons += [(draft_button("edit", stored.id, stored.version), "Edit"),
                 (draft_button("cancel", stored.id, stored.version), "Cancel")]
@@ -295,10 +312,10 @@ def change_text(changes):
     parts = []
     for field, change in changes.items():
         if field == "price_pkr":
-            parts.append(f"price {cards.price_text(change['from'], None)} -> "
-                         f"{cards.price_text(change['to'], None)}")
+            parts.append(f"price {cards.price_text(change['from'], None)} → "
+                         f"*{cards.price_text(change['to'], None)}*")
         else:
-            parts.append(f"status {change['from']} -> {change['to']}")
+            parts.append(f"status {change['from']} → *{change['to']}*")
     return "; ".join(parts)
 
 
@@ -309,7 +326,7 @@ def update_card(stored, facts=None, gazetteer=None):
     lines = [WORDING["update"].format(code=payload["target_code"],
                                       changes=change_text(payload["changes"]))]
     if facts is not None:
-        lines += listing_lines(facts, gazetteer)
+        lines += [""] + listing_lines(facts, gazetteer)
     if DRAFT_WARNING_NOTE in payload.get("warnings", ()):
         lines.append(WORDING["unusual"])
     buttons = [(draft_button("confirm", stored.id, stored.version), "Confirm"),
@@ -361,7 +378,7 @@ def _undo_changes(event_type, changes):
 
 def undo_confirm_card(code, event_type, changes, event_id, version, facts, gazetteer):
     lines = [WORDING["undo_ask"].format(code=code, changes=_undo_changes(event_type, changes))]
-    lines += listing_lines(facts, gazetteer)
+    lines += [""] + listing_lines(facts, gazetteer)
     buttons = [(undo_confirm_button("confirm", event_id, version), "Confirm undo"),
                (undo_confirm_button("cancel", event_id, version), "Cancel")]
     return _buttons(_fit(lines), buttons, facts.get("cover_url"))
@@ -385,7 +402,8 @@ def attach_list(segment_id, photos, targets):
 
 
 def attach_confirm_card(code, photos, segment_id, facts, gazetteer):
-    lines = [WORDING["attach_ask"].format(code=code, n=photos)] + listing_lines(facts, gazetteer)
+    lines = [WORDING["attach_ask"].format(code=code, n=photos), ""]
+    lines += listing_lines(facts, gazetteer)
     buttons = [(attach_confirm_button("confirm", segment_id, facts["id"], facts["version"]),
                 "Confirm"),
                (attach_confirm_button("cancel", segment_id, facts["id"], facts["version"]),

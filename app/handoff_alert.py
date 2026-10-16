@@ -190,20 +190,21 @@ def card_body(packet, minutes, *, escalated=False):
     customer = f"+{packet.customer_number}"
     if packet.customer_name:
         customer = f"{_clip(packet.customer_name, 40)} · {customer}"
-    lines = [f"New lead {packet.lead_code} ({packet.reason or NOT_STATED})",
-             f"Customer: {customer}",
-             f"Wants: {packet.wants or NOT_STATED}"]
+    lines = [f"🔔 *New lead {packet.lead_code}* ({packet.reason or NOT_STATED})", "",
+             f"👤 *Customer:* {customer}",
+             f"🏠 *Wants:* {packet.wants or NOT_STATED}", "", "📍 *Property:*"]
     shown = [listing_line(li, packet.positions.get(li.code))
              for li in packet.listings[:LISTING_LINES]]
     if len(packet.listings) > LISTING_LINES:
         shown.append(f"+{len(packet.listings) - LISTING_LINES} more")
-    lines.append("Property: " + ("; ".join(shown) if shown else "none chosen"))
+    lines += [f"- {line}" for line in shown] or ["- none chosen"]
     last = _clip(packet.last_message, LAST_MESSAGE_CHARS) if packet.last_message else None
-    lines.append(f'Last message: "{last}"' if last else f"Last message: {NOT_STATED}")
+    lines += ["", f'💬 *Last message:* "{last}"' if last
+              else f"💬 *Last message:* {NOT_STATED}"]
     if packet.summary:
-        lines.append(f"Summary: {packet.summary}")
-    lines.append(f"Not accepted within {minutes} min: please take it." if escalated
-                 else f"Tap Accept within {minutes} min.")
+        lines.append(f"📝 *Summary:* {packet.summary}")
+    lines += ["", f"⏰ Not accepted within {minutes} min: please take it." if escalated
+              else f"⏰ Tap *Accept* within {minutes} min."]
     body = "\n".join(lines)
     if len(body) > whatsapp.INTERACTIVE_BODY_MAX and packet.summary:
         return card_body(_without_summary(packet), minutes, escalated=escalated)

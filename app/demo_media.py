@@ -502,10 +502,11 @@ def derivative_boxes(width, height, box, processed):
         with Image.open(io.BytesIO(getattr(processed, name))) as image:
             scale = image.width / width
         boxes[name] = tuple(v * scale for v in box)
-    left, top, right, _ = crop_box(width, height)
-    scale = media.CARD_SIZE[0] / (right - left)
-    boxes["card"] = ((box[0] - left) * scale, (box[1] - top) * scale,
-                     (box[2] - left) * scale, (box[3] - top) * scale)
+    # The card holds the whole photo, fitted and centred (media.card_placement).
+    left, top, fitted_w, _ = media.card_placement(width, height)
+    scale = fitted_w / width
+    boxes["card"] = (left + box[0] * scale, top + box[1] * scale,
+                     left + box[2] * scale, top + box[3] * scale)
     return boxes
 
 

@@ -111,6 +111,13 @@ stub or the engine. Customer and broker turns never reach `staff_actions` (route
 
 ## 5. Wording (proposed; needs owner approval)
 
+**Layout (2026-10-16):** cards use WhatsApp `*bold*` for the head, the codes and the new values,
+emoji line marks (📝 🏠 📍 💰 📷 ℹ️ ⚠️ ✅ ✏️ ↩) and blank lines between sections (facts / note and
+photos / flags / ready line; `staff_cards._fit` never leaves two blank lines in a row). The
+inferred-purpose star (`SALE*` + "* purpose…", which WhatsApp showed as a bullet) is now
+"🏠 *HOUSE · SALE* (inferred)" + "ℹ️ Purpose price se samjha gaya". Changes read
+"price PKR 8 crore → *PKR 7.8 crore*". The sentences below keep their words.
+
 Card lines (`staff_cards.WORDING`): "⚠ Missing: {fields}. Edit dabayein aur likh kar bhejein.", "⚠ Check - {label}: {values}?", "Sab zaroori maloomat mil gayi. Save dabayein.", "Save ke liye maloomat poori karein (Edit).", "{code}: {changes}. Confirm?", "Kaunsi property? {n} listings milin. List se chunein.", "✅ Saved as {code}. Listing ab active hai.", "✅ {code} updated: {changes}.", "✅ {code} marked {STATUS}.", "Undo {code}: {changes}?", "↩ Undo ho gaya: …", "Ye {n} photos kis listing ki hain? List se chunein.", "{code}: {n} photos add karein?", "✅ {code}: {n} photos add ho gayin."
 
 Notices (`staff_cards.NOTICES`, also in `turn_engine.TEMPLATES`):

@@ -57,11 +57,12 @@ def ready(st):
 def test_accept_hands_the_conversation_to_the_broker_with_full_details(st):
     ready(st)
     replies = press(st, "accept", BROKER_NUMBER)
-    assert replies[0] == f"You accepted L-01. Chat with the customer: https://wa.me/{CUSTOMER_B}"
+    assert replies[0] == (f"✅ You accepted *L-01*.\n\n💬 Chat with the customer:\n"
+                          f"https://wa.me/{CUSTOMER_B}")
     details = replies[1].split("\n")
-    assert details[0] == "L-01 full details"
+    assert details[0] == "📋 *L-01 full details*"
     assert any(line.startswith("- #") and "DH6-101" in line for line in details)
-    assert details[-1].endswith(f"] {SCENARIO_2}")
+    assert details[-2].startswith("_") and details[-1].endswith(SCENARIO_2)  # time, then text
     assert lead(st)[:3] == ("accepted", "broker", "broker")
     assert control(st) == ("human_owned", "human")
     [(due_ok,)] = st.query("SELECT release_due_at BETWEEN now() + interval '47 hours' "
@@ -81,10 +82,10 @@ def test_after_accept_the_customer_only_gets_the_holding_reply(st):
     turn(st, "price kam ho sakti hai?")
     turn(st, "aur properties bhi dikhao")
     assert bodies(to(st, BROKER_NUMBER, before)) == [
-        f"L-01 · +{CUSTOMER_B}: price kam ho sakti hai?",
-        f"L-01 · +{CUSTOMER_B}: aur properties bhi dikhao"]
+        f"💬 *L-01* · +{CUSTOMER_B}\nprice kam ho sakti hai?",
+        f"💬 *L-01* · +{CUSTOMER_B}\naur properties bhi dikhao"]
     assert bodies(to(st, CUSTOMER_B, before)) == [
-        "Ahmed ko aapka message bhej diya hai; woh jald jawab denge."]
+        "✅ *Ahmed* ko aapka message bhej diya hai; woh jald jawab denge."]
     assert len(st.requests) == calls
 
 
@@ -92,8 +93,8 @@ def test_the_first_tap_wins_and_a_later_one_changes_nothing(st):
     ready(st)
     open_admin_window(st)
     press(st, "accept", BROKER_NUMBER)
-    assert press(st, "accept", ADMIN_NUMBER) == ["L-01 was already accepted by Ahmed."]
-    assert press(st, "accept", BROKER_NUMBER) == ["You already accepted L-01."]
+    assert press(st, "accept", ADMIN_NUMBER) == ["*L-01* was already accepted by Ahmed."]
+    assert press(st, "accept", BROKER_NUMBER) == ["You already accepted *L-01*."]
     assert lead(st)[:3] == ("accepted", "broker", "broker")
 
 
@@ -104,14 +105,14 @@ def test_after_escalation_the_admin_may_accept_and_the_broker_is_told(st):
     assert len(cards_to(st, ADMIN_NUMBER)) == 1
     press(st, "accept", ADMIN_NUMBER)
     assert lead(st)[:3] == ("accepted", "broker", "admin")
-    assert press(st, "accept", BROKER_NUMBER) == ["L-01 was already accepted by Admin."]
+    assert press(st, "accept", BROKER_NUMBER) == ["*L-01* was already accepted by Admin."]
 
 
 def test_the_broker_can_still_accept_after_the_timeout(st):
     ready(st)
     open_admin_window(st)
     run_due(st, handoff.TIMEOUT_JOB)
-    assert press(st, "accept", BROKER_NUMBER)[0].startswith("You accepted L-01.")
+    assert press(st, "accept", BROKER_NUMBER)[0].startswith("✅ You accepted *L-01*.")
     assert lead(st)[:3] == ("accepted", "broker", "broker")
 
 
@@ -121,7 +122,7 @@ def test_pass_hands_the_lead_to_the_admin(st):
     ready(st)
     open_admin_window(st)
     before = len(st.client.sent)
-    assert press(st, "pass", BROKER_NUMBER) == ["L-01 passed to Admin."]
+    assert press(st, "pass", BROKER_NUMBER) == ["↪ *L-01* passed to Admin."]
     assert len(cards_to(st, ADMIN_NUMBER, before)) == 1
     assert lead(st)[:2] == ("pending", "admin") and lead(st)[3]
     # The broker who passed can no longer take it; the admin can.
@@ -132,7 +133,7 @@ def test_pass_hands_the_lead_to_the_admin(st):
 
 def test_called_is_recorded_once(st):
     ready(st)
-    assert press(st, "called", BROKER_NUMBER) == ["Noted: you called the customer of L-01."]
+    assert press(st, "called", BROKER_NUMBER) == ["📞 Noted: you called the customer of *L-01*."]
     first = st.query("SELECT called_at FROM handoff")
     press(st, "called", BROKER_NUMBER)
     assert st.query("SELECT called_at FROM handoff") == first and lead(st)[4]

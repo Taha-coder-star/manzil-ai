@@ -50,23 +50,23 @@ OPENED, ALREADY_OPEN, NO_AGENT = "opened", "already_open", "no_agent"
 # Customer wording (R6 / Demo Scope scenario 5; awaits owner approval).
 TEXT = {
     ROMAN_URDU: {
-        "connect": ("Main Manzil ka AI assistant hoon -- aapko hamare consultant {name} se "
+        "connect": ("Main Manzil ka AI assistant hoon — aapko hamare consultant *{name}* se "
                     "connect kar raha hoon. Woh jald rabta karenge."),
-        "property": "Property: {refs}",
-        "lead": "Aapka reference: {code}",
+        "property": "🏠 Property: *{refs}*",
+        "lead": "🔖 Aapka reference: *{code}*",
         "chat": "Chat with {name}",
         "chat_short": "Agent se chat",
         # Task 11.2 holding reply (R6 "Ahmed ko aapka message bhej diya hai")
-        "holding": "{name} ko aapka message bhej diya hai; woh jald jawab denge.",
+        "holding": "✅ *{name}* ko aapka message bhej diya hai; woh jald jawab denge.",
     },
     ENGLISH: {
-        "connect": ("I'm Manzil's AI assistant -- I'm connecting you with our consultant "
-                    "{name}. They will contact you soon."),
-        "property": "Property: {refs}",
-        "lead": "Your reference: {code}",
+        "connect": ("I'm Manzil's AI assistant — I'm connecting you with our consultant "
+                    "*{name}*. They will contact you soon."),
+        "property": "🏠 Property: *{refs}*",
+        "lead": "🔖 Your reference: *{code}*",
         "chat": "Chat with {name}",
         "chat_short": "Chat with agent",
-        "holding": "I've passed your message to {name}; they will reply soon.",
+        "holding": "✅ I've passed your message to *{name}*; they will reply soon.",
     },
 }
 
@@ -254,7 +254,7 @@ def customer_message(opened, language):
     wa.me CTA to the assigned staff member ("Ref L-07" pre-filled)."""
     words = TEXT.get(language, TEXT[ROMAN_URDU])
     name = first_name(opened.agent.name) or words["chat_short"]
-    lines = [words["connect"].format(name=name)]
+    lines = [words["connect"].format(name=name), ""]
     if opened.refs:
         lines.append(words["property"].format(refs=", ".join(opened.refs)))
     lines.append(words["lead"].format(code=opened.lead_code))
@@ -302,12 +302,12 @@ def staff_conversation(conn, number):
 
 
 def forward_text(code, customer, message):
-    """Broker-facing (English, D15): "L-07 · +923000000102: price kam ho sakti hai?"."""
+    """Broker-facing (English, D15): "💬 *L-07* · +923000000102" and the message below it."""
     label = {"text": "", "audio": " (voice)"}.get(message.type, f" ({message.type})")
     body = (message.text or "").strip() or f"[{message.type}]"
     if len(body) > FORWARD_CHARS:
         body = body[:FORWARD_CHARS - 1] + "…"
-    return f"{code} · +{customer}{label}: {body}"
+    return f"💬 *{code}* · +{customer}{label}\n{body}"
 
 
 def forward_turn(conn, client, turn, transcribe=None):

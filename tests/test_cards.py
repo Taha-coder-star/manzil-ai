@@ -84,8 +84,8 @@ def test_area_rooms_and_status_text():
     assert cards.area_text(shop) == "300 sq ft"
     assert cards.rooms_text(shop) is None and cards.rooms_text(listing()) == "4 bed / 5 bath"
     assert cards.status_text(shop) == "Off-plan" and cards.kind_text(shop) == "Shop for sale"
-    assert cards.card_body(2, shop) == "#2 PRJ-103 · Shop for sale\nDHA Phase 6 · 300 sq ft\n" \
-        "PKR 7.8 crore · Off-plan"
+    assert cards.card_body(2, shop) == "*#2 PRJ-103* · Shop for sale\nDHA Phase 6 · 300 sq ft\n" \
+        "*PKR 7.8 crore* · Off-plan"
 
 
 # --- formats --------------------------------------------------------------------------
@@ -101,8 +101,8 @@ def test_single_result_is_one_image_card_with_three_buttons():
         "type": "image", "image": {"link": f"{CDN}/DH6-101.jpg"},
     }
     assert button_ids(payload) == ["photos:DH6-101", "visit:DH6-101", "similar:DH6-101"]
-    assert body(payload) == ("*DH6-101* · House for sale\nDHA Phase 6\n"
-                             "500 sq yd · 4 bed / 5 bath\nPKR 7.8 crore · Ready")
+    assert body(payload) == ("*DH6-101* · House for sale\n📍 DHA Phase 6\n"
+                             "📐 500 sq yd · 4 bed / 5 bath\n💰 *PKR 7.8 crore* · Ready")
 
 
 def test_single_result_without_a_cover_gets_a_text_header():
@@ -125,16 +125,18 @@ def test_two_to_five_results_are_one_carousel(count):
     ]
     for rank, card in enumerate(deck, 1):
         code = f"DH6-{100 + rank}"
-        assert card["body"]["text"].startswith(f"#{rank} {code} ·")
+        assert card["body"]["text"].startswith(f"*#{rank} {code}* ·")
         assert [b["quick_reply"]["id"] for b in card["action"]["buttons"]] == [
             f"photos:{code}", f"visit:{code}",
         ]
-    lines = body(payload).splitlines()
-    assert lines[0] == f"{count} matching listings:"
-    assert [line.split(" ·")[0] for line in lines[1:-1]] == [
-        f"#{n} DH6-{100 + n}" for n in range(1, count + 1)
+    blocks = body(payload).split("\n\n")  # a blank line between blocks
+    assert blocks[0] == f"*{count} matching listings:*"
+    assert [block.split(" ·")[0] for block in blocks[1:-1]] == [
+        f"*#{n} DH6-{100 + n}*" for n in range(1, count + 1)
     ]
-    assert lines[-1] == "Reply with a number, or tap a card."
+    assert all(block.splitlines()[1] == "📍 DHA Phase 6 · *PKR 7.8 crore*"
+               for block in blocks[1:-1])
+    assert blocks[-1] == "👉 Reply with a number, or tap a card."
 
 
 @pytest.mark.parametrize(("count", "rows"), [(7, 2), (11, 6), (15, 10)])
@@ -158,11 +160,11 @@ def test_a_listing_without_a_cover_keeps_its_number_and_follows_as_a_text_card()
     payloads = cards.render(results)
     assert kinds(payloads) == ["carousel", "button"]
     deck = payloads[0]["interactive"]["action"]["cards"]
-    assert [c["body"]["text"].split(" ·")[0] for c in deck] == ["#1 DH6-101", "#3 DH6-103"]
-    assert "#2 DH6-102 · House for sale · DHA Phase 6 · PKR 7.8 crore (photos coming soon)" \
-        in body(payloads[0])
+    assert [c["body"]["text"].split(" ·")[0] for c in deck] == ["*#1 DH6-101*", "*#3 DH6-103*"]
+    assert ("*#2 DH6-102* · House for sale (photos coming soon)\n📍 DHA Phase 6 · "
+            "*PKR 7.8 crore*") in body(payloads[0])
     assert payloads[1]["interactive"]["header"]["text"] == "DH6-102 · photos coming soon"
-    assert body(payloads[1]).startswith("#2 DH6-102")
+    assert body(payloads[1]).startswith("*#2 DH6-102*")
     assert button_ids(payloads[1]) == ["photos:DH6-102", "visit:DH6-102"]
 
 
@@ -173,11 +175,11 @@ def test_a_listing_without_a_cover_keeps_its_number_and_follows_as_a_text_card()
 def test_fewer_than_two_covers_means_individual_cards(results):
     payloads = cards.render(results)
     assert kinds(payloads) == ["text"] + ["button"] * len(results)
-    assert body(payloads[0]).endswith("Reply with a number, or tap a card's button.")
+    assert body(payloads[0]).endswith("👉 Reply with a number, or tap a card's button.")
     for rank, (payload, item) in enumerate(zip(payloads[1:], results, strict=True), 1):
         header = payload["interactive"]["header"]
         assert header["type"] == ("image" if item.cover_url else "text")
-        assert body(payload).startswith(f"#{rank} {item.code}")
+        assert body(payload).startswith(f"*#{rank} {item.code}*")
 
 
 def test_fallback_sends_individual_image_cards_with_the_carousel_buttons():
@@ -248,7 +250,7 @@ def test_long_values_are_trimmed_to_the_card_limit():
     item = listing(location="L" * 200)
     text = cards.card_body(1, item)
     assert len(text) == whatsapp.CARD_BODY_MAX and text.count("\n") == 2
-    assert text.splitlines()[0] == "#1 DH6-101 · House for sale"
+    assert text.splitlines()[0] == "*#1 DH6-101* · House for sale"
 
 
 # --- database: migration 011 and listing reads ---------------------------------------

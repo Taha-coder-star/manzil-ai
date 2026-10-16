@@ -27,8 +27,12 @@ Sources: RFC section 11 (media storage boundary), R4/R9 D14 (media storage and r
    metadata it is not given; each output is re-opened and checked, and a failure rejects the photo):
    - `original`: long edge <= 2,560 px (R-36); JPEG q92, or PNG for PNG input;
    - `wa`: JPEG, 8-bit RGB, long edge <= 1,600 px, < 5 MB (quality, then size, is lowered until it fits);
-   - `card`: JPEG 1,200 x 628 (1.91:1), cropped and centred. The ratio is to be confirmed with the Day-5
-     carousel check on Android / iPhone / Web. Task 5.2 (app/cards.py) uses a listing cover's
+   - `card`: JPEG 1,200 x 628 (1.91:1). Since 2026-10-16 the whole photo is scaled to fit (contain) and
+     centred on a neutral `CARD_BACKGROUND`, never cropped or stretched (`media.card_image`,
+     `card_placement`); before, it was centre-cropped and portrait photos lost most of their height.
+     Cards made before that are rebuilt once by `python -m app.card_regen --agency-id <uuid> [--apply]`
+     under new keys `card/<agency_id>/v2/<uuid>.jpg` (card objects are immutable, so never
+     overwritten; the old objects stay for a rollback). Task 5.2 (app/cards.py) uses a listing cover's
      `public_url_card` as the carousel card header and as the image header of the single and
      individual cards (link only; Meta documents no media-ID form for carousel headers).
 6. Upload, then the row becomes `stored` with keys, size, dimensions, `public_url_card`, `exif_stripped`.
