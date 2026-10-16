@@ -1063,12 +1063,17 @@ def score_tools(records):
 
 # --- identity, plan, CLI ----------------------------------------------------------------------
 
+def text_sha256(path):
+    """sha256 of a text file with CRLF read as LF: the repository bytes, the same on a Windows
+    checkout (core.autocrlf) and on Linux (as tests/test_staff_bench.py pins the gold)."""
+    return stt_bench.sha256_bytes(Path(path).read_bytes().replace(b"\r\n", b"\n"))
+
+
 def identity(args, mode, provider_name, guard):
-    files = {name: stt_bench.sha256_bytes((benchmark.BENCH_DIR / name).read_bytes())
+    files = {name: text_sha256(benchmark.BENCH_DIR / name)
              for name in ("customer_text.json", "scope_conversations.json", "staff.json",
                           "staff_spans.json", "voice_controls.json")}
-    sources = {name: stt_bench.sha256_bytes(
-        (Path(__file__).resolve().parent / name).read_bytes())
+    sources = {name: text_sha256(Path(__file__).resolve().parent / name)
         for name in ("bench_live.py", "turn_engine.py", "ai_tools.py", "customer_tools.py",
                      "requirements.py", "search.py", "staff_tools.py", "staff_normalise.py",
                      "speech.py", "llm.py")}

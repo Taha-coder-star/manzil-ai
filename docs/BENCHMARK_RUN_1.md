@@ -7,12 +7,13 @@ Task 10.3 is not complete: the live text and staff runs, and the whole voice set
 
 - Commit: `09a9ec70005cb21987c64bac2b4a1811c804fa88` (main, merge of PR #42), branch `feature/task-10-3-benchmark`.
 - Date: 2026-10-16. Run by: Claude coordinator + 3 read-only investigation agents.
-- Bench file sha256:
-  - `bench/customer_text.json` e658bd2b82c55c19a9d55f636539adfe9ad169c5061149258d3f29e12dc73720
-  - `bench/customer_voice.json` 6ec276586de7fdda0fac8c4b3f3b3af971744ac95107d910447dbe63e97181ae
-  - `bench/voice_controls.json` 3175ad9ef12cbe8b979f56cf24e0722436fff9202e745790f0d3942203ba5109
-  - `bench/staff.json` ac7281424f33029380b5301ec3cfdbbe1b7b361dd7bf4809522519c8e823c25e
-  - `bench/staff_spans.json` 59ccc7dad22850ef639d7b2be198b953abcce3fccd04fb028298b8398ecc660e
+- Bench file sha256 (repository bytes, CRLF read as LF; corrected 2026-10-16 from the Windows
+  working-copy values first written here):
+  - `bench/customer_text.json` 077f17e70244e187421c6d0c6f217a0f749ba7be4475a2abdcb7e87b0598f48f
+  - `bench/customer_voice.json` f9018d5d5cac5c5ff7feddd1c53347f93b88caf890ad7a63257c930b4d433579
+  - `bench/voice_controls.json` c2b2bb0ad0abbd99403c0039b36b6927cb481d71e133ac3eef2e9791aa6a56e1
+  - `bench/staff.json` 7669513378d38fdf6280eda48de19889d67e66b9aa232b32e0252987927c8a40
+  - `bench/staff_spans.json` 099920d80b63f6d7a13c5d5124f42273cc9aae11d52f0fae9ce630c1e35390cf
 - No production, AWS, Meta/WhatsApp or paid provider access. Database runs used only the disposable local `manzil-schema-test` container.
 
 ## 1. Acceptance criteria (sourced)

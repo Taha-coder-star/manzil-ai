@@ -9,8 +9,9 @@ import pytest
 
 from app import benchmark
 
-# The R16 text set is referenced by the scope set, never edited (sha256 of the committed file).
-CUSTOMER_TEXT_SHA256 = "e658bd2b82c55c19a9d55f636539adfe9ad169c5061149258d3f29e12dc73720"
+# The R16 text set is referenced by the scope set, never edited: sha256 of the repository bytes
+# (CRLF read as LF, so a Windows checkout and Linux CI agree; as tests/test_staff_bench.py).
+CUSTOMER_TEXT_SHA256 = "077f17e70244e187421c6d0c6f217a0f749ba7be4475a2abdcb7e87b0598f48f"
 
 
 @pytest.fixture(scope="module")
@@ -47,7 +48,7 @@ def test_the_committed_scope_set_is_valid_and_covers_the_source_counts(scope, co
 
 def test_the_r16_text_items_are_referenced_unchanged(committed):
     raw = (benchmark.BENCH_DIR / "customer_text.json").read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == CUSTOMER_TEXT_SHA256
+    assert hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest() == CUSTOMER_TEXT_SHA256
     by_id = {i["id"]: i for i in committed[1]}
     for ref_item in benchmark.scope_items(committed[0], committed[1])[:8]:
         original = by_id[ref_item["id"]]

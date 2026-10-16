@@ -12,7 +12,7 @@ recordings. `docs/BENCHMARK_RUN_1.md` is readiness / offline evidence only.
 | Area | Files |
 |---|---|
 | Code | `app/bench_live.py` (new); `app/staff_bench.py` (shared scorers, `--mode`, scored denominators); `app/benchmark.py` (scope-set validator) |
-| Data | `bench/scope_conversations.json` (new, sha256 `a70137768077cb65ade7c6c9bf7f95bb02fd6ca07c7e7f926cced0eaa09ac4ca`). Unchanged: `customer_text.json` `e658bd2b…3720`, `staff.json` `ac72814…5e`, `staff_spans.json` `59ccc7d…0e`, `voice_controls.json` `3175ad9…09`, `customer_voice.json` `6ec2765…ae` |
+| Data | `bench/scope_conversations.json` (new). Unchanged R16 files. All sha256 are of the repository bytes (CRLF read as LF, as runs record them): scope_conversations `a70137768077…09ac4ca`, customer_text `077f17e7…98f48f`, staff `76695133…7c8a40`, staff_spans `099920d8…5390cf`, voice_controls `c2b2bb0a…a56e1`, customer_voice `f9018d5d…d433579` |
 | Tests | `tests/test_bench_live.py`, `tests/test_bench_live_db.py`, `tests/test_scope_bench.py` |
 
 ## 1. What runs, and what is real
@@ -204,6 +204,10 @@ The source is Demo Scope p7:
   - `test_bench_live.py`, `test_bench_live_db.py`, `test_staff_bench.py`, `test_scope_bench.py`,
     `test_benchmark.py`: **125 passed**, 0 failed / errors / skipped (Python 3.12, DB).
   - The offline subset on the host: 84 passed.
+- **Final focused run** (after the run-identity hashes moved to repository bytes, CRLF read
+  as LF, so Windows and Linux CI agree): the same five modules, **126 passed**, 0 failed /
+  errors / skipped (Python 3.12, DB). Result files written before this change recorded
+  Windows working-copy hashes.
   - `python -m app.benchmark`: valid (R16 sets + scope set).
   - Ruff (`app tests deploy`) clean; `git diff --check` clean.
 - **The four test warnings** (one per batch ab, ac, ad, ae) are one third-party deprecation:

@@ -487,3 +487,10 @@ def test_controls_without_recordings_never_complete_and_never_succeed(tmp_path):
     assert not data["coverage"]["subset_complete"]
     assert [m["reason"] for m in data["repeats"][0]["coverage"]["missing"]] == [
         "no_recording_or_stt_result"] * 5
+
+
+def test_run_hashes_are_the_repository_bytes_on_any_checkout(tmp_path):
+    (tmp_path / "lf.json").write_bytes(b'{"a": 1}\n')
+    (tmp_path / "crlf.json").write_bytes(b'{"a": 1}\r\n')
+    assert (bench_live.text_sha256(tmp_path / "lf.json")
+            == bench_live.text_sha256(tmp_path / "crlf.json"))
