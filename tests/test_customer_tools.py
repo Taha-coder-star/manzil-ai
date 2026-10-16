@@ -77,6 +77,20 @@ def test_the_voice_echo_question_is_not_preceded_by_notes_it_already_says():
     assert out == [echo]
 
 
+def test_not_understood_is_said_only_when_the_turn_says_nothing_else():
+    # Production turn 4b1d4b0f: three update calls gave "noted", a budget note and "not
+    # understood" in one message. The fallback stays only when it is the whole reply.
+    unclear = ai_tools.Notice("requirements_unclear")
+    out = render_customer(Outcome("done", "iteration_limit",
+                                  ("requirements_saved", unclear)), customer())
+    assert out == [whatsapp.text(TEMPLATES["requirements_saved"])]
+    out = render_customer(Outcome("done", "stop", (unclear,), payloads=(CARD,)),
+                          customer(results=True))
+    assert out == [CARD]
+    alone = render_customer(Outcome("done", "stop", (unclear,)), customer())
+    assert alone == [whatsapp.text(TEMPLATES["requirements_unclear"])]
+
+
 def test_of_several_questions_only_the_first_in_priority_is_sent():
     # Task 10.2: one question per turn; the others stay open in the patch log.
     operator = ai_tools.Notice("budget_operator_ask", (("amount", "8 crore"),))
