@@ -13,6 +13,10 @@ tolerances and the ladder bounds) to confirm that every expected ID fits the
 request and that no clear match is missing. They are not the search engine
 and must not be used as one.
 
+Task 10.3 adds bench/scope_conversations.json: the Demo Scope section 6 conversation
+coverage (20 scripted follow-up turns, Scenarios 2-3 + 10 extra photo requests), checked
+by check_scope against the same demo listings and filters.
+
     python -m app.benchmark [bench_dir]
 """
 
@@ -476,6 +480,128 @@ def check_staff_outcome(demo, item, created, errors):
         errors.append(f"{where}: every staff write needs a confirmation tap")
 
 
+# --- Demo Scope section 6 conversation coverage (Task 10.3) ---------------------------
+
+SCOPE_FILE = "scope_conversations.json"
+SCOPE_FOLLOW_UPS = 20  # Demo Scope p7: "20 scripted follow-up turns"
+SCOPE_PHOTOS = 10  # Demo Scope p7: "Scenarios 2-3 + 10 extra 'photos' requests"
+SCOPE_SCENARIO_PHOTOS = {"CT-27"}  # Scenario 3a
+SCOPE_KINDS = {"position", "quote", "add_location", "cheaper", "budget", "location",
+               "purpose_switch"}  # the follow-up targets Demo Scope p7 names
+PHOTO_KINDS = {"position", "quote", "continue", "focus", "listing_id"}
+GOLD_STATUSES = {"derived", "unresolved"}
+
+
+def load_scope(directory=BENCH_DIR):
+    return json.loads((Path(directory) / SCOPE_FILE).read_text("utf-8"))
+
+
+def scope_items(scope, text_items):
+    """The scope set as runnable items in file order: referenced customer_text items
+    (unchanged, with their scope role) and the SC- items."""
+    by_id = {i["id"]: i for i in text_items}
+    out = []
+    for ref in scope["refs"]:
+        item = dict(by_id[ref["id"]])
+        item.update(scope_role=ref["role"], follow_up_kind=ref.get("follow_up_kind"),
+                    metrics=ref.get("metrics", []), gold_status="derived")
+        out.append(item)
+    return out + [dict(i, scope_role="turn") for i in scope["items"]]
+
+
+def check_scope(demo, scope, text_items, errors):
+    by_text = {i["id"]: i for i in text_items}
+    refs = scope.get("refs") or []
+    items = scope.get("items") or []
+    for ref in refs:
+        if ref.get("id") not in by_text:
+            errors.append(f"scope ref {ref.get('id')!r} is not a customer_text item")
+            return
+    known = {i["id"]: i for i in scope_items(scope, text_items)}
+    ids = Counter(i.get("id") for i in items)
+    for item_id, count in ids.items():
+        if count > 1 or item_id in by_text:
+            errors.append(f"scope: duplicate id {item_id}")
+    for item in items:
+        where = item.get("id", "?")
+        if not str(where).startswith("SC-") or item.get("set") != "scope":
+            errors.append(f"{where}: scope items need id SC-nn and set 'scope'")
+        if item.get("gold_status") not in GOLD_STATUSES or not item.get("source"):
+            errors.append(f"{where}: gold_status (derived / unresolved) and a source are required")
+        if item.get("gold_status") == "unresolved" and "UNRESOLVED" not in item.get("note", ""):
+            errors.append(f"{where}: an unresolved item must say why in its note")
+        if item.get("language") not in LANGUAGES:
+            errors.append(f"{where}: language {item.get('language')!r}")
+        check_slots(demo, item, errors)
+        check_tools(item, errors)
+        context = item.get("context") or {}
+        after = known.get(context.get("after"))
+        if after is None:
+            errors.append(f"{where}: context.after {context.get('after')!r} is unknown")
+            continue
+        _check_scope_context(demo, item, after, errors)
+        outcome = item.get("expected_outcome") or {}
+        if outcome.get("type") == "photos":
+            _check_scope_photos(item, after, errors)
+        else:
+            check_customer_outcome(demo, item, known, errors)
+    turns = [i for i in known.values() if i.get("scope_role") == "turn"]
+    follow = [i for i in turns if "follow_up" in i.get("metrics", [])]
+    photos = [i for i in turns if "photos" in i.get("metrics", [])]
+    if len(follow) != SCOPE_FOLLOW_UPS:
+        errors.append(f"scope: {len(follow)} follow-up turns, Demo Scope asks {SCOPE_FOLLOW_UPS}")
+    kinds = {i.get("follow_up_kind") for i in follow}
+    if kinds != SCOPE_KINDS:
+        errors.append(f"scope: follow-up kinds {sorted(k for k in kinds if k)} "
+                      f"!= {sorted(SCOPE_KINDS)}")
+    extra = [i for i in photos if i["id"] not in SCOPE_SCENARIO_PHOTOS]
+    if len(extra) < SCOPE_PHOTOS or not SCOPE_SCENARIO_PHOTOS <= {i["id"] for i in photos}:
+        errors.append(f"scope: {len(extra)} extra photo requests (+ Scenario 3a), "
+                      f"Demo Scope asks {SCOPE_PHOTOS}")
+    check_hidden_and_private(demo, {"scope": items}, errors)
+
+
+def _shown_after(item):
+    """The listings a turn may leave on screen: its results, else what it had."""
+    outcome = item.get("expected_outcome") or {}
+    if outcome.get("type") == "results":
+        return set(outcome["ids"]) | set(outcome.get("allowed") or [])
+    return set((item.get("context") or {}).get("shown") or [])
+
+
+def _check_scope_context(demo, item, after, errors):
+    """context.shown holds every required result of the turn it follows, and only
+    listings that turn may show (ids + allowed)."""
+    where, shown = item["id"], item["context"].get("shown") or []
+    for code in shown:
+        if not _active_code(demo, code):
+            errors.append(f"{where}: shown {code} is not an active listing")
+    previous = _shown_after(after)
+    outcome = after.get("expected_outcome") or {}
+    required = set(outcome.get("ids") or []) if outcome.get("type") == "results" else previous
+    if not required <= set(shown) <= previous:
+        errors.append(f"{where}: context.shown {shown} does not follow {after['id']}")
+
+
+def _check_scope_photos(item, after, errors):
+    where, listing = item["id"], item["expected_outcome"].get("listing")
+    shown = item["context"].get("shown") or []
+    kind = item.get("follow_up_kind")
+    args = (item.get("expected_tools") or [{}])[0].get("args") or {}
+    if kind not in PHOTO_KINDS or listing not in shown:
+        errors.append(f"{where}: photos need a target kind and a shown listing")
+    elif kind == "position" and shown[args.get("position", 0) - 1:][:1] != [listing]:
+        errors.append(f"{where}: position {args.get('position')} is not {listing}")
+    elif kind == "quote" and (item.get("quote") or {}).get("listing") != listing:
+        errors.append(f"{where}: the quoted card is not {listing}")
+    elif kind == "listing_id" and listing not in item["input"]:
+        errors.append(f"{where}: {listing} is not named in the input")
+    elif kind == "focus" and len(shown) != 1:
+        errors.append(f"{where}: a focus reference needs exactly one shown listing")
+    elif kind == "continue" and (after.get("expected_outcome") or {}).get("listing") != listing:
+        errors.append(f"{where}: 'aur' continues {after['id']}, not {listing}")
+
+
 def check_hidden_and_private(demo, data, errors):
     hidden = {c for c, p in demo["properties"].items() if p["status"] != "active"}
     for items in data.values():
@@ -509,7 +635,8 @@ def validate(data, demo):
 
 
 def summary(data):
-    return {name: len(items) for name, items in data.items()}
+    return {name: items if isinstance(items, int) else len(items)
+            for name, items in data.items()}
 
 
 def main(argv=None):
@@ -521,6 +648,11 @@ def main(argv=None):
         print(f"Benchmark set could not be read: {exc}")
         return 1
     errors = validate(data, demo)
+    scope_path = Path(argv[0] if argv else BENCH_DIR) / SCOPE_FILE
+    if scope_path.is_file():
+        scope = json.loads(scope_path.read_text("utf-8"))
+        check_scope(demo, scope, data["customer_text"], errors)
+        data = {**data, "scope_turns": len(scope["items"]), "scope_refs": len(scope["refs"])}
     print(json.dumps(summary(data), sort_keys=True))
     for error in errors:
         print(f"ERROR {error}")
