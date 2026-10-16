@@ -6,8 +6,7 @@ execute() re-checks the route and validates the arguments before any tool body
 runs, so a tool the model was not offered (or invented) never executes:
 
 - customer: update_requirements, search_properties, send_property_photos,
-  get_property (Task 10.1), request_handoff (a stub until 11.1: it says no agent was
-  told)
+  get_property (Task 10.1), request_handoff (Task 11.1: a lead for a human agent)
 - staff (admin / agent): draft_listing, find_listings, propose_update, list_my_listings
 - broker: none (the engine makes no provider call for brokers)
 
@@ -98,10 +97,20 @@ _TOOLS = {
         },
     },
     "request_handoff": {
-        "description": "Ask for a human agent (visit, call, negotiation, or on request).",
+        "description": (
+            "Hand the customer to a human agent: a visit or booking, a price negotiation, "
+            "a legal or document question, a request for a person, or repeated "
+            "frustration. A listing is named only by the customer's own words in "
+            "description; the backend asks which listing when that is unclear."
+        ),
         "parameters": {
             "type": "object",
-            "properties": {"reason": {"type": "string", "minLength": 1, "maxLength": 300}},
+            "properties": {
+                "reason": {"type": "string", "enum": ["visit", "negotiation", "agent",
+                                                      "legal", "frustration"]},
+                "description": {"type": "string", "minLength": 1, "maxLength": 200},
+            },
+            "required": ["reason"],
         },
     },
     # --- staff (L2) ---
@@ -353,7 +362,7 @@ _STUBS = {
     "search_properties": _customer_tool("search_properties", "search_unavailable"),
     "send_property_photos": _customer_tool("send_property_photos", "photos_unavailable"),
     "get_property": _customer_tool("get_property", "details_unavailable"),
-    "request_handoff": _make_stub("request_handoff", "handoff_unavailable"),
+    "request_handoff": _customer_tool("request_handoff", "handoff_unavailable"),
     "draft_listing": _staff_stub("draft_listing", "draft_unavailable",
                                  staff_drafts.verify_draft_listing),
     "find_listings": _staff_stub("find_listings", "find_unavailable",

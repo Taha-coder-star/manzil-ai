@@ -18,7 +18,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import cards, echo, seed, webhook, whatsapp
+from app import cards, echo, handoff_actions, seed, webhook, whatsapp
 from app import demo_dataset as dd
 from app.db import tenant_transaction
 from app.handlers import make_handlers
@@ -27,6 +27,9 @@ from app.provision_agency import create_agency
 from app.worker import Worker
 from tests.test_gateway import FakeClient
 from tests.test_seed import ENV as SEED_ENV
+
+# Task 11.2: what a broker gets for anything that is not a lead command (R-15).
+BROKER_HELP = handoff_actions.TEXT["help"] + "\n\n" + handoff_actions.TEXT["none_open"]
 
 CDN = "https://demo-bucket.s3.us-east-1.amazonaws.com/card"
 
@@ -450,7 +453,7 @@ def test_demo_card_sends_the_single_result_card(demo):
 
 @pytest.mark.parametrize(("sender", "stub"), [
     (CUSTOMER, "Customer mode (stub) · 1 message in this turn"),
-    (BROKER, "Broker mode (stub) · 1 message in this turn"),
+    (BROKER, BROKER_HELP),   # Task 11.2: a broker gets the lead-command help (R-15)
 ])
 def test_card_commands_are_for_staff_only(demo, sender, stub):
     for n, command in enumerate(["#demo carousel", "#demo cards", "#demo fallback on"]):

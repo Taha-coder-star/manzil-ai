@@ -5,7 +5,13 @@ so a retried job never sends the same reply twice:
 
 1. One tenant transaction inserts (or finds) the message + outbound_message rows,
    applies the send-time control gate (R-28) and the 24 h window check, then
-   marks the row 'sending'.
+   marks the row 'sending'. The gate (Task 11.2) re-reads the conversation in that
+   transaction: an AI message goes out only while mode = 'ai', control_state =
+   'ai_active' and ai_muted_until is not in the future. A reply drafted before a
+   handoff (or an Accept) landed is therefore cancelled here, whatever the turn saw.
+   Messages sent with ai_generated=False (handoff messages, the holding reply,
+   forwards, broker cards, templates) are the only exemption; app code chooses it,
+   never model output.
 2. The HTTP call runs outside any transaction.
 3. A second transaction records 'sent' / 'failed' / 'unknown', or puts the row
    back to 'pending' for a retry.
@@ -17,6 +23,10 @@ read timeout.
 
 Residual gate window: a control-state change that commits after step 1 but
 before Meta accepts the call is not seen; it is bounded by one HTTP call.
+
+Templates (Task 11.1: new_lead_alert) are the only messages Meta delivers outside the
+24 h window, so a template payload skips the window check. It must be sent with
+ai_generated=False: templates carry handoff notices, never model output.
 """
 
 import logging
@@ -59,7 +69,10 @@ def send_message(
     'unknown' (ambiguous). Raises RetryableSendError after putting the row back
     to 'pending', and PermanentSendError after recording 'failed'.
     media_source: (table, id) of the stored image an image payload shows (app.media).
+    A template payload needs ai_generated=False (ValueError otherwise).
     """
+    if payload["type"] == "template" and ai_generated:
+        raise ValueError("a template is a system message: pass ai_generated=False")
     outbound_id, status = _prepare(
         conn, agency_id, conversation_id, recipient, payload, dedupe_key, ai_generated,
         media_source,
@@ -104,7 +117,8 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
         _set_timeout(conn)
         conversation = conn.execute(
             """
-            SELECT mode,
+            SELECT mode = 'ai' AND control_state = 'ai_active'
+                       AND (ai_muted_until IS NULL OR ai_muted_until <= now()),
                    last_customer_message_at > now() - make_interval(hours => %s)
             FROM conversation WHERE id = %s
             FOR SHARE
@@ -113,7 +127,7 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
         ).fetchone()
         if conversation is None:
             raise LookupError("conversation not found")
-        mode, in_window = conversation
+        ai_open, in_window = conversation
 
         row = conn.execute(
             "SELECT id, status FROM outbound_message WHERE dedupe_key = %s FOR UPDATE",
@@ -152,11 +166,11 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
             ).fetchone()[0]
 
         # Send-time gate (R-28): after a handoff the AI never speaks.
-        if ai_generated and mode != "ai":
+        if ai_generated and not ai_open:
             _set_status(conn, outbound_id, "cancelled", error_code="control_gate")
             return outbound_id, "cancelled"
-        if not in_window:
-            # Session messages need an open 24 h window; templates come later.
+        if not in_window and payload["type"] != "template":
+            # Session messages need an open 24 h window; a template does not.
             _set_status(conn, outbound_id, "failed", error_code="outside_window")
             return outbound_id, "failed"
 

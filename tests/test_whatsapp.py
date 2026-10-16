@@ -218,7 +218,30 @@ def test_token_and_body_never_logged(caplog):
     assert TO not in caplog.text
 
 
+def test_template():
+    assert whatsapp.template("new_lead_alert", "en", ["L-07", "DHA Phase 6"]) == {
+        "type": "template",
+        "template": {
+            "name": "new_lead_alert", "language": {"code": "en"},
+            "components": [{"type": "body", "parameters": [
+                {"type": "text", "text": "L-07"}, {"type": "text", "text": "DHA Phase 6"},
+            ]}],
+        },
+    }
+    assert whatsapp.template("hello_world", "en_US") == {
+        "type": "template",
+        "template": {"name": "hello_world", "language": {"code": "en_US"}},
+    }
+    for name, params in (("New Lead", []), ("", []), ("ok", ["two\nlines"]),
+                         ("ok", ["tab\there"]), ("ok", ["five     spaces"]), ("ok", [""])):
+        with pytest.raises(ValueError):
+            whatsapp.template(name, "en", params)
+
+
 def test_summary():
+    assert whatsapp.summary(whatsapp.template("new_lead_alert", "en", ["L-07", "DHA"])) == (
+        "[template new_lead_alert] · L-07 · DHA"
+    )
     assert whatsapp.summary(whatsapp.text("Hi")) == "Hi"
     assert whatsapp.summary(whatsapp.reply_buttons("Pick", [("a", "A")])) == "Pick"
     assert whatsapp.summary(whatsapp.image(media_id="1")) is None

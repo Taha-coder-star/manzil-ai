@@ -22,6 +22,9 @@ from app import (
     audio,
     cards,
     echo,
+    handoff,
+    handoff_actions,
+    handoff_alert,
     media,
     orchestrator,
     outbound,
@@ -32,6 +35,7 @@ from app import (
 )
 from app.config import check_ai_settings, check_stt_settings
 from app.db import tenant_transaction
+from app.gazetteer import GazetteerUnavailable
 from app.queue import TURN_FAILED_NOTICE_JOB, PermanentJobError
 
 logger = logging.getLogger(__name__)
@@ -225,6 +229,28 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         cards.carousel_fallback(conn, job, client_factory)
 
     handlers[cards.FALLBACK_JOB_TYPE] = carousel_fallback
+
+    # Task 11.1: the broker's lead card (L3 summary) and the accept timer.
+    service = requirements or getattr(engine, "requirements", None)
+
+    def place_names():
+        try:
+            return service.cache.get() if service is not None else None
+        except GazetteerUnavailable:
+            return None   # the card goes without place names
+
+    def lead_alert(conn, job):
+        handoff_alert.alert(conn, job, client_factory, engine, place_names())
+
+    def accept_timeout(conn, job):
+        handoff_alert.accept_timeout(conn, job, client_factory, place_names())
+
+    def release(conn, job):
+        handoff_actions.release(conn, job, client_factory)
+
+    handlers[handoff.ALERT_JOB] = lead_alert
+    handlers[handoff.TIMEOUT_JOB] = accept_timeout
+    handlers[handoff.RELEASE_JOB] = release
 
     if storage is not None:
         def fetch_voice(conn, job):

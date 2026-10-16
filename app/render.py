@@ -237,6 +237,22 @@ def wrapper_line(request, language, gazetteer=None):
                                    budget=_budget_text(request, language))
 
 
+def requirements_line(request, gazetteer=None):
+    """The stored requirements for a broker's lead card (Task 11.1; staff cards are English,
+    D15): "500 sq yd houses for sale in DHA Phase 6, up to 8 crore"; None when nothing
+    is stored."""
+    if request is None:
+        return None
+    names = " / ".join(_place_names(request, gazetteer))
+    size = _size_text(request, ENGLISH)
+    budget = _budget_text(request, ENGLISH)
+    if not (names or size or budget or request.types or request.purpose):
+        return None
+    things = (f"{size} " if size else "") + _things(request, ENGLISH)
+    place = TEXT[ENGLISH]["in_place"].format(place=names) if names else ""
+    return f"{things}{place}{budget}"
+
+
 def echo_lines(payload, request, language, gazetteer=None):
     """One line per unconfirmed slot the search echoed (SEARCH.md: never blocking)."""
     words, out = TEXT[language], []

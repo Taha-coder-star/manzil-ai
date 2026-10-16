@@ -9,6 +9,10 @@ holds WhatsApp payloads plus two internal entries that are never sent to Meta:
   was sent: a failed, gated or refused send leaves no history (docs/SEARCH.md).
 - IMAGE: one listing photo (property_media), sent through media.send_image under the
   entry's own key and recorded in media_sent, so "aur pictures" never repeats one.
+- SYSTEM: a handoff message (Task 11.1) wrapping its WhatsApp payload. It is sent with
+  ai_generated=False: the handoff that produced it has already set the conversation to
+  handoff_pending, where the send-time gate drops every AI message (R-28). Only
+  app.handoff builds one; model output never does.
 
 Every entry keeps its plan index as its seq, so a retried turn uses the same
 "turn:{id}:{seq}" keys and record_shown / media_sent ignore what is already there.
@@ -18,7 +22,7 @@ Never log message text, codes of the customer's choice or phone numbers.
 import logging
 import re
 
-from app import cards, media, search
+from app import cards, media, outbound, search
 from app.db import tenant_transaction
 
 logger = logging.getLogger(__name__)
@@ -26,7 +30,8 @@ logger = logging.getLogger(__name__)
 STATEMENT_TIMEOUT = "5s"
 SHOWN = "manzil_shown"
 IMAGE = "manzil_property_image"
-INTERNAL = frozenset({SHOWN, IMAGE})
+SYSTEM = "manzil_system"
+INTERNAL = frozenset({SHOWN, IMAGE, SYSTEM})
 _CARD_ID = re.compile(r"(?:photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
 
 
@@ -42,13 +47,18 @@ def image_entry(property_id, property_media_id, caption):
             "property_media_id": str(property_media_id), "caption": caption}
 
 
+def system_entry(payload):
+    return {"type": SYSTEM, "payload": payload}
+
+
 def is_internal(payload):
     return payload.get("type") in INTERNAL
 
 
 def visible(payloads):
-    """The payloads a customer sees (internal entries left out)."""
-    return [payload for payload in payloads if not is_internal(payload)]
+    """The payloads a customer sees (SHOWN / IMAGE entries left out)."""
+    return [payload for payload in payloads
+            if not is_internal(payload) or payload["type"] == SYSTEM]
 
 
 def _set_timeout(conn):
@@ -67,6 +77,10 @@ def send(conn, client, storage, turn, payloads):
             continue
         if payload["type"] == IMAGE:
             status = _send_image(conn, client, storage, turn, payload, key)
+        elif payload["type"] == SYSTEM:
+            status = outbound.send_message(
+                conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+                payload["payload"], key, ai_generated=False).status
         else:
             status = cards.send_one(conn, client, turn.agency_id, turn.conversation_id,
                                     turn.sender_wa_id, payload, key)

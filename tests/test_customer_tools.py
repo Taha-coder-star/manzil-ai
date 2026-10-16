@@ -37,6 +37,7 @@ def test_text_position(text, position):
     "photos:DH6-101", "visit:DH6-101", "similar:DH6-101", "listing:DH6-101",
     "clarify:location:0", "clarify:location:none", "clarify:purpose:sale",
     "clarify:purpose:rent", "nomatch:nearby", "nomatch:budget", "handoff:request",
+    "handoff:visit:DH6-101", "handoff:agent:all",
 ])
 def test_known_customer_taps(reply_id):
     assert customer_tools.TAP.fullmatch(reply_id)
@@ -44,6 +45,7 @@ def test_known_customer_taps(reply_id):
 
 @pytest.mark.parametrize("reply_id", [
     "photos:dh6-101", "clarify:location:x", "nomatch:cheaper", "handoff:now", "demo_btn_1", "",
+    "handoff:visit:dh6-101", "handoff:price:all", "handoff:visit:",
 ])
 def test_other_ids_are_no_customer_taps(reply_id):
     assert not customer_tools.TAP.fullmatch(reply_id)

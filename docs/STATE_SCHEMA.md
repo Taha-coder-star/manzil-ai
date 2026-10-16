@@ -57,8 +57,9 @@ unchanged. Only staff `#demo fallback on|off` writes it in 5.2, and only on the 
 conversation; a client that fails to render a carousel sends no signal, so nothing sets it
 automatically.
 
-`mode` (`ai`, `human`, `paused`) and `ai_muted_until` are unchanged, and **the send gate in
-app/outbound.py still reads `mode`**. control_state is the foundation for Task 11.2.
+`mode` (`ai`, `human`, `paused`) and `ai_muted_until` are unchanged. **Since Task 11.2 the send
+gate in app/outbound.py reads all three**: an AI message is cancelled unless `mode = 'ai'`,
+`control_state = 'ai_active'` and `ai_muted_until` is not in the future (docs/HANDOFF.md).
 
 **Backfill mapping**
 
@@ -90,7 +91,8 @@ No `service_window_expires_at` (owner decision; deliberate departure from R17 5 
 window is derived from `last_customer_message_at` by app/outbound.py, and a stored copy that nothing
 maintains would be a second, stale source of truth. A later task that needs a stored value must add
 reliable update logic and tests with it. Control-state integration (the gate reading control_state)
-is pending for the orchestration / handoff tasks (5.1, 11.2).
+is done in Task 11.2; handoff writes keep `mode` in step (`human` while pending / owned, `ai` after
+`#done` / release).
 
 ### message
 

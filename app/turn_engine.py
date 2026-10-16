@@ -199,6 +199,9 @@ TEMPLATES = {
     "listing_unknown": ("Main samajh nahi saka aap kaunsi property keh rahe hain. List mein "
                         "se us ka number bhejein (jaise #2)."),
     "no_more_photos": "{ref}: is property ki mazeed photos abhi available nahi hain.",
+    # Task 11.1 (wording pending owner approval)
+    "handoff_no_agent": ("Maazrat, abhi koi consultant available nahi hai; aapki request kisi "
+                         "ko nahi bheji gayi. Thori der baad dobara koshish karein."),
     "visit_unavailable": ("Visit book karne ka feature abhi tayyar ho raha hai; abhi koi "
                           "visit book nahi hui."),
     "similar_unavailable": ("Milti-julti listings ka feature abhi tayyar ho raha hai; abhi "
@@ -263,6 +266,8 @@ TEMPLATES_EN = {
                         "from the list (for example #2)."),
     "no_more_photos": "{ref}: no more photos of this property are available right now.",
     "visit_unavailable": "Booking a visit is not ready yet; no visit was booked.",
+    "handoff_no_agent": ("Sorry, no consultant is available right now; your request was "
+                         "not sent to anyone. Please try again a little later."),
     "similar_unavailable": "Similar listings are not ready yet; no search was run.",
     "details_unavailable": "Property details are not ready yet; no answer was given.",
     "echo_edit": "Okay, please type or say the correct details.",
@@ -298,7 +303,8 @@ SYSTEM_PROMPTS = {
         "is already recorded and any open question.\n"
         "- send_property_photos only for a listing they were already shown.\n"
         "- get_property for a question about one listing they were shown.\n"
-        "- request_handoff when they ask for a person, a visit, a call or a negotiation.\n"
+        "- request_handoff when they ask for a person, a visit, a call, a negotiation "
+        "or a legal / document answer, or keep being frustrated.\n"
         + _SHARED_RULES
     ),
     "staff": (
@@ -465,6 +471,11 @@ def render_customer(outcome, customer):
     if outcome.kind != "done":
         key = "refusal" if outcome.kind == "refused" else "failure"
         return [whatsapp.text(_template(key, language))]
+    if getattr(customer, "handoff", None) is not None:
+        # Task 11.1: the conversation is now handoff_pending; the handoff message (sent
+        # past the gate) is the whole reply. Anything else would be an AI message the
+        # gate drops, and a dropped payload stops the plan before the handoff message.
+        return [customer.handoff]
     keys = list(dict.fromkeys(outcome.notices))
     if customer.asked:  # one question per turn: the clarification with answer buttons
         keys = [k for k in keys if _key(k) not in customer_tools.QUESTIONS]

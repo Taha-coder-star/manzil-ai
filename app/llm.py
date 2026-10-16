@@ -80,6 +80,11 @@ TRANSCRIBE_INSTRUCTION = (
     "false and transcript to an empty string. language: the main spoken language as an "
     "ISO 639-1 code (ur, en, hi, ...), or an empty string."
 )
+SUMMARY_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {"summary": {"type": "STRING"}},
+    "required": ["summary"],
+}
 TRANSCRIBE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -269,6 +274,16 @@ def build_body(system, tools, contents, thinking_level=None):
 
 
 @dataclass(frozen=True)
+class Summary:
+    """The L3 lead summary (Task 11.1): broker-facing text, checked by the caller
+    against the lead's facts before use. Never logged."""
+
+    text: str
+    usage: Usage = field(default_factory=Usage)
+    model_version: str | None = None
+
+
+@dataclass(frozen=True)
 class Transcription:
     """A Gemini transcription (Task 6.3). The transcript is untrusted user content:
     never logged."""
@@ -303,6 +318,37 @@ def build_transcribe_body(data, mime_type, thinking_level=TRANSCRIBE_THINKING_LE
 def parse_transcription(data):
     """A Transcription from a generateContent body; ProviderError when it is unusable
     (refused, truncated, not the requested JSON)."""
+    result, usage, version = _json_candidate(data)
+    if (not isinstance(result, dict) or not isinstance(result.get("speech_present"), bool)
+            or not isinstance(result.get("transcript"), str)):
+        raise ProviderError("malformed:transcription", failover=False)
+    language = result.get("language")
+    language = language.strip().lower() if isinstance(language, str) else ""
+    return Transcription(result["speech_present"], result["transcript"].strip(),
+                         language or None, usage, version)
+
+
+def build_summary_body(system, text, thinking_level=None):
+    """generateContent body of the L3 lead summary (Task 11.1): no tools, JSON only."""
+    config = {"temperature": 0, "responseMimeType": "application/json",
+              "responseSchema": SUMMARY_SCHEMA}
+    if thinking_level:
+        config["thinkingConfig"] = {"thinkingLevel": thinking_level}
+    return {"systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": text}]}],
+            "generationConfig": config}
+
+
+def parse_summary(data):
+    """A Summary from a generateContent body; ProviderError when it is unusable."""
+    result, usage, version = _json_candidate(data)
+    if not isinstance(result, dict) or not isinstance(result.get("summary"), str):
+        raise ProviderError("malformed:summary", failover=False)
+    return Summary(result["summary"].strip(), usage, version)
+
+
+def _json_candidate(data):
+    """(the JSON object a structured-output call returned, Usage, model version)."""
     if not isinstance(data, dict):
         raise ProviderError("malformed:not_an_object", failover=False)
     usage = parse_usage(data.get("usageMetadata"))
@@ -329,13 +375,7 @@ def parse_transcription(data):
         result = json.loads(text)
     except (ValueError, RecursionError):
         raise ProviderError("malformed:not_json", failover=False) from None
-    if (not isinstance(result, dict) or not isinstance(result.get("speech_present"), bool)
-            or not isinstance(result.get("transcript"), str)):
-        raise ProviderError("malformed:transcription", failover=False)
-    language = result.get("language")
-    language = language.strip().lower() if isinstance(language, str) else ""
-    return Transcription(result["speech_present"], result["transcript"].strip(),
-                         language or None, usage, version)
+    return result, usage, version
 
 
 def _shutdown(sock):
@@ -465,6 +505,28 @@ class GeminiClient:
         except (ValueError, RecursionError):
             raise ProviderError("invalid_json", failover=False) from None
         return parse_transcription(payload)
+
+    def summarize(self, model, *, system, text, timeout_s, thinking_level=None):
+        """Task 11.1 L3: one lead-summary attempt (structured output, no tools).
+        Returns a Summary; raises ProviderError (failover on 404 / 408 / 429 / 5xx)."""
+        return _summarize(self, model, system, text, timeout_s, thinking_level)
+
+
+def _summarize(client, model, system, text, timeout_s, thinking_level):
+    if timeout_s <= 0:
+        raise ProviderError("deadline", failover=False)
+    body = json.dumps(build_summary_body(system, text, thinking_level),
+                      ensure_ascii=False).encode()
+    status, raw = client._post(f"{client._base_url}/models/{model}:generateContent",
+                               body, timeout_s)
+    if status != 200:
+        raise ProviderError(f"http_{status}", failover=status in (404, 408, 429)
+                            or status >= 500)
+    try:
+        payload = json.loads(raw)
+    except (ValueError, RecursionError):
+        raise ProviderError("invalid_json", failover=False) from None
+    return parse_summary(payload)
 
 
 def post_with_deadline(http, url, timeout_s, *, headers, content=None, files=None,
