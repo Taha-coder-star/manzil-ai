@@ -59,8 +59,9 @@ R16 7.4 b). No numeric confidence is invented; these are the provenance flags 7.
 | `8 crore تک`, `8 کروڑ تک`, `آٹھ کروڑ تک` (Urdu script) | max 8 cr | max 8 cr (unchanged) |
 | `8 crore` (bare, nothing after it) | around 7.2-8.8 cr (owner decision 2026-10-12) | unchanged |
 | span `8 crore`, message `8 crore tak` / `se upar` / `se 10 crore` / `تک` | **around** (silent) | max / min / range / max, read from the same message; raw `8 crore tak` |
-| `8 crore तक` (Devanagari operator, in or after the span) | **around** (silent) | asked: `budget_operator_ask` |
-| `8 करोड़ तक`, `आठ करोड़ तक` (Devanagari amount) | **dropped** (`unparsed`, no notice) | asked: `budget_unclear` |
+| `8 crore तक` (Devanagari operator, in or after the span) | **around** (silent) | max 8 cr (read as `tak`, 2026-10-17; was asked: `budget_operator_ask`) |
+| `8 करोड़ तक`, `आठ करोड़ तक` (Devanagari amount) | **dropped** (`unparsed`, no notice) | max 8 cr (2026-10-17; was asked: `budget_unclear`) |
+| `8 crore वाला`, `8 करोड़ों तक` (Devanagari words not in the table) | around / dropped | asked: `budget_operator_ask` / `budget_unclear` (unchanged) |
 
 Rules (`normalise.parse_budget(span, after=...)`; `after` is the text right after the verified span
 in the same message, R-22: current-turn evidence only):
@@ -110,12 +111,20 @@ as `unparsed` with no notice; the search then ran over every type. Now:
 - Urdu-script type words are read through the existing alias table: `گھر`, `مکان` -> house,
   `فلیٹ` -> apartment, `پلاٹ` -> plot, `دکان` -> shop, `دفتر` -> office (R16 7.5: the normalisers
   cover both scripts). No transliteration step.
-- A type span in words the normaliser cannot read (Devanagari) is asked: `type_unclear`.
+- Devanagari (2026-10-17, live C-02: Scribe wrote `घर` and `8 crore तक`, and the customer was
+  asked both): `normalise.romanise` maps a fixed table of known Devanagari words (types, budget
+  operators, purpose words, amounts, number words, units, relative ops; digits; nukta and
+  chandrabindu ignored) to the Roman spellings the parsers read, before `parse_types`,
+  `parse_budget`, `parse_area`, `parse_purpose`, `parse_number` and `relative_op`. It is needed
+  because Python's `\w` splits Devanagari words at vowel signs, so the word lists cannot hold
+  them. Spans, `find_money` / `find_areas` (validator, re-extraction) and place names are not
+  romanised.
+- A type span in Devanagari words outside that table (`कोठी`) is still asked: `type_unclear`.
 - `type_unclear` and `budget_operator_ask` are 7.3 asks, so they hold the search until answered
   (next section): no result is built over every type or on a guessed budget.
 
 Limit: if the model never emits a `property_types` op for an unread word, nothing can detect it
-(the backend does not read Devanagari); the search then has no type, as for a customer who named
+(the backend reads only the Devanagari words in the table); the search then has no type, as for a customer who named
 none. The 7.2 decision on the STT setting (Roman Urdu output) addresses this at the source.
 
 ## Scenario 2 by script (tested)
@@ -124,8 +133,8 @@ none. The 7.2 decision on the STT setting (Roman Urdu output) addresses this at 
 |---|---|---|---|---|---|---|
 | Roman Urdu | DHA Phase 6 | house | 500 sq yd | max 8 cr | sale (inferred, noted) | the 3 listings (DB test) |
 | Urdu script | DHA Phase 6 | house | 500 sq yd | max 8 cr (`آٹھ کروڑ تک`) | sale (inferred, noted) | the 3 listings (DB test) |
-| Scribe mixed Devanagari (`घर`, `8 crore तक`) | DHA Phase 6 | asked first | 500 sq yd | asked next (operator) | not inferred | one question per turn, no search until both answered (DB test) |
-| Full Devanagari | not resolved (`location_unknown`) | asked | read as gaz | asked (`budget_unclear`) | not read | questions, no slot guessed |
+| Scribe mixed Devanagari (`घर`, `8 crore तक`) | DHA Phase 6 | house | 500 sq yd | max 8 cr | sale (inferred, noted) | the 3 listings (DB test; was: two questions before 2026-10-17) |
+| Full Devanagari | not resolved (`location_unknown`) | house | 500 sq yd | max 8 cr | sale (inferred) | the place is asked, never guessed |
 
 ## Haan / Badlein
 

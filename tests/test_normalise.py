@@ -299,3 +299,24 @@ def test_inferred_purpose(pkr, category, value):
 ])
 def test_category(kind, category):
     assert n.category_of(kind) == category
+
+
+# Devanagari (live 2026-10-17: Scribe writes Roman Urdu speech partly in Devanagari)
+@pytest.mark.parametrize(("text", "roman"), [
+    ("8 crore तक", "8 crore tak"),
+    ("घर चाहिए", "ghar चाहिए"),                      # unknown words stay as they are
+    ("बजट आठ करोड़ तक।", "बजट aath crore tak।"),     # nukta, danda
+    ("५०० गज़", "500 gaz"),                          # Devanagari digits
+    ("पाँच सौ गज", "paanch sau gaz"),                 # chandrabindu
+    ("DHA phase 6", "DHA phase 6"),
+])
+def test_romanise(text, roman):
+    assert n.romanise(text) == roman
+
+
+def test_devanagari_amounts_sizes_and_purpose_are_read():
+    assert n.parse_area("पाँच सौ गज़", property_type="house").sqft == 4500
+    assert n.parse_budget("आठ करोड़ तक", purpose="sale").max == 80_000_000
+    assert n.parse_purpose("किराए पर चाहिए").value == "rent"
+    assert n.parse_purpose("घर खरीदना है").value == "sale"
+    assert n.relative_op("कुछ सस्ता दिखाओ") == "cheaper"
