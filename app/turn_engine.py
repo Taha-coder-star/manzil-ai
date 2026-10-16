@@ -513,6 +513,10 @@ def render_customer(outcome, customer):
     if customer.echoed:  # Task 10.2: the voice echo lists the values these notes repeat
         keys = [k for k in keys if _key(k) not in customer_tools.SAID_BY_ECHO]
     payloads = ground_customer(list(outcome.payloads), customer.facts, gazetteer, language)
+    if len(keys) > 1 or customer_reply.visible(payloads):
+        # "Not understood" is the fallback of an update call that produced no notice; next to
+        # another call's notice or a reply it contradicts what this turn did say.
+        keys = [k for k in keys if _key(k) != "requirements_unclear"]
     if not keys and not customer_reply.visible(payloads):
         keys = ["customer_default"]
     summarise = getattr(customer, "filters_text", None)
@@ -663,7 +667,9 @@ class TurnEngine:
             payloads = render_customer(outcome, customer)
         else:
             payloads = ground_reply(render(turn.route, outcome), outcome.trusted)
-        logger.info(
+        # The round limit is not stored on the turn (it is 'replied'); WARNING makes it visible.
+        logger.log(
+            logging.WARNING if outcome.detail.startswith("iteration_limit") else logging.INFO,
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
             turn.id, turn.route, outcome.kind, outcome.detail, outcome.calls,
             ", ".join(outcome.tools), int((self._clock() - start) * 1000),
@@ -809,8 +815,32 @@ class TurnEngine:
                     for call, result in zip(response.tool_calls, results, strict=True)
                 ]},
             ]
-        return Outcome("done", "iteration_limit", tuple(notices), tuple(tools), calls,
+        detail = "iteration_limit"
+        if self._search_due(context, tools):
+            # Every round went to update_requirements (production turn 4b1d4b0f, 2026-10-16):
+            # the saved requirements get the normal search in code, with all its gates (an
+            # open question, the voice echo, no-match), and no further provider call.
+            result = ai_tools.execute(llm.ToolCall("search_properties", {}, None), context)
+            tools.append(result.name if result.ok else f"{result.name}!{result.error}")
+            notices.extend(_notices(result))
+            trusted |= result.trusted_codes
+            if result.ok:
+                payloads.extend(result.payloads)
+            detail = "iteration_limit_search"
+        return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
+
+    @staticmethod
+    def _search_due(context, tools):
+        """A customer turn whose every tool call was update_requirements (a failed one
+        included) and whose reply has no answer yet."""
+        binding = context.binding
+        return (context.route == "customer"
+                and isinstance(binding, customer_tools.CustomerBinding)
+                and bool(tools)
+                and all(t.split("!")[0] == "update_requirements" for t in tools)
+                and not (binding.asked or binding.results or binding.echoed
+                         or getattr(binding, "handoff", None) is not None))
 
     def _extend(self, turn, budget, notify):
         """Once per turn: send the interim message and grant the continuation."""

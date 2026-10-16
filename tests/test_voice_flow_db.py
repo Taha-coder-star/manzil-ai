@@ -477,6 +477,110 @@ def test_a_retried_haan_tap_confirms_once(vf):
                     "'echo'")[0][0] == 1
 
 
+# --- the model spends every round on update_requirements (production turn 4b1d4b0f) ----------
+
+LOOPED = "DHA Phase 6 mein ghar chahiye, 8 crore tak."
+LOOPED_PATCH = [p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar"),
+                p("budget", "set", "8 crore tak")]
+# No size was said: an invented size span is rejected (R-22) and saves nothing.
+INVENTED_SIZE = [p("size", "set", "500 gaz")]
+
+
+def looped(vf, message, patch):
+    """One customer turn whose model calls update_requirements in all three rounds and
+    never search_properties (the third call's only op is an invented size)."""
+    before, calls = len(vf.st.client.sent), len(vf.st.requests)
+    for n, ops in enumerate((patch, patch, INVENTED_SIZE)):
+        vf.st.script.append(tools_answer(tool("update_requirements", {"patch": ops},
+                                              call_id=f"loop-{n}")))
+    vf.st.deliver(message)
+    vf.st.drain()
+    assert vf.st.script == [] and len(vf.st.requests) - calls == turn_engine.MAX_ITERATIONS
+    return [payload for _, payload in vf.st.client.sent[before:]]
+
+
+def no_contradiction(said):
+    for key in ("requirements_saved", "requirements_unclear", "budget_implausible"):
+        assert TEMPLATES[key] not in said
+
+
+@pytest.mark.parametrize("kind", ["voice", "text"])
+def test_an_update_only_turn_still_gets_the_normal_search(vf, kind, caplog):
+    """The same words typed or transcribed, with the same state: the stored requirements are
+    searched once in code (no fourth provider call), and the reply is the search reply alone,
+    not "noted" + "budget looks wrong" + "I did not understand"."""
+    st = vf.st
+    if kind == "voice":
+        vf.scribe.script.append(scribe_body(LOOPED))
+        message = vf.voice()
+    else:
+        message = text(LOOPED, sender=CUSTOMER_B)
+    caplog.set_level(logging.INFO)
+    payloads = looped(vf, message, LOOPED_PATCH)
+    state = slots(st)
+    assert state["budget"]["value"]["mode"] == "max"
+    assert state["budget"]["value"]["max"] == 80_000_000
+    assert state["property_types"]["value"] == ["house"]
+    assert state["location"]["value"]["nodes"] == [st.ids["dha-ph6"]]
+    assert "size" not in state            # never invented
+    assert requirements.uncertain_slots(state) == []
+    assert runs(st) == 1 and set(latest_shown(st)) == SCENARIO_2_IDS
+    assert echo_question(payloads) is None
+    no_contradiction(sent_text(payloads))
+    # Operators see that the round limit was hit, also when the reply was delivered.
+    [line] = [r for r in caplog.records if "iteration_limit" in r.getMessage()]
+    assert line.levelno == logging.WARNING
+    assert "iteration_limit_search" in line.getMessage()
+
+
+def test_an_update_only_voice_turn_keeps_the_confirmed_size(vf):
+    st = vf.st
+    typed = "dha phase 6 mien 500 gz ka ghar budget 8 crore tak"
+    vf.say(text(typed, sender=CUSTOMER_B), calls=search_calls([
+        p("location", "set", "dha phase 6"), p("size", "set", "500 gz"),
+        p("property_types", "set", "ghar"), p("budget", "set", "budget 8 crore tak")]))
+    first = set(latest_shown(st))
+    size = slots(st)["size"]
+    assert size["value"]["value"] == 500 and size["confirmed"] is True and runs(st) == 1
+
+    vf.scribe.script.append(scribe_body(LOOPED))
+    payloads = looped(vf, vf.voice(), LOOPED_PATCH)
+    state = slots(st)
+    assert state["size"] == size          # the earlier typed size is untouched
+    assert state["budget"]["value"]["max"] == 80_000_000
+    assert runs(st) == 2 and set(latest_shown(st)) == first
+    assert echo_question(payloads) is None
+    no_contradiction(sent_text(payloads))
+
+
+def test_an_update_only_voice_turn_with_a_doubtful_budget_asks_one_question(vf):
+    """A heard amount far outside the inventory band (R17 4.7) is confirmed with the echo
+    before any search; the echo is the whole reply."""
+    st = vf.st
+    heard = "DHA Phase 6 mein ghar khareedna hai, 8 lakh tak."
+    vf.scribe.script.append(scribe_body(heard))
+    payloads = looped(vf, vf.voice(), [
+        p("location", "set", "DHA Phase 6"), p("purpose", "set", "khareedna"),
+        p("property_types", "set", "ghar"), p("budget", "set", "8 lakh tak")])
+    question = echo_question(payloads)
+    assert question is not None and payloads == [question]
+    assert "8 lakh tak" in question["interactive"]["body"]["text"]
+    assert slots(st)["budget"]["echo"] == ["implausible"]
+    assert runs(st) == 0
+
+
+def test_an_update_only_turn_with_no_match_gets_the_honest_no_match(vf):
+    st = vf.st
+    vf.scribe.script.append(scribe_body("DHA Phase 6 mein ghar chahiye, 5 crore tak."))
+    payloads = looped(vf, vf.voice(), [
+        p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar"),
+        p("budget", "set", "5 crore tak")])
+    assert runs(st) == 1 and latest_shown(st) == []
+    said = sent_text(payloads)
+    assert "is budget mein" in said and "abhi available nahi" in said
+    no_contradiction(said)
+
+
 # --- logs --------------------------------------------------------------------------------------
 
 def test_voice_turn_logs_hold_no_transcript_or_phone(vf, caplog):
