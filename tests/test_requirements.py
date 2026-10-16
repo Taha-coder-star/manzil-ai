@@ -510,13 +510,24 @@ def test_a_stored_purpose_is_kept_when_the_amount_does_not_contradict_it(gz, spa
     assert "purpose_inferred" not in {n.key for n in merge.notices}
 
 
-def test_a_sale_search_followed_by_a_monthly_rent_amount_becomes_rent(gz):
-    state = {"purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
+def test_an_inferred_sale_followed_by_a_rent_amount_becomes_rent(gz):
+    inferred = dict(slot_entry("sale"), source="inferred", confirmed=False)
+    state = {"purpose": inferred, "property_types": slot_entry(["house"]),
              "location": loc("dha-ph6")}
     merge = run(gz, state, [op("budget", "set", "2 lakh")], [("text", "budget 2 lakh")])
     assert value(merge, "purpose") == "rent"
     assert value(merge, "budget")["period"] == "monthly"
     assert "purpose_inferred" in {n.key for n in merge.notices}
+
+
+def test_a_stated_purpose_for_the_same_kind_of_property_is_kept(gz):
+    # "buy house ..." then "budget 2 lakh": no type switch, so sale stays (the plausibility
+    # guard asks about the amount; test_an_impossible_budget_is_asked_then_kept_when_restated).
+    state = {"purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
+             "location": loc("dha-ph6")}
+    merge = run(gz, state, [op("budget", "set", "2 lakh")], [("text", "budget 2 lakh")])
+    assert value(merge, "purpose") == "sale"
+    assert "purpose_inferred" not in {n.key for n in merge.notices}
 
 
 HOUSE_SEARCH = {

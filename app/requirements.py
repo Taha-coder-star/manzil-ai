@@ -1042,9 +1042,14 @@ class Patch:
         """Live 2026-10-17: after "office on rent", "500 gaz ka ghar, budget aath crore tak"
         kept rent and searched 8 crore a month. A new amount with no purpose word that the
         Data Model 4.4 thresholds put only in the other purpose drops the stored purpose
-        (and the budget's period), so _infer_purpose sets it again, inferred and noted."""
+        (and the budget's period), so _infer_purpose sets it again, inferred and noted.
+        Only after a residential <-> commercial switch in this patch, or over a purpose that
+        was itself inferred: a purpose the customer stated for the same kind of property is
+        kept, and an odd amount goes to the plausibility guard (R17 4.7)."""
         value = budget["value"]
         if value.get("relative"):
+            return False
+        if self.type_switch is None and purpose.get("source") != "inferred":
             return False
         if normalise.parse_purpose(budget.get("raw") or "").status == normalise.OK:
             return False   # "3 lakh mahana": the amount says its own purpose
