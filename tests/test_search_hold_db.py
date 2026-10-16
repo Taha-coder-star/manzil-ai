@@ -72,6 +72,23 @@ def test_a_size_question_holds_the_search_too(st):
     assert runs(st) == 1
 
 
+def test_a_house_to_office_switch_asks_the_size_before_searching(st):
+    """Live 2026-10-16 (owner decision): after scenario 2's 500 gaz house search, scenario
+    1's office request found "no 500 sq yd offices". The old size is dropped and asked."""
+    scenario_2(st)
+    assert runs(st) == 1
+    office = "office on rent in karachi around 5 lakh per month"
+    asked = turn(st, office,
+                 update(p("property_types", "set", "office"), p("purpose", "set", "on rent"),
+                        p("location", "set", "karachi"),
+                        p("budget", "set", "around 5 lakh per month")), SEARCH)
+    assert turn_engine.TEMPLATES_EN["size_ask"] in sent_text(asked)  # English, as asked
+    assert runs(st) == 1 and not cards_in(asked)
+    assert "size" not in st.state()[1] and "beds_min" not in st.state()[1]
+    answered = turn(st, "1500 sq ft", update(p("size", "set", "1500 sq ft")), SEARCH)
+    assert runs(st) == 2 and cards_in(answered)
+
+
 def age_log(st):
     with psycopg.connect(st.admin_url, autocommit=True) as admin:
         admin.execute("UPDATE requirement_patch_log SET created_at = now() - interval '3 days'")

@@ -475,6 +475,47 @@ def test_buy_to_rent_moves_the_budget_and_asks_unless_an_amount_is_given(gz):
     assert "budget_ask_rent" not in {n.key for n in given.notices}
 
 
+HOUSE_SEARCH = {
+    "purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
+    "location": loc("dha-ph6"), "beds_min": slot_entry(4),
+    "size": slot_entry({"value": 500, "unit": "sq_yd", "sqft": 4500, "nominal_sqyd": 500}),
+    "budget": slot_entry({"min": None, "max": 80_000_000, "mode": "max",
+                          "period": "one_time"})}
+OFFICE_TEXT = "office on rent in karachi around 5 lakh per month"
+
+
+def test_a_house_to_office_switch_drops_the_old_size_and_asks_for_it(gz):
+    # Live 2026-10-16: the house search's 500 sq yd made "office ... 5 lakh" find nothing.
+    merge = run(gz, HOUSE_SEARCH, [op("property_types", "set", "office"),
+                                   op("purpose", "set", "on rent"),
+                                   op("budget", "set", "around 5 lakh per month")],
+                [("text", OFFICE_TEXT)])
+    assert value(merge, "property_types") == ["office"]
+    assert "size" not in merge.slots and "beds_min" not in merge.slots
+    [ask] = [e for e in merge.entries if e["status"] == "ask"]
+    assert (ask["slot"], ask["detail"]) == ("size", "type_switch")
+    assert merge.entries[-1] is ask   # the newest size entry: open_asks holds the search
+    assert "size_ask" in {n.key for n in merge.notices}
+
+
+def test_a_switch_that_states_a_new_size_keeps_it_and_asks_nothing(gz):
+    merge = run(gz, HOUSE_SEARCH, [op("property_types", "set", "office"),
+                                   op("size", "set", "1500 sq ft")],
+                [("text", "office chahiye 1500 sq ft")])
+    assert value(merge, "size")["sqft"] == 1500
+    assert "beds_min" not in merge.slots
+    assert not [e for e in merge.entries if e["status"] == "ask"]
+
+
+def test_a_switch_within_homes_or_a_first_search_keeps_or_asks_no_size(gz):
+    flat = run(gz, HOUSE_SEARCH, [op("property_types", "set", "flat")], [("text", "flat bhi")])
+    assert value(flat, "size")["value"] == 500 and value(flat, "beds_min") == 4
+    first = run(gz, {}, [op("property_types", "set", "office"),
+                         op("budget", "set", "around 5 lakh per month")],
+                [("text", OFFICE_TEXT)])
+    assert not [e for e in first.entries if e["status"] == "ask"]   # Demo Scope scenario 1
+
+
 def test_the_same_purpose_again_does_not_touch_the_budget(gz):
     state = {"purpose": slot_entry("sale"),
              "budget": slot_entry({"min": None, "max": 8, "mode": "max", "period": "one_time"})}
