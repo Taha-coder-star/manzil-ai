@@ -13,6 +13,7 @@ Validator: `python -m app.benchmark` (also run by `tests/test_benchmark.py` in C
 | `voice_controls.json` | VC-01..05 | 1 silent, 1 near-silent, 1 music, 1 Punjabi, 1 over 120 s (not scored) |
 | `staff.json` | ST-01..20 | new full 6, new missing fields 3, update by ID 4, by description single 2, multiple 3, Bahria nominal / marla 2 |
 | `voice_manifest.csv` | after recording | one row per recorded note (below) |
+| `scope_conversations.json` | SC-01..21 + references to 8 CT items | Demo Scope section 6 (Task 10.3): 20 scripted follow-up turns (CT-27..29 + 17 SC), Scenario 3a + 10 extra photo requests; checked by `check_scope`; design and status in docs/BENCH_LIVE.md |
 
 Text coverage (checked): >= 12 prices (lakh, crore, sawa, saade, dedh, dhai, "80 lac", "7.8cr"),
 >= 10 sizes in all four units (sq ft, sq yd / gaz / yard, marla, kanal; one without a unit),

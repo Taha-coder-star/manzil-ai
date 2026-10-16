@@ -2,6 +2,7 @@
 staff extraction rules with HAND-WRITTEN SPANS (bench/staff_spans.json).
 
     python -m app.staff_bench [--out result.json]
+    python -m app.staff_bench --mode dry-run|live ...   (app.bench_live: the real pipeline)
 
 What this measures: the backend rules (span checks, normalisers, resolver, conflicts,
 duplicates, codes, candidate matching, update checks) over the demo dataset, in memory.
@@ -36,7 +37,7 @@ BANNER = ("FIXTURE RUN - spans were written by hand from the inputs. This measur
 # Gold values this code disagrees with on purpose; reported, never hidden or tuned away.
 KNOWN_GOLD_DISAGREEMENTS = {
     ("ST-01", "duplicate_of"): (
-        "DH6-101 (78 lakh, 4 bed / 5 bath, 500 yd, same phase) and the reserved DH6-106 are "
+        "DH6-101 (7.8 crore, 4 bed / 5 bath, 500 yd, same phase) and the reserved DH6-106 are "
         "closer to ST-01 than BTK-101 is to ST-02, which the gold does flag; the RFC rule "
         "(same location + size + price within tolerance) flags both. Owner question Q1."),
 }
@@ -68,41 +69,105 @@ def _check(gold, got):
     return {"gold": gold, "got": got, "ok": gold == got}
 
 
+def _number(value):
+    """A stored payload number (JSON keeps Decimals as strings) as a Decimal; others as is."""
+    if isinstance(value, str):
+        try:
+            return Decimal(value)
+        except ArithmeticError:
+            return value
+    return value
+
+
+def score_draft(gold, payload, *, location_key=lambda location_id: location_id):
+    """Critical fields and workflow checks of one draft, from its listing_draft payload
+    (staff_normalise.to_payload: in memory for the fixture run, the stored JSON for a live
+    run). location_key maps the stored location id to the demo key."""
+    f, want = payload["fields"], gold["fields"]
+    size = f.get("size") or {}
+    location_id = (f.get("location") or {}).get("location_id")
+    got = {"purpose": (f.get("purpose") or {}).get("value"),
+           "property_type": (f.get("property_type") or {}).get("value"),
+           "location_key": location_key(location_id) if location_id is not None else None,
+           "price_pkr": _number((f.get("price_pkr") or {}).get("value")),
+           "area_value": _number(size.get("value")), "area_unit": size.get("unit"),
+           "bedrooms": _number((f.get("bedrooms") or {}).get("value"))}
+    if "size_nominal_sqyd" in want:
+        got["size_nominal_sqyd"] = _number(size.get("nominal_sqyd"))
+    slots = ["purpose", "property_type", "location_key", "price_pkr", "area_value",
+             "area_unit", "size_nominal_sqyd"]
+    if want.get("property_type") in sn.BEDROOM_TYPES or "bedrooms" in want:
+        slots.append("bedrooms")
+    fields = {slot: _check(want.get(slot), got.get(slot)) for slot in slots if slot in got}
+    names = [MISSING_NAMES.get(m, m) for m in payload["missing"]]
+    codes = [d["code"] for d in payload["duplicates"] if "code" in d]
+    workflow = {
+        "missing": _check(sorted(gold["missing"]), sorted(names)),
+        "save_allowed": _check(gold["save_allowed"], not payload["blockers"]),
+        "duplicate_of": _check(gold["duplicate_of"], codes),
+    }
+    if "expected_code" in gold:
+        workflow["expected_code"] = _check(gold["expected_code"], payload["proposed_code"])
+    return {"exact": all(c["ok"] for c in fields.values()), "failure": None,
+            "fields": fields, "workflow": workflow,
+            "blockers": list(payload["blockers"]), "warnings": list(payload["warnings"])}
+
+
+def expected_checks(gold):
+    """(field names, workflow names) the specification of one item calls for, the same lists
+    score_draft / score_update produce when the item runs."""
+    if gold["type"] == "draft":
+        fields = ["purpose", "property_type", "location_key", "price_pkr", "area_value",
+                  "area_unit"]
+        if "size_nominal_sqyd" in gold["fields"]:
+            fields.append("size_nominal_sqyd")
+        if gold["fields"].get("property_type") in sn.BEDROOM_TYPES or "bedrooms" in gold["fields"]:
+            fields.append("bedrooms")
+        workflow = ["missing", "save_allowed", "duplicate_of"]
+        if "expected_code" in gold:
+            workflow.append("expected_code")
+        return fields, workflow
+    if gold["type"] == "update":
+        return ["target_and_changes"], []
+    return ["candidates", "changes", "no_target_chosen"], []
+
+
+def failed_item(item, failure):
+    """An item that produced nothing to score (not run, stopped, no draft): every expected
+    check is kept and failed, so the denominators never shrink."""
+    gold = item["expected_outcome"]
+    fields, workflow = expected_checks(gold)
+    missing = {"gold": "expected", "got": None, "ok": False}
+    return {"id": item["id"], "kind": gold["type"], "exact": False, "failure": failure,
+            "fields": {name: dict(missing) for name in fields},
+            "workflow": {name: dict(missing) for name in workflow}}
+
+
+def score_update(gold, proposal, candidates, pending, *, failure=None):
+    """An update item (target and changes) or a disambiguation item (the candidates offered,
+    nothing outside candidates + allowed, no target chosen, the changes parsed)."""
+    if gold["type"] == "update":
+        want = {"code": gold["listing"], "changes": gold["changes"]}
+        return {"exact": proposal == want, "failure": failure,
+                "fields": {"target_and_changes": _check(want, proposal)}, "workflow": {}}
+    allowed = set(gold["candidates"]) | set(gold.get("allowed", []))
+    ok = (bool(candidates) and set(gold["candidates"]) <= set(candidates) <= allowed
+          and proposal is None and pending == gold["changes"])
+    return {"exact": ok, "failure": failure,
+            "fields": {"candidates": _check(gold["candidates"], candidates),
+                       "changes": _check(gold["changes"], pending),
+                       "no_target_chosen": _check(True, proposal is None)},
+            "workflow": {}}
+
+
 def _draft_item(item, calls, rows, gazetteer):
     text, gold = item["input"], item["expected_outcome"]
     staff = staff_drafts.context([text], {1}, True)
     result = sn.normalise_drafts(calls[0]["args"], staff, gazetteer, marla_sqft=225,
                                  listings=rows)
     if "error" in result:
-        return {"exact": False, "failure": result["error"], "fields": {}, "workflow": {}}
-    draft = result["drafts"][0]
-    f, want = draft.fields, gold["fields"]
-    size = f.get("size") or {}
-    got = {"purpose": (f.get("purpose") or {}).get("value"),
-           "property_type": (f.get("property_type") or {}).get("value"),
-           "location_key": (f.get("location") or {}).get("location_id"),
-           "price_pkr": (f.get("price_pkr") or {}).get("value"),
-           "area_value": size.get("value"), "area_unit": size.get("unit"),
-           "bedrooms": (f.get("bedrooms") or {}).get("value")}
-    if "size_nominal_sqyd" in want:
-        got["size_nominal_sqyd"] = size.get("nominal_sqyd")
-    slots = ["purpose", "property_type", "location_key", "price_pkr", "area_value",
-             "area_unit", "size_nominal_sqyd"]
-    if want.get("property_type") in sn.BEDROOM_TYPES or "bedrooms" in want:
-        slots.append("bedrooms")
-    fields = {slot: _check(want.get(slot), got.get(slot)) for slot in slots if slot in got}
-    names = [MISSING_NAMES.get(m, m) for m in draft.missing]
-    codes = [d["code"] for d in draft.duplicates if "code" in d]
-    workflow = {
-        "missing": _check(sorted(gold["missing"]), sorted(names)),
-        "save_allowed": _check(gold["save_allowed"], not draft.blockers()),
-        "duplicate_of": _check(gold["duplicate_of"], codes),
-    }
-    if "expected_code" in gold:
-        workflow["expected_code"] = _check(gold["expected_code"], draft.proposed_code)
-    return {"exact": all(c["ok"] for c in fields.values()), "failure": None,
-            "fields": fields, "workflow": workflow,
-            "blockers": list(draft.blockers()), "warnings": list(draft.warnings)}
+        return failed_item(item, result["error"])
+    return score_draft(gold, sn.to_payload(result["drafts"][0]))
 
 
 def _target(rows, code):
@@ -138,21 +203,10 @@ def _update_item(item, spec, rows, gazetteer):
                 failure = checked["error"]
                 break
             proposal = {"code": verified["target"], "changes": parsed["changes"]}
-    if gold["type"] == "update":
-        want = {"code": gold["listing"], "changes": gold["changes"]}
-        return {"exact": proposal == want, "failure": failure,
-                "fields": {"target_and_changes": _check(want, proposal)}, "workflow": {}}
     codes = [r["code"] for r in (found or {}).get("candidates", [])]
     pending = sn.parse_changes([c for c in spec.get("pending_changes", [])
                                 if c["span"].lower() in text.lower()])
-    allowed = set(gold["candidates"]) | set(gold.get("allowed", []))
-    ok = (bool(codes) and set(gold["candidates"]) <= set(codes) <= allowed
-          and proposal is None and pending.get("changes") == gold["changes"])
-    return {"exact": ok, "failure": failure,
-            "fields": {"candidates": _check(gold["candidates"], codes),
-                       "changes": _check(gold["changes"], pending.get("changes")),
-                       "no_target_chosen": _check(True, proposal is None)},
-            "workflow": {}}
+    return score_update(gold, proposal, codes, pending.get("changes"), failure=failure)
 
 
 def run(bench_dir=BENCH_DIR, *, mode=MODE):
@@ -175,17 +229,18 @@ def run(bench_dir=BENCH_DIR, *, mode=MODE):
     return {"mode": mode, "model": None, "banner": BANNER,
             "bench_sha256": _sha256(bench_dir / "staff.json"),
             "spans_sha256": _sha256(bench_dir / SPANS_FILE),
-            "summary": _summary(out), "items": out}
+            "summary": summary(out), "items": out}
 
 
-def _summary(items):
+def summary(items):
     disagreements, workflow_ok, workflow_total = [], 0, 0
     for item in items:
         for name, check in item["workflow"].items():
             known = KNOWN_GOLD_DISAGREEMENTS.get((item["id"], name))
-            if known and not check["ok"]:
+            if known:  # disputed gold: unscored whatever the result, until the owner decides
                 disagreements.append({"item": item["id"], "check": name, "gold": check["gold"],
-                                      "got": check["got"], "reason": known})
+                                      "got": check["got"], "agrees_with_gold": check["ok"],
+                                      "reason": known})
                 check["known_disagreement"] = True
                 continue
             workflow_total += 1
@@ -202,6 +257,10 @@ def _summary(items):
         "fields": {"correct": sum(c["ok"] for c in fields), "of": len(fields)},
         "workflow": {"passed": workflow_ok, "of": workflow_total},
         "known_gold_disagreements": disagreements,
+        "scored_denominators": {
+            "items": len(items), "fields": len(fields), "workflow_scored": workflow_total,
+            "workflow_unscored": len(disagreements),
+            "unscored_checks": [f"{d['item']} {d['check']}" for d in disagreements]},
         "failed_items": [{"id": i["id"], "reason": i["failure"]} for i in items
                          if not i["exact"]],
     }
@@ -210,7 +269,15 @@ def _summary(items):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--out", help="write the JSON result here")
-    args = parser.parse_args(argv)
+    parser.add_argument("--mode", choices=(MODE, "dry-run", "live"), default=MODE,
+                        help="dry-run / live run through the real pipeline (app.bench_live)")
+    args, rest = parser.parse_known_args(argv)
+    if args.mode != MODE:
+        from app import bench_live
+        return bench_live.main([args.mode, "staff", *(["--out", args.out] if args.out else []),
+                                *rest])
+    if rest:
+        parser.error("unrecognized arguments: " + " ".join(rest))
     result = run()
     print(BANNER)
     print(json.dumps(result["summary"], indent=2, default=str))

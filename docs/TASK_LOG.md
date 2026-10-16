@@ -242,4 +242,42 @@ Entries are historical snapshots; later entries supersede earlier status stateme
 
 2026-10-15: Task 10.2 voice end to end on feature/task-10-2-voice (worktree .claude/worktrees/task-10-2, from origin/main 7f5cd3d; uncommitted). The R16 7.4 confirmation before a search for heard, uncertain purpose / location / size / budget ([Haan] echo:yes:{version} -> RequirementService.confirm_echo, [Badlein] echo:edit; a stale / repeated / >24 h Haan -> echo_stale, no search); llm_uncertain (heard only, add only); budget operators read from right after the span (tak / se upar / range; a repeated amount with different readings is asked); unread operators, amounts and types asked; Urdu-script type words; unanswered type / size / budget questions hold the search (RequirementService.open_asks over the patch log, 24 h) and one question per turn in priority. Review rounds removed a script-based uncertainty rule and a 10.1 D5 change. No migration, no provider or setting change. Review fixes: Haan is bound to the tapped question message and its own sent_at (24 h), so a new question on day-old values is answerable and an old message stays stale; an unanswered type / size / budget question holds the search with no expiry. Validation after the final code change: 3309 collected = 3309 passed, 0 failed, 0 errors, 0 skipped, in 16 sequential memory-capped batches (REQUIRE_DATABASE_TESTS=1, disposable PostgreSQL, per-file counts match collection for 63 files); Ruff, git diff --check and Gitleaks clean. A run with overlapping batches was invalid (shared database) and is not counted; its orphan test schemas were dropped from the disposable database first. An earlier full run was stopped by the host for low memory and is not counted. Not deployed; no live voice check.
 
-2026-10-16: Tasks 11.1 + 11.2 human handoff on feature/task-11-1-handoff (worktree wt-11-1, from origin/main 09a9ec7): template sends outside the window (f569316); customer handoff request, R-31 property confirmation and the lead / handoff write (a1a749a); send-time gate on control_state, forwarding and one holding reply (6b9d619); lead card, L3 summary, template fallback and accept timeout (5c9e3c2); card buttons Accept / Pass / Called, Full details, card resend, #done / #pass / help and the 48 h release. Full suites: 3332 passed (step 2), 3353 passed (step 3), 1 skipped each (disposable PostgreSQL, REQUIRE_DATABASE_TESTS=1); Ruff clean. No migration. Not deployed; no live check.
+2026-10-16: Tasks 11.1 + 11.2 human handoff on feature/task-11-1-handoff (worktree wt-11-1, from origin/main 09a9ec7).
+- Implemented template sends outside the messaging window (f569316).
+- Added customer handoff requests, R-31 property confirmation, and lead / handoff writes (a1a749a).
+- Added the send-time control_state gate, forwarding, and one holding reply (6b9d619).
+- Added the lead card, L3 summary, template fallback, and accept timeout (5c9e3c2).
+- Added Accept / Pass / Called buttons, Full details, card resend, #done / #pass / help, and the 48-hour release.
+- Validation: full suites reported 3332 passed at step 2 and 3353 passed at step 3, with 1 skipped in each run (disposable PostgreSQL, REQUIRE_DATABASE_TESTS=1). Ruff clean.
+- No migration. At this checkpoint, deployment and live checks had not been performed.
+
+2026-10-16: Task 10.3 runners on feature/task-10-3-benchmark (from origin/main 09a9ec7; uncommitted at this checkpoint).
+- app/bench_live.py adds the customer-text runner, staff live mode, and voice-control zero-requirement scorer. They exercise the real worker, engine, requirements, search, staff tools, and speech chain on fresh disposable schemas, using a recording fake WhatsApp.
+- Live mode requires --confirm-live, --max-calls, --spend-cap-usd, a dated prices file, an API key, and priced models. Every provider attempt, including retries, is checked against the caps and recorded. The request cap is hard; the currency cap is an estimate.
+- app/staff_bench.py shares score_draft, score_update, and summary between fixture and live runs, with --mode dry-run|live.
+- Validation: Python 3.12 bench tests passed 44 tests. The full suite passed 3340 of 3340 tests, with 0 failures, errors, or skips, in 5 sequential memory-capped batches (disposable PostgreSQL, REQUIRE_DATABASE_TESTS=1). Ruff clean.
+- Scripted dry-runs, not model scores: text extraction 27/27, tool choice 30/30, and end-to-end replies 23/30. Failures: CT-09 render_failed; CT-22/23/24/26 no question; CT-27 result order; CT-30 handoff stub.
+- Staff dry-run: 19/20, with ST-15 failing and the disputed ST-01 duplicate check unscored. No listing writes. Voice controls were not run because recordings were unavailable.
+- No provider calls, production access, WhatsApp sends, existing-gold changes, or product fixes. Report: docs/BENCH_LIVE.md.
+
+2026-10-16: Task 10.3 review round (uncommitted at this checkpoint; no provider calls, product fixes, or existing-gold changes).
+- Added bench/scope_conversations.json, SHA256 a70137768077cb65ade7c6c9bf7f95bb02fd6ca07c7e7f926cced0eaa09ac4ca.
+- Demo Scope coverage now includes 20 follow-up turns (CT-27..29 plus 17 new SC turns), Scenario 3a, and 10 additional photo requests. Every SC item has gold_status and a source citation. SC-18 remains unresolved pending the Clifton-neighbours decision.
+- app.benchmark.check_scope validates the new set. tests/test_scope_bench.py covers 12 broken-gold mutations. Existing R16 benchmark files retain their hashes.
+- Added the scope runner: 5 conversation chains, an 8-photo-per-listing media fixture, quoted replies, image-to-listing scoring, and repeat checks.
+- Fixed runner defects involving immediate staff latency, search-gate question detection, ST-01 scoring, commit pinning, position-dependent order checks, and DH6-101 price wording.
+- Scripted dry-runs at 09a9ec7: text 23/30 end to end, or 23/29 excluding CT-30, which was blocked by 11.x at this baseline; scope follow-ups 19/20; photos 10/11 with 0 repeats; staff 19/20, with 33 scored workflow checks and 1 unscored.
+- Product diagnoses, without fixes: CT-09 grounding._check_features treats "north" in "North Nazimabad" as a feature; CT-22/23/24/26 ask only through the search gate; CT-27 gold order differs from R17 ranking while the product follows the displayed card; photo replies receive a customer_default prefix.
+- Validation: 927 tests passed across 15 dependent modules (Python 3.12, disposable DB, REQUIRE_DATABASE_TESTS=1), followed by 103 and 62 tests after the final runner change. Ruff and git diff --check clean.
+- Gitleaks v8.24.2, using the CI image, found no leaks in the base history or review files.
+- The four test warnings were the same StarletteDeprecationWarning from fastapi.testclient with starlette 1.7.0.
+
+2026-10-16: Task 10.3 runner findings round 3 (uncommitted at this checkpoint; runner changes only, no product or gold changes, no provider calls).
+- End-to-end scoring now requires a visible honest no-match reply for no_match and a visible question for clarification. Failure, refusal, default, and placeholder replies fail these checks; a pending database row alone does not pass.
+- Staff checks come from each case's specification. NOT_RUN, stopped_by_cap, and no_draft retain their expected checks as failed. ST-01 duplicate_of remains unscored.
+- result.json records requested, filtered-out, executed, and missing case IDs, with separate subset_complete and full_set_complete fields.
+- Unknown or empty --only selections are refused. Runs completing no cases write their result file and exit with code 3.
+- Photo-repeat scoring detects duplicates both within one reply and across conversation turns.
+- Validation: 125 bench tests passed on Python 3.12 with the disposable DB; 84 offline tests passed on the host. Ruff and git diff --check clean. Gitleaks v8.24.2 found no leaks in the final review files and diff.
+- Refreshed scripted dry-runs retained the same scores: text 23/30; scope follow-ups 19/20 and photos 10/11 with 0 repeats; staff 19/20, 92/94 fields, and 33/33 scored workflow checks plus 1 unscored. Each dry-run reported full-set completion.
+- These are scripted backend results, not live model scores. Benchmark run #1 and M3 acceptance remain incomplete.
