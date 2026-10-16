@@ -417,6 +417,7 @@ class Patch:
         self.budget_given = False
         self.purpose_given = False
         self.opened = False
+        self.type_switch = None         # the types op of a residential <-> commercial switch
 
     # -- bookkeeping --
 
@@ -589,8 +590,26 @@ class Patch:
             types = found
         if not types:
             return self._drop(op, "property_types")
+        old = {normalise.category_of(t) for t in current}
+        new = {normalise.category_of(t) for t in types}
+        if current and None not in old | new and old.isdisjoint(new):
+            self.type_switch = op   # house -> office: see _switch_sizes
         self._set(op, "property_types", make_entry(types, op["raw_span"], ev, self.ctx))
         self._derive_category(ev)
+
+    def _switch_sizes(self, op):
+        """A switch between residential and commercial types (owner decision 2026-10-16):
+        a size or room count stated for the old kind does not carry over (a "500 gaz" house
+        search must not look for 500 sq yd offices). Unless this patch stated them again,
+        they are dropped and the size is asked, so the search waits for the answer
+        (open_asks); a first search without any size is not asked (Demo Scope scenario 1)."""
+        stale = [slot for slot in ("size", "beds_min", "baths_min")
+                 if slot in self.slots and self.slots[slot] == self.before.get(slot)]
+        for slot in stale:
+            self._drop(dict(op, slot=slot, op="clear"), slot)
+        if "size" in stale:
+            self._record(dict(op, slot="size", op="clear"), "ask", "type_switch",
+                         notices=[_notice("size_ask")])
 
     def _derive_category(self, ev):
         categories = {normalise.category_of(t) for t in self._value("property_types") or []}
@@ -999,6 +1018,8 @@ class Patch:
     # -- after the ops --
 
     def _finalise(self):
+        if self.type_switch is not None:
+            self._switch_sizes(self.type_switch)
         budget = self.slots.get("budget")
         purpose = self.slots.get("purpose")
         if budget and not purpose and self.budget_given and not self.purpose_given:

@@ -106,6 +106,7 @@ Each call is one patch:
 | beds_min "more_beds" | owner decision 2026-10-13: the stored bedroom minimum + 1 (max 20); with no prior minimum, ask (`beds_ask`) and store nothing. Phrases: "ek aur / one more / more / extra / zyada bedroom" |
 | budget "budget_up" | the existing `higher` relative op (R17 4.5 "thoda upar / budget barha do": max x 1.10) |
 | plausibility | an absolute budget outside [0.3, 3] x (min, max price) of the **active inventory** (see "Inventory read by the guard") of this purpose, the stored types and the stored location's subtree is asked about, not stored (`budget_implausible`, patch detail `implausible`, `guard_pkr`). Restated unchanged in the next patch: kept unconfirmed with `echo implausible`. Heard (voice): kept unconfirmed with the echo at once (R17 edge 15). No purpose yet, or no inventory: no guard |
+| type switch | owner decision 2026-10-16: a switch between residential and commercial types (house -> office) drops a size / `beds_min` / `baths_min` the same patch did not state again and records a `size` ask (`type_switch`, notice `size_ask`), so the search waits for the size (`open_asks`). A switch within one category (house -> flat) keeps them; a first search without a size is not asked (Demo Scope scenario 1) |
 | previous_budget, excluded_property_ids | backend only: a model op is `not_settable` |
 
 `add` on a scalar slot means set; `remove` on one means clear. `relative` elsewhere is
