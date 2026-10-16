@@ -224,7 +224,7 @@ def test_the_live_turn_shape_bad_args_then_draft_then_an_empty_stop_still_sends_
     sc.deliver(text(ST["ST-01"][0]))
     sc.drain()
     [(_, card)] = sc.send()
-    assert body(card).startswith("Draft 1 of 1 · Proposed ID DH6-109")
+    assert body(card).startswith("📝 *Draft 1 of 1* · Proposed ID *DH6-109*")
     assert sc.query("SELECT status FROM conversation_turn WHERE staff_segment_id IS NOT NULL") \
         == [("replied",)]
 
@@ -232,12 +232,13 @@ def test_the_live_turn_shape_bad_args_then_draft_then_an_empty_stop_still_sends_
 def test_4a_the_card_has_the_cover_and_save_creates_dh6_109_visible_at_once(sc):
     _, card, saved = scenario_4a(sc)
     assert card["type"] == "interactive" and card["interactive"]["header"]["type"] == "image"
-    assert body(card).splitlines()[:5] == [
-        "Draft 1 of 1 · Proposed ID DH6-109", "HOUSE · SALE*",
-        "DHA Phase 6 · 500 sq yd · 4 bed / 5 bath", "PKR 8 crore · Owner direct", "Photos: 3"]
+    assert body(card).splitlines()[:7] == [
+        "📝 *Draft 1 of 1* · Proposed ID *DH6-109*", "", "🏠 *HOUSE · SALE* (inferred)",
+        "📍 DHA Phase 6 · 500 sq yd · 4 bed / 5 bath", "💰 *PKR 8 crore* · Owner direct", "",
+        "📷 Photos: 3"]
     assert [b.split(":")[1] for b in button_ids(card)] == ["save", "edit", "cancel"]
 
-    assert body(saved) == "✅ Saved as DH6-109. Listing ab active hai."
+    assert body(saved) == "✅ Saved as *DH6-109*. Listing ab active hai."
     assert button_ids(saved)[0].startswith("undo:")
     status, price, version, cover, _ = listing(sc, "DH6-109")
     assert (status, price, version) == ("active", 80_000_000, 1) and cover is not None
@@ -272,7 +273,7 @@ def test_a_double_tap_on_save_writes_nothing_more(sc):
 def test_the_saved_reply_undo_withdraws_the_new_listing_once(sc):
     _, _, saved = scenario_4a(sc)
     [(_, undone)] = sc.send(tap(button(saved, "undo:"), title="Undo"))
-    assert body(undone) == "↩ Undo ho gaya: DH6-109 ab WITHDRAWN hai."
+    assert body(undone) == "↩ Undo ho gaya: *DH6-109* ab WITHDRAWN hai."
     assert listing(sc, "DH6-109")[:3] == ("withdrawn", 80_000_000, 2)
     assert not public(sc, "DH6-109")
     assert events(sc, "DH6-109") == [("created",), ("undone",)]
@@ -289,10 +290,10 @@ def test_the_undo_button_lasts_30_minutes_then_undo_command_still_works(sc):
     assert body(late) == NOTICES["staff_undo_expired"]
     assert listing(sc, "DH6-109")[0] == "active"
     [(_, ask)] = sc.send(text("#undo DH6-109"))  # a confirm card first: no write yet
-    assert body(ask).startswith("Undo DH6-109: listing hata di jayegi (WITHDRAWN)?")
+    assert body(ask).startswith("↩ *Undo DH6-109*: listing hata di jayegi (WITHDRAWN)?")
     assert listing(sc, "DH6-109")[0] == "active"
     [(_, done)] = sc.send(tap(button(ask, "undoc:confirm:"), title="Confirm undo"))
-    assert body(done) == "↩ Undo ho gaya: DH6-109 ab WITHDRAWN hai."
+    assert body(done) == "↩ Undo ho gaya: *DH6-109* ab WITHDRAWN hai."
     assert not public(sc, "DH6-109")
 
 
@@ -316,11 +317,12 @@ def propose(sc, message, code, *changes):
 
 def test_4b_update_by_id_confirms_with_the_facts_then_undo_restores_the_price(sc):
     [(wamid, card)] = propose(sc, "#DH6-102 price 7.8 crore", "DH6-102", ("price", "7.8 crore"))
-    assert body(card).splitlines()[:2] == [
-        "DH6-102: price PKR 8 crore -> PKR 7.8 crore. Confirm?", "HOUSE · SALE · ACTIVE"]
+    assert body(card).splitlines()[:4] == [
+        "✏️ *DH6-102*: price PKR 8 crore → *PKR 7.8 crore*", "*Confirm?*", "",
+        "🏠 *HOUSE · SALE · ACTIVE*"]
     assert listing(sc, "DH6-102")[1] == 80_000_000  # nothing written before the tap
     [(_, done)] = sc.send(tap(button(card, "draft:confirm:"), wamid, title="Confirm"))
-    assert body(done) == "✅ DH6-102 updated: price PKR 8 crore -> PKR 7.8 crore."
+    assert body(done) == "✅ *DH6-102* updated: price PKR 8 crore → *PKR 7.8 crore*."
     assert listing(sc, "DH6-102")[1:3] == (78_000_000, 2)
     assert sc.query("SELECT price_pkr FROM v_public_listing WHERE listing_code = 'DH6-102'") \
         == [(78_000_000,)]
@@ -331,7 +333,7 @@ def test_4b_update_by_id_confirms_with_the_facts_then_undo_restores_the_price(sc
     assert listing(sc, "DH6-102")[2] == 2
 
     [(_, undone)] = sc.send(tap(button(done, "undo:")))
-    assert body(undone) == "↩ Undo ho gaya: DH6-102 price PKR 7.8 crore -> PKR 8 crore."
+    assert body(undone) == "↩ Undo ho gaya: *DH6-102* price PKR 7.8 crore → *PKR 8 crore*."
     assert listing(sc, "DH6-102")[1:3] == (80_000_000, 3)
 
 
@@ -371,10 +373,11 @@ def test_4c_a_description_update_lists_the_houses_then_the_pick_confirms_sold(sc
     assert listing(sc, "DH6-109")[0] == "active"  # a list writes nothing
 
     [(wamid, card)] = sc.send(pick("pick:DH6-109:s=sold"))
-    assert body(card).splitlines()[0] == "DH6-109: status active -> sold. Confirm?"
+    assert body(card).splitlines()[:2] == ["✏️ *DH6-109*: status active → *sold*",
+                                           "*Confirm?*"]
     assert card["interactive"]["header"]["type"] == "image"  # R-11: the cover is shown
     [(_, done)] = sc.send(tap(button(card, "draft:confirm:"), wamid))
-    assert body(done) == "✅ DH6-109 marked SOLD."
+    assert body(done) == "✅ *DH6-109* marked *SOLD*."
     assert listing(sc, "DH6-109")[0] == "sold" and not public(sc, "DH6-109")
     assert events(sc, "DH6-109") == [("created",), ("status_changed",)]
     assert listing(sc, "DH6-101")[0] == "active"  # 0 wrong-property updates
@@ -407,7 +410,7 @@ def test_edit_fills_the_gaps_bumps_the_version_and_old_buttons_go_stale(sc):
     [(_, stale)] = sc.send(tap(forged, wamid))
     assert body(stale) == NOTICES["staff_card_stale"]
     [(_, saved)] = sc.send(tap(button(card2, "draft:save:"), wamid2))
-    assert body(saved) == "✅ Saved as DH7-102. Listing ab active hai."
+    assert body(saved) == "✅ Saved as *DH7-102*. Listing ab active hai."
     assert listing(sc, "DH7-102")[:2] == ("active", 75_000_000)
 
 
@@ -452,14 +455,14 @@ def test_photos_replying_to_one_of_several_cards_attach_to_that_draft_only(sc):
     (_, c1), (w2, c2) = draft_once(sc, TWO, text(PASTE), photo())
     assert "reply karke" in body(c1) and "reply karke" in body(c2)  # never auto-assigned
     [(_, again)] = sc.send(photo(context=w2), photo(context=w2))
-    assert "Photos: 2" in body(again) and body(again).startswith("Draft 2 of 2")
+    assert "📷 Photos: 2" in body(again) and body(again).startswith("📝 *Draft 2 of 2*")
     store_photos(sc)
     [(_, saved)] = sc.send(tap(button(again, "draft:save:"), title="Save"))
-    assert body(saved) == "✅ Saved as CLF-105. Listing ab active hai."
+    assert body(saved) == "✅ Saved as *CLF-105*. Listing ab active hai."
     assert sc.query("SELECT count(*) FROM property_media m JOIN property p "
                     "ON p.id = m.property_id WHERE p.listing_code = 'CLF-105'") == [(2,)]
     [(_, first)] = sc.send(tap(button(c1, "draft:save:")))
-    assert body(first) == "✅ Saved as DH6-109. Listing ab active hai."
+    assert body(first) == "✅ Saved as *DH6-109*. Listing ab active hai."
     assert sc.query("SELECT count(*) FROM property_media m JOIN property p "
                     "ON p.id = m.property_id WHERE p.listing_code = 'DH6-109'") == [(0,)]
 
@@ -471,21 +474,21 @@ def test_a_photo_only_segment_lists_open_drafts_and_recent_listings(sc):
     sc.drain()
     store_photos(sc)
     [(_, prompt)] = sc.send()
-    assert body(prompt) == "Ye 2 photos kis listing ki hain? List se chunein."
+    assert body(prompt) == "📷 Ye 2 photos kis listing ki hain? List se chunein."
     targets = rows(prompt)
     draft_row = [r for r in targets if ":d:" in r]
     listing_row = [r for r in targets if ":p:" in r]
     assert len(draft_row) == 1 and len(listing_row) == 1  # the open ST-07 draft, DH6-109
 
     [(_, card2)] = sc.send(pick(draft_row[0]))
-    assert "Photos: 2" in body(card2) and body(card2).startswith("Draft 1 of 1")
+    assert "📷 Photos: 2" in body(card2) and body(card2).startswith("📝 *Draft 1 of 1*")
 
     [(_, ask)] = sc.send(pick(listing_row[0]))
-    assert body(ask).startswith("DH6-109: 2 photos add karein?")
+    assert body(ask).startswith("📷 *DH6-109*: 2 photos add karein?")
     assert sc.query("SELECT count(*) FROM property_media m JOIN property p ON "
                     "p.id = m.property_id WHERE p.listing_code = 'DH6-109'") == [(3,)]
     [(_, added)] = sc.send(tap(button(ask, "attachc:confirm:")))
-    assert body(added) == "✅ DH6-109: 2 photos add ho gayin."
+    assert body(added) == "✅ *DH6-109*: 2 photos add ho gayin."
     assert sc.query("SELECT count(*), max(sort_order) FROM property_media m JOIN property p "
                     "ON p.id = m.property_id WHERE p.listing_code = 'DH6-109'") == [(5, 4)]
     assert events(sc, "DH6-109")[-1] == ("media_added",)
@@ -535,7 +538,7 @@ def test_a_save_whose_reply_failed_to_send_is_retried_without_a_second_write(sc)
     [(wamid, card)] = draft_once(sc, [ST["ST-01"][1]], text(ST["ST-01"][0]))
     sc.client.outcomes.append(whatsapp.RetryableSendError("fictional_outage"))
     [(_, saved)] = sc.send(tap(button(card, "draft:save:"), wamid))  # the retry sends it
-    assert body(saved) == "✅ Saved as DH6-109. Listing ab active hai."
+    assert body(saved) == "✅ Saved as *DH6-109*. Listing ab active hai."
     assert sc.query("SELECT count(*) FROM property WHERE listing_code LIKE 'DH6-1%%'") == [
         (9,)]  # DH6-101..108 + 109, nothing twice
     assert events(sc, "DH6-109") == [("created",)]
@@ -578,8 +581,8 @@ def test_two_saves_of_the_same_prefix_at_once_get_different_codes(sc):
         thread.start()
     for thread in threads:
         thread.join(timeout=60)
-    assert sorted(results.values()) == ["✅ Saved as DH6-109. Listing ab active hai.",
-                                        "✅ Saved as DH6-110. Listing ab active hai."]
+    assert sorted(results.values()) == ["✅ Saved as *DH6-109*. Listing ab active hai.",
+                                        "✅ Saved as *DH6-110*. Listing ab active hai."]
 
 
 def test_another_agencys_draft_cannot_be_tapped(sc):

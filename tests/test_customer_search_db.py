@@ -65,7 +65,7 @@ def test_scenario_2_labels_the_neighbouring_phase(st):
 
     assert {code for _, code, _ in shown_rows(st, CUSTOMER_B)} == {
         "DH6-101", "DH6-102", "DH7-101"}
-    assert "Phase 7 -- qareeb" in sent_text(payloads)
+    assert "Phase 7 — qareeb" in sent_text(payloads)
 
 
 def test_a_failed_send_records_nothing_as_shown(st):

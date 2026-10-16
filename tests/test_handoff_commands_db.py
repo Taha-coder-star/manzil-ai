@@ -39,7 +39,7 @@ def test_done_hands_the_customer_back_to_the_ai(st):
     ready(st)
     press(st, "accept", BROKER_NUMBER)
     assert say(st, "#done L-01") == [
-        "L-01 is closed. The AI assistant will answer this customer again."]
+        "✅ *L-01* is closed. The AI assistant will answer this customer again."]
     assert closed(st) == [("completed", "closed")]
     assert control(st) == ("ai_active", "ai")
     calls, before = len(st.requests), len(st.client.sent)
@@ -52,14 +52,14 @@ def test_done_hands_the_customer_back_to_the_ai(st):
 def test_done_without_a_code_closes_the_only_accepted_lead(st):
     ready(st)
     press(st, "accept", BROKER_NUMBER)
-    assert say(st, "#DONE")[0].startswith("L-01 is closed.")
+    assert say(st, "#DONE")[0].startswith("✅ *L-01* is closed.")
     assert closed(st) == [("completed", "closed")]
 
 
 def test_done_accepts_a_short_code(st):
     ready(st)
     press(st, "accept", BROKER_NUMBER)
-    assert say(st, "#done L-1")[0].startswith("L-01 is closed.")
+    assert say(st, "#done L-1")[0].startswith("✅ *L-01* is closed.")
 
 
 def test_done_before_accept_changes_nothing(st):
@@ -81,7 +81,7 @@ def test_an_admin_may_close_a_lead_the_broker_holds(st):
     ready(st)
     open_admin_window(st)
     press(st, "accept", BROKER_NUMBER)
-    assert say(st, "#done L-01", sender=ADMIN_NUMBER)[0].startswith("L-01 is closed.")
+    assert say(st, "#done L-01", sender=ADMIN_NUMBER)[0].startswith("✅ *L-01* is closed.")
     assert control(st) == ("ai_active", "ai")
 
 
@@ -95,14 +95,14 @@ def test_an_unknown_lead_code_is_not_found(st):
 def test_pass_as_text_hands_the_lead_to_the_admin(st):
     ready(st)
     open_admin_window(st)
-    assert say(st, "#pass L-01") == ["L-01 passed to Admin."]
+    assert say(st, "#pass L-01") == ["↪ *L-01* passed to Admin."]
     assert lead(st)[:2] == ("pending", "admin")
 
 
 def test_other_broker_text_gets_help_with_the_open_leads(st):
     ready(st)
     [reply] = say(st, "kal call karunga customer ko")
-    assert reply.startswith("Manzil lead commands:")
+    assert reply.startswith("*Manzil lead commands*")
     assert reply.endswith("Your open leads: L-01 (pending).")
     assert st.query("SELECT count(*) FROM staff_segment") == [(0,)]   # never extraction
 

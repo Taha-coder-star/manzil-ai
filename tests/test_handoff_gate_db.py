@@ -58,14 +58,14 @@ def test_customer_messages_go_to_the_broker_with_one_holding_reply(st):
     before = len(st.client.sent)
     assert turn(st, "price kam ho sakti hai?") != []
     assert bodies(to(st, BROKER_NUMBER, before)) == [
-        f"L-01 · +{CUSTOMER_B}: price kam ho sakti hai?"]
+        f"💬 *L-01* · +{CUSTOMER_B}\nprice kam ho sakti hai?"]
     assert bodies(to(st, CUSTOMER_B, before)) == [
-        "Ahmed ko aapka message bhej diya hai; woh jald jawab denge."]
+        "✅ *Ahmed* ko aapka message bhej diya hai; woh jald jawab denge."]
     # A second message is forwarded too, but there is no second holding reply.
     before = len(st.client.sent)
     turn(st, "kal 6 baje theek hai")
     assert bodies(to(st, BROKER_NUMBER, before)) == [
-        f"L-01 · +{CUSTOMER_B}: kal 6 baje theek hai"]
+        f"💬 *L-01* · +{CUSTOMER_B}\nkal 6 baje theek hai"]
     assert to(st, CUSTOMER_B, before) == []
     assert st.query("SELECT holding_reply_sent_at IS NOT NULL FROM handoff") == [(True,)]
     assert st.query("SELECT status FROM conversation_turn WHERE conversation_id = %s "
@@ -90,7 +90,7 @@ def test_a_voice_note_is_forwarded_as_its_transcript(st):
     st.deliver(media("audio", sender=CUSTOMER_B))
     st.drain()
     assert bodies(to(st, BROKER_NUMBER, before)) == [
-        f"L-01 · +{CUSTOMER_B} (voice): visit kal shaam ho sakti hai?"]
+        f"💬 *L-01* · +{CUSTOMER_B} (voice)\nvisit kal shaam ho sakti hai?"]
 
 
 def test_a_broker_whose_window_is_closed_misses_the_forward_but_the_customer_is_told(st):

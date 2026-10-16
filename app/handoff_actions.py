@@ -47,24 +47,25 @@ DETAIL_MESSAGE_CHARS = 300
 
 # Staff-facing wording (English, D15; awaits owner approval).
 TEXT = {
-    "accepted": "You accepted {code}. Chat with the customer: https://wa.me/{number}",
-    "already_mine": "You already accepted {code}.",
-    "already": "{code} was already accepted by {name}.",
+    "accepted": ("✅ You accepted *{code}*.\n\n💬 Chat with the customer:\n"
+                 "https://wa.me/{number}"),
+    "already_mine": "You already accepted *{code}*.",
+    "already": "*{code}* was already accepted by {name}.",
     "closed": "{code} is closed.",
     "not_yours": "{code} is no longer assigned to you.",
     "unknown": "That lead was not found.",
-    "passed": "{code} passed to {name}.",
+    "passed": "↪ *{code}* passed to {name}.",
     "no_admin": "There is no admin to pass {code} to; it stays with you.",
     "pass_accepted": "{code} is already accepted; send #done {code} when you have finished.",
-    "called": "Noted: you called the customer of {code}.",
+    "called": "📞 Noted: you called the customer of *{code}*.",
     # Task 11.2
-    "done": "{code} is closed. The AI assistant will answer this customer again.",
+    "done": "✅ *{code}* is closed. The AI assistant will answer this customer again.",
     "done_pending": "{code} has not been accepted yet: tap Accept first, or Pass.",
     "which": "Which lead? Send {command} with its code, e.g. {command} {example}.",
     "none_open": "You have no open leads.",
-    "help": ("Manzil lead commands:\n#done L-07: finish a lead; the AI answers the customer "
-             "again\n#pass L-07: pass a pending lead to the admin\nThe Accept / Pass / Called "
-             "buttons are on each lead card."),
+    "help": ("*Manzil lead commands*\n\n- *#done L-07*: finish a lead; the AI answers the "
+             "customer again\n- *#pass L-07*: pass a pending lead to the admin\n\nThe "
+             "*Accept* / *Pass* / *Called* buttons are on each lead card."),
     "open": "Your open leads: {leads}.",
     "released": ("{code} was handed back to the AI assistant after {hours} h without a "
                  "customer message."),
@@ -338,14 +339,15 @@ def full_details(conn, agency_id, handoff_id, gazetteer=None):
     customer = f"+{packet.customer_number}"
     if packet.customer_name:
         customer = f"{packet.customer_name} · {customer}"
-    lines = [f"{packet.lead_code} full details", f"Customer: {customer}",
-             f"Wants: {packet.wants or handoff_alert.NOT_STATED}", "Properties:"]
+    lines = [f"📋 *{packet.lead_code} full details*", "", f"👤 *Customer:* {customer}",
+             f"🏠 *Wants:* {packet.wants or handoff_alert.NOT_STATED}", "", "📍 *Properties:*"]
     lines += [f"- {handoff_alert.listing_line(li, packet.positions.get(li.code))}"
               for li in packet.listings] or ["- none chosen"]
-    lines.append("Messages (latest last):")
+    lines += ["", "💬 *Messages* (latest last):"]
     for when, kind, body in reversed(rows):
-        label = " (voice)" if kind == "audio" else ""
-        lines.append(f"[{when}]{label} {handoff_alert._clip(body, DETAIL_MESSAGE_CHARS)}")
+        label = " · voice" if kind == "audio" else ""
+        lines += ["", f"_{when}{label}_",
+                  handoff_alert._clip(body, DETAIL_MESSAGE_CHARS)]
     return "\n".join(lines)[:whatsapp.TEXT_MAX]
 
 

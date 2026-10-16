@@ -48,13 +48,13 @@ TEXT = {
         "max": ", up to {amount}", "around": ", around {amount}", "min": ", from {amount}",
         "range": ", {low} to {high}", "cheaper": ", below the earlier price",
         "per_month": " per month",
-        "neighbour": "{place} -- nearby", "above_budget": "slightly above budget",
+        "neighbour": "{place} — nearby", "above_budget": "slightly above budget",
         "size": "size differs a little", "beds": "fewer bedrooms",
-        "echo_purpose_sale": "These are for sale -- tell me if you meant rent.",
-        "echo_purpose_rent": "These are for rent -- tell me if you want to buy.",
-        "echo_budget": "I took your budget as {budget} -- correct me if that's wrong.",
-        "echo_location": "I took the location as {place} -- correct me if that's wrong.",
-        "echo_size": "I took the size as {size} -- correct me if that's wrong.",
+        "echo_purpose_sale": "These are for sale — tell me if you meant rent.",
+        "echo_purpose_rent": "These are for rent — tell me if you want to buy.",
+        "echo_budget": "I took your budget as {budget} — correct me if that's wrong.",
+        "echo_location": "I took the location as {place} — correct me if that's wrong.",
+        "echo_size": "I took the size as {size} — correct me if that's wrong.",
         "no_match_cheaper": "No cheaper{what}{place} are available right now.",
         "no_match": "No{what}{place} match this budget right now.",
         "lowest": "Prices there start from {amount}.",
@@ -66,23 +66,23 @@ TEXT = {
         "location_ask": "Which area are you looking in?",
         "type_ask": "What type of property (house, flat, plot, office) and what budget?",
         "generic_ask": "Please tell me a little more about what you are looking for.",
-        "voice_echo": "You said: {facts} -- is that right?", "echo_yes": "Yes",
+        "voice_echo": "You said: {facts} — is that right?", "echo_yes": "Yes",
         "echo_edit": "Change", "to_sale": "to buy", "to_rent": "to rent",
     },
     ROMAN_URDU: {
-        "wrapper": "Ji, {place}{things}{budget} -- ye options hain:",
+        "wrapper": "Ji, {place}{things}{budget} — ye options hain:",
         "in_place": "{place} mein ",
         "max": ", {amount} tak", "around": ", {amount} ke aas paas", "min": ", {amount} se upar",
         "range": ", {low} se {high} tak", "cheaper": ", pehle se kam price par",
         "per_month": " mahana",
-        "neighbour": "{place} -- qareeb", "above_budget": "budget se thoda upar",
+        "neighbour": "{place} — qareeb", "above_budget": "budget se thoda upar",
         "size": "size thoda alag", "beds": "bedroom kam",
-        "echo_purpose_sale": "Ye khareedne ke options hain -- agar kiraye par chahiye to "
+        "echo_purpose_sale": "Ye khareedne ke options hain — agar kiraye par chahiye to "
                              "bata dein.",
-        "echo_purpose_rent": "Ye kiraye ke options hain -- agar khareedna hai to bata dein.",
-        "echo_budget": "Budget main ne {budget} samjha hai -- ghalat ho to bata dein.",
-        "echo_location": "Jagah main ne {place} samjhi hai -- ghalat ho to bata dein.",
-        "echo_size": "Size main ne {size} samjha hai -- ghalat ho to bata dein.",
+        "echo_purpose_rent": "Ye kiraye ke options hain — agar khareedna hai to bata dein.",
+        "echo_budget": "Budget main ne {budget} samjha hai — ghalat ho to bata dein.",
+        "echo_location": "Jagah main ne {place} samjhi hai — ghalat ho to bata dein.",
+        "echo_size": "Size main ne {size} samjha hai — ghalat ho to bata dein.",
         "no_match_cheaper": "{place}is se kam price ka{what} abhi available nahi.",
         "no_match": "{place}is budget mein{what} abhi available nahi.",
         "lowest": "Yahan price {amount} se shuru hoti hai.",
@@ -96,7 +96,7 @@ TEXT = {
         "type_ask": ("Kis qisam ki property chahiye (ghar, flat, plot, office) aur budget "
                      "kitna hai?"),
         "generic_ask": "Please thora aur bata dein ke aap ko kya chahiye.",
-        "voice_echo": "Aap ne kaha: {facts} -- sahi hai?", "echo_yes": "Haan",
+        "voice_echo": "Aap ne kaha: {facts} — sahi hai?", "echo_yes": "Haan",
         "echo_edit": "Badlein", "to_sale": "khareedne ke liye", "to_rent": "kiraye par",
     },
 }
@@ -222,7 +222,7 @@ def _budget_text(request, language):
 
 def wrapper_line(request, language, gazetteer=None):
     """The templated wrapper (R-21: the model writes no facts). Roman Urdu follows Demo
-    Scope scenario 2: "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:"."""
+    Scope scenario 2: "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:"."""
     words = TEXT[language]
     names = " / ".join(_place_names(request, gazetteer))
     if language == ENGLISH:

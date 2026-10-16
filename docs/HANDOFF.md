@@ -123,6 +123,12 @@ Customer: the handoff message and CTA, "Kaunsi property ke liye visit?" / "Sab",
 the holding reply (Roman Urdu + English). Staff (English): the card, Full details, the button
 replies, the commands' replies, the help, the release notice.
 
+Layout (2026-10-16): the lead card and Full details have bold labels (👤 *Customer:*,
+🏠 *Wants:*, 📍 *Property:* as a `- ` list, 💬 *Last message:*), blank lines between sections, and
+Full details puts each message under its own italic time line. Forwards read "💬 *L-07* · +92…"
+with the message on the next line. The customer handoff message bolds the consultant and the
+reference. The `new_lead_alert` template is unchanged (approved; parameters cannot hold newlines).
+
 ## Limits
 
 - A forward to an agent whose window is closed is recorded, not delivered (no template for

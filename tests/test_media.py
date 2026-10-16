@@ -15,10 +15,10 @@ from types import SimpleNamespace
 import httpx
 import psycopg
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 from psycopg import sql
 
-from app import media, migrate, webhook, whatsapp
+from app import card_regen, media, migrate, webhook, whatsapp
 from app.db import tenant_transaction
 from app.handlers import make_handlers
 from app.ingest import store_event
@@ -88,6 +88,61 @@ def test_large_photo_is_downscaled_per_derivative():
     assert max(opened(result.wa).size) == media.WA_MAX_EDGE
     assert len(result.wa) <= media.WA_MAX_BYTES
     assert opened(result.card).size == media.CARD_SIZE
+
+
+def framed(size):
+    """A solid red photo with a blue frame (~2 % of the long edge, so it survives the
+    downscale): any crop removes blue edge pixels."""
+    image = Image.new("RGB", size, (220, 0, 0))
+    if min(size) > 4:
+        ImageDraw.Draw(image).rectangle((0, 0, size[0] - 1, size[1] - 1), outline=(0, 0, 255),
+                                        width=max(1, max(size) // 50))
+    return image
+
+
+@pytest.mark.parametrize("size", [(4000, 3000), (3000, 4000), (1000, 1000), (1200, 628),
+                                  (300, 3000), (4000, 200), (40, 30), (1, 1)])
+def test_the_card_holds_the_whole_photo_fitted_and_centred(size):
+    card = media.card_image(framed(size))
+    assert card.size == media.CARD_SIZE and card.mode == "RGB"
+    left, top, fitted_w, fitted_h = media.card_placement(*size)
+    # Inside the bounds, centred, touching two opposite sides (contain, not cover).
+    assert 0 <= left and 0 <= top
+    assert left + fitted_w <= media.CARD_SIZE[0] and top + fitted_h <= media.CARD_SIZE[1]
+    assert abs(left - (media.CARD_SIZE[0] - fitted_w - left)) <= 1
+    assert abs(top - (media.CARD_SIZE[1] - fitted_h - top)) <= 1
+    assert fitted_w == media.CARD_SIZE[0] or fitted_h == media.CARD_SIZE[1]
+    # Never stretched: the aspect ratio is kept to the pixel.
+    assert abs(fitted_w * size[1] - fitted_h * size[0]) <= max(size)
+    # The background shows only outside the photo; the photo's centre is the photo.
+    if left:
+        assert card.getpixel((0, media.CARD_SIZE[1] // 2)) == media.CARD_BACKGROUND
+    if top:
+        assert card.getpixel((media.CARD_SIZE[0] // 2, 0)) == media.CARD_BACKGROUND
+    r, g, _ = card.getpixel((left + fitted_w // 2, top + fitted_h // 2))
+    assert r > 150 and g < 60
+
+
+@pytest.mark.parametrize("size", [(4000, 3000), (3000, 4000), (2000, 300)])
+def test_no_edge_of_the_photo_is_cropped(size):
+    card = media.card_image(framed(size))
+    left, top, fitted_w, fitted_h = media.card_placement(*size)
+    mid_x, mid_y = left + fitted_w // 2, top + fitted_h // 2
+    # The blue frame survives on all four sides (scaled, so a blue-ish pixel at the edge).
+    edges = [(left, mid_y), (left + fitted_w - 1, mid_y), (mid_x, top),
+             (mid_x, top + fitted_h - 1)]
+    for x, y in edges:
+        r, _, b = card.getpixel((x, y))
+        assert b > r, (size, (x, y))
+
+
+def test_a_portrait_photo_is_no_longer_cut_to_its_middle_strip():
+    result = media.process_image(photo((300, 400), exif=False))
+    card = opened(result.card)
+    left, top, fitted_w, fitted_h = media.card_placement(300, 400)
+    assert top == 0 and fitted_h == media.CARD_SIZE[1] and left > 0  # full height kept
+    assert fitted_w == 471  # 300 x 628 / 400: the whole width too
+    assert card.size == media.CARD_SIZE
 
 
 def test_wa_derivative_is_forced_under_the_cap(monkeypatch):
@@ -398,6 +453,30 @@ def test_staff_photo_becomes_three_clean_objects(md):
     assert fetch_jobs(md) == [("succeeded", None)]
     assert md.query("SELECT content_sha256 FROM inbound_media")[0][0] == hashlib.sha256(
         md.channel.files["111"]).hexdigest()
+
+
+def test_card_regen_rebuilds_each_card_once_under_a_new_key(md):
+    md.channel.files["121"] = photo()
+    md.channel.files["122"] = photo()  # the same bytes: a duplicate row sharing the card
+    md.deliver(image_message("wamid.R1", "121"), image_message("wamid.R2", "122"))
+    md.drain()
+    [(old_key,)] = md.query("SELECT DISTINCT card_image_key FROM inbound_media")
+    old_bytes = md.storage.objects[old_key][0]
+
+    assert card_regen.run(md.conn, md.storage, md.agency, PUBLIC_BASE) == (1, 0, 0, 0)
+    assert md.query("SELECT DISTINCT card_image_key FROM inbound_media") == [(old_key,)]
+
+    assert card_regen.run(md.conn, md.storage, md.agency, PUBLIC_BASE, apply=True) == (
+        1, 1, 2, 0)  # one object rebuilt; the stored row and its duplicate repointed
+    [(new_key, url)] = md.query(
+        "SELECT DISTINCT card_image_key, public_url_card FROM inbound_media")
+    assert new_key.startswith(f"card/{md.agency}/v2/") and url == f"{PUBLIC_BASE}/{new_key}"
+    data, content_type, cache = md.storage.objects[new_key]
+    assert (content_type, cache) == ("image/jpeg", media.CARD_CACHE_CONTROL)
+    assert opened(data).size == media.CARD_SIZE and not media.has_metadata(data)
+    assert md.storage.objects[old_key][0] == old_bytes  # immutable: never overwritten
+    assert card_regen.run(md.conn, md.storage, md.agency, PUBLIC_BASE, apply=True) == (
+        0, 0, 0, 0)  # a rerun has nothing left
 
 
 def test_photo_sent_as_document_is_staged(md):

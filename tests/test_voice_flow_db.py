@@ -133,8 +133,8 @@ def test_scenario_2_by_voice_gives_the_three_listings_in_roman_urdu(vf):
     # The inferred purpose is said once, as the note before the cards (D5).
     assert said.count("Raqam se main ne samjha ke aap khareedna chahte hain") == 1
     assert "Ye khareedne ke options hain" not in said
-    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:" in said
-    assert "Phase 7 -- qareeb" in said
+    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:" in said
+    assert "Phase 7 — qareeb" in said
     assert runs(st) == 1
 
 
@@ -151,7 +151,7 @@ def test_scenario_2_in_urdu_script_gives_the_same_three_listings(vf):
     assert state["purpose"]["value"] == "sale"
     assert set(latest_shown(st)) == SCENARIO_2_IDS and echo_question(payloads) is None
     assert "Ji, DHA Phase 6 mein 500 gaz ghar, 8 crore tak" not in sent_text(payloads)
-    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:" in sent_text(payloads)
+    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:" in sent_text(payloads)
 
 
 # --- budget operators in other scripts --------------------------------------------------------
@@ -234,7 +234,7 @@ def test_a_weak_transcript_is_confirmed_before_any_search(vf):
     question = echo_question(payloads)
     assert question is not None and payloads == [question]   # one question, no other notes
     assert question["interactive"]["body"]["text"] == (
-        "Aap ne kaha: DHA Phase 6, 500 gaz, 8 crore tak, khareedne ke liye -- sahi hai?")
+        "Aap ne kaha: DHA Phase 6, 500 gaz, 8 crore tak, khareedne ke liye — sahi hai?")
     assert button_ids(question)[1] == "echo:edit"
     assert runs(st) == 0 and latest_shown(st) == []
     assert set(requirements.uncertain_slots(slots(st))) == {"location", "size", "budget"}

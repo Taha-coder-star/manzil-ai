@@ -98,9 +98,9 @@ def test_picking_a_row_opens_the_lead_and_sends_the_honest_cta(st):
     [reply] = ctas(tap(st, "handoff:visit:DH6-102"))
     body, button, url = cta(reply)
     assert body == (
-        "Main Manzil ka AI assistant hoon -- aapko hamare consultant Ahmed se connect kar "
-        f"raha hoon. Woh jald rabta karenge.\nProperty: #{n} · DH6-102\n"
-        "Aapka reference: L-01")
+        "Main Manzil ka AI assistant hoon — aapko hamare consultant *Ahmed* se connect kar "
+        f"raha hoon. Woh jald rabta karenge.\n\n🏠 Property: *#{n} · DH6-102*\n"
+        "🔖 Aapka reference: *L-01*")
     assert button == "Chat with Ahmed"
     assert url == f"https://wa.me/{BROKER_NUMBER}?text=Ref%20L-01"
     assert lead_rows(st) == [("L-01", "open", "visit", "broker")]
@@ -218,7 +218,7 @@ def test_after_the_handoff_the_ai_stays_silent(st):
     payloads = turn(st, "price kam ho sakti hai?")   # the turn is gated: no model call
     # Only the one holding reply (Task 11.2), sent as a system message.
     assert [p["text"]["body"] for p in payloads] == [
-        "Ahmed ko aapka message bhej diya hai; woh jald jawab denge."]
+        "✅ *Ahmed* ko aapka message bhej diya hai; woh jald jawab denge."]
     assert st.script  # the scripted model answer was never used
 
 

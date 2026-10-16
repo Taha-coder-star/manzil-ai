@@ -10,7 +10,8 @@ the fetch_media job runs at once, because the WhatsApp download URL lives for
 4. Otherwise build three EXIF-free images with Pillow and upload them:
    - original: orientation applied, long edge <= 2,560 px (Red-Team R-36);
    - wa: JPEG, 8-bit RGB, long edge <= 1,600 px, < 5 MB (image messages);
-   - card: JPEG cropped and centred to one ratio (carousel headers, public).
+   - card: JPEG 1200 x 628 (carousel headers, public): the whole photo scaled to fit
+     and centred on a neutral background, never cropped or stretched.
 5. Record the keys and the public card URL.
 
 Keys: tenant/<agency_id>/inbound/<inbound_media_id>/{original.jpg|png, wa.jpg}
@@ -60,8 +61,10 @@ WA_MAX_EDGE = 1600
 WA_MAX_BYTES = 5 * 1024 * 1024
 WA_JPEG_QUALITIES = (82, 72, 62, 50)
 # One ratio for every carousel header (1.91:1). Rendering is checked on phones
-# with the carousel (CLAUDE.md section 14, Day 5).
+# with the carousel (CLAUDE.md section 14, Day 5). The photo is fitted inside it
+# (contain), so WhatsApp's header shows all of it; the rest is CARD_BACKGROUND.
 CARD_SIZE = (1200, 628)
+CARD_BACKGROUND = (240, 240, 240)
 CARD_JPEG_QUALITY = 80
 CARD_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
@@ -133,6 +136,24 @@ def _fit(image, max_edge):
     return copy
 
 
+def card_placement(width, height, size=CARD_SIZE):
+    """(left, top, scaled width, scaled height) of a width x height photo fitted inside
+    size, centred, aspect ratio kept (each side at least 1 px)."""
+    scale = min(size[0] / width, size[1] / height)
+    fitted_w = min(size[0], max(1, round(width * scale)))
+    fitted_h = min(size[1], max(1, round(height * scale)))
+    return (size[0] - fitted_w) // 2, (size[1] - fitted_h) // 2, fitted_w, fitted_h
+
+
+def card_image(rgb, size=CARD_SIZE):
+    """The card derivative: the whole RGB photo, scaled to fit and centred on
+    CARD_BACKGROUND. Never cropped, never stretched."""
+    left, top, fitted_w, fitted_h = card_placement(*rgb.size, size)
+    canvas = Image.new("RGB", size, CARD_BACKGROUND)
+    canvas.paste(rgb.resize((fitted_w, fitted_h), Image.Resampling.LANCZOS), (left, top))
+    return canvas
+
+
 def _wa_jpeg(image):
     """The WhatsApp derivative: under WA_MAX_BYTES, lowering quality, then size."""
     candidate = _fit(image, WA_MAX_EDGE)
@@ -195,10 +216,8 @@ def _transform(data, mime):
 
     rgb = _flatten(upright)
     wa = _wa_jpeg(rgb)
-    card = _encode(
-        ImageOps.fit(rgb, CARD_SIZE, Image.Resampling.LANCZOS, centering=(0.5, 0.5)),
-        "JPEG", quality=CARD_JPEG_QUALITY, optimize=True, progressive=True,
-    )
+    card = _encode(card_image(rgb), "JPEG", quality=CARD_JPEG_QUALITY, optimize=True,
+                   progressive=True)
     for encoded in (original, wa, card):
         if has_metadata(encoded):
             raise MediaRejected("metadata_not_stripped")

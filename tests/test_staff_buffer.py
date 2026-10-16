@@ -452,7 +452,7 @@ def test_customer_and_broker_turns_are_not_buffered(sb):
     sb.drain()
 
     assert segments(sb) == []
-    assert sorted(p["text"]["body"] for p in sb.channel.sent) == [
+    assert sorted(p["text"]["body"] for p in sb.channel.sent) == sorted([
         "Customer mode (stub) · 1 message in this turn",
         BROKER_HELP,   # Task 11.2: the lead-command help, never extraction (R-15)
-    ]
+    ])
