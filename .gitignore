@@ -19,3 +19,5 @@ demo/media/**/*.webp
 /.local/demo-media/
 # Task 7.2: STT benchmark runs (transcripts, speaker labels) stay local
 /.local/stt-bench/
+# Task 10.3: live / dry-run benchmark results stay local until reviewed
+/.local/bench-live/
