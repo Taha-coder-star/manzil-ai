@@ -475,6 +475,61 @@ def test_buy_to_rent_moves_the_budget_and_asks_unless_an_amount_is_given(gz):
     assert "budget_ask_rent" not in {n.key for n in given.notices}
 
 
+def test_a_new_amount_for_the_other_purpose_re_infers_it(gz):
+    """Live 2026-10-17: an earlier "office on rent" kept rent, and "500 gaz ka ghar, budget
+    aath crore tak" searched houses at 8 crore a month (0 results)."""
+    state = {"purpose": slot_entry("rent"), "property_types": slot_entry(["office"]),
+             "category": slot_entry("commercial"), "location": loc("dha-ph6"),
+             "budget": slot_entry({"min": 450_000, "max": 550_000, "mode": "around",
+                                   "period": "monthly"})}
+    message = "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak"
+    merge = run(gz, state, [op("property_types", "set", "ghar"),
+                            op("budget", "set", "budget aath crore tak")], [("text", message)])
+    assert value(merge, "purpose") == "sale"
+    assert merge.slots["purpose"]["source"] == "inferred"
+    assert merge.slots["purpose"]["confirmed"] is False
+    assert (value(merge, "budget")["max"], value(merge, "budget")["period"]) == (
+        80_000_000, "one_time")
+    assert "purpose_inferred" in {n.key for n in merge.notices}
+
+
+@pytest.mark.parametrize(("span", "message"), [
+    ("3 lakh", "budget 3 lakh"),                   # fits rent: kept
+    ("2 crore", "2 crore, sale ke liye"),          # the purpose is said: never re-inferred
+    ("30 lakh", "budget 30 lakh"),                 # between the thresholds: kept, not asked
+])
+def test_a_stored_purpose_is_kept_when_the_amount_does_not_contradict_it(gz, span, message):
+    state = {"purpose": slot_entry("rent"), "property_types": slot_entry(["house"]),
+             "location": loc("dha-ph6")}
+    patch = [op("budget", "set", span)]
+    if "sale" in message:
+        patch.append(op("purpose", "set", "sale"))
+    merge = run(gz, state, patch, [("text", message)])
+    expected = "sale" if "sale" in message else "rent"
+    assert value(merge, "purpose") == expected
+    assert "purpose_inferred" not in {n.key for n in merge.notices}
+
+
+def test_an_inferred_sale_followed_by_a_rent_amount_becomes_rent(gz):
+    inferred = dict(slot_entry("sale"), source="inferred", confirmed=False)
+    state = {"purpose": inferred, "property_types": slot_entry(["house"]),
+             "location": loc("dha-ph6")}
+    merge = run(gz, state, [op("budget", "set", "2 lakh")], [("text", "budget 2 lakh")])
+    assert value(merge, "purpose") == "rent"
+    assert value(merge, "budget")["period"] == "monthly"
+    assert "purpose_inferred" in {n.key for n in merge.notices}
+
+
+def test_a_stated_purpose_for_the_same_kind_of_property_is_kept(gz):
+    # "buy house ..." then "budget 2 lakh": no type switch, so sale stays (the plausibility
+    # guard asks about the amount; test_an_impossible_budget_is_asked_then_kept_when_restated).
+    state = {"purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
+             "location": loc("dha-ph6")}
+    merge = run(gz, state, [op("budget", "set", "2 lakh")], [("text", "budget 2 lakh")])
+    assert value(merge, "purpose") == "sale"
+    assert "purpose_inferred" not in {n.key for n in merge.notices}
+
+
 HOUSE_SEARCH = {
     "purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
     "location": loc("dha-ph6"), "beds_min": slot_entry(4),
@@ -547,6 +602,23 @@ def test_cheaper_uses_the_shown_prices_excludes_them_and_skips_budget_relaxation
                 [("text", "kuch sasta")], shown=Shown(("c", "d"), (60_000_000, 61_000_000), (1, 1)))
     assert value(again, "budget")["max"] == 58_200_000
     assert again.slots["excluded_property_ids"]["value"] == ["a", "b", "c", "d"]
+
+
+def test_a_stated_budget_after_cheaper_ends_the_exclusion(gz):
+    """Live 2026-10-17: "Kuch sasta dikhao", then the restated "budget aath crore tak" still
+    hid the three listings. A stated amount starts a new search; relative ones keep it."""
+    shown = Shown(("a", "b", "c"), (75_000_000, 78_000_000, 80_000_000), (500, 500, 500))
+    cheap = run(gz, {"purpose": slot_entry("sale")}, [op("budget", "relative", "Kuch sasta")],
+                [("text", "Kuch sasta dikhao")], shown=shown)
+    assert cheap.slots["excluded_property_ids"]["value"] == ["a", "b", "c"]
+    other = run(gz, cheap.slots, [op("location", "add", "Phase 8")],
+                [("text", "Phase 8 mein bhi dekho")])
+    assert other.slots["excluded_property_ids"]["value"] == ["a", "b", "c"]   # 3c unchanged
+    stated = run(gz, cheap.slots, [op("budget", "set", "budget aath crore tak")],
+                 [("text", "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak")])
+    assert "excluded_property_ids" not in stated.slots
+    assert value(stated, "budget")["max"] == 80_000_000
+    assert "no_budget_relaxation" not in value(stated, "budget")
 
 
 def test_a_relative_phrase_with_no_prior_search_invents_no_amount(gz):
@@ -1016,6 +1088,10 @@ def test_a_transcript_in_another_script_is_not_uncertain_by_itself(gz):
     ("8 crore tak", "max", 80_000_000),
     ("8 crore تک", "max", 80_000_000),            # Urdu script: read (R16: both scripts)
     ("8 کروڑ تک", "max", 80_000_000),
+    ("8 crore तक", "max", 80_000_000),            # Devanagari, as Scribe writes it (live)
+    ("8 करोड़ तक", "max", 80_000_000),
+    ("आठ करोड़ तक", "max", 80_000_000),
+    ("8 crore के आसपास", "around", 88_000_000),
     ("8 crore", "around", 88_000_000),            # bare amount: around (owner 2026-10-12)
 ])
 def test_budget_operators_the_normaliser_reads(span, mode, maximum):
@@ -1023,7 +1099,7 @@ def test_budget_operators_the_normaliser_reads(span, mode, maximum):
     assert (parsed.status, parsed.mode, parsed.max) == ("ok", mode, maximum)
 
 
-@pytest.mark.parametrize("span", ["8 crore तक", "budget 8 crore तक का"])
+@pytest.mark.parametrize("span", ["8 crore वाला", "budget 8 crore वाला"])
 def test_an_unread_operator_is_never_taken_as_around(span):
     parsed = normalise.parse_budget(span, purpose="sale")
     assert (parsed.status, parsed.reason, parsed.stated_pkr) == (
@@ -1031,9 +1107,9 @@ def test_an_unread_operator_is_never_taken_as_around(span):
 
 
 @pytest.mark.parametrize(("text", "span"), [
-    ("budget 8 crore तक है", "8 crore tak"),     # not in the turn: re-extracted (R-22)
-    ("budget 8 crore तक है", "8 crore तक"),
-    ("budget 8 crore तक है", "8 crore"),          # the model left the operator out
+    ("budget 8 crore वाला है", "8 crore wala"),   # not in the turn: re-extracted (R-22)
+    ("budget 8 crore वाला है", "8 crore वाला"),
+    ("budget 8 crore वाला है", "8 crore"),        # a word the normaliser cannot read
 ])
 def test_a_budget_with_an_unread_operator_is_asked_with_the_amount(gz, text, span):
     merge = run(gz, {}, [op("budget", "set", span)], [("voice", text, False)])
@@ -1051,7 +1127,7 @@ def test_a_typed_budget_without_an_operator_stays_around(gz):
 
 
 def test_an_amount_the_normaliser_cannot_read_is_asked_not_dropped(gz):
-    merge = run(gz, {}, [op("budget", "set", "8 करोड़ तक")], [("voice", "budget 8 करोड़ तक")])
+    merge = run(gz, {}, [op("budget", "set", "8 करोड़ों तक")], [("voice", "budget 8 करोड़ों तक")])
     assert statuses(merge) == [("budget", "ask", "unreadable")]
     assert keys(merge) == {"budget_unclear"}
     plain = run(gz, {}, [op("budget", "set", "ghar")], [("text", "ghar")])
@@ -1103,10 +1179,18 @@ def test_urdu_script_type_words_are_read():
     assert requirements.parse_types("فلیٹ") == ["apartment"]
 
 
+def test_devanagari_type_words_are_read():
+    assert requirements.parse_types("घर") == ["house"]
+    assert requirements.parse_types("मकान") == ["house"]
+    assert requirements.parse_types("फ्लैट") == ["apartment"]
+    assert requirements.parse_types("ऑफ़िस") == ["office"]
+    assert requirements.parse_types("दुकान") == ["shop"]
+
+
 def test_a_type_or_budget_in_unread_words_is_asked_not_dropped(gz):
-    merge = run(gz, {}, [op("property_types", "set", "घर"),
-                         op("budget", "set", "आठ करोड़ तक")],
-                [("voice", "घर चाहिए, बजट आठ करोड़ तक", False)])
+    merge = run(gz, {}, [op("property_types", "set", "कोठी"),
+                         op("budget", "set", "आठ करोड़ों तक")],
+                [("voice", "कोठी चाहिए, बजट आठ करोड़ों तक", False)])
     assert statuses(merge) == [("property_types", "ask", "unreadable"),
                                ("budget", "ask", "unreadable")]
     assert keys(merge) == {"type_unclear", "budget_unclear"}
@@ -1133,7 +1217,7 @@ def scenario_2_patch(spans):
         ("location", "size", "property_types", "budget"), spans, strict=True)]
 
 
-@pytest.mark.parametrize("script", ["roman", "urdu"])
+@pytest.mark.parametrize("script", ["roman", "urdu", "mixed_devanagari"])
 def test_scenario_2_in_a_supported_script_keeps_every_critical_slot(gz, script):
     text, spans = SCENARIO_2_SPEECH[script]
     merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
@@ -1146,25 +1230,29 @@ def test_scenario_2_in_a_supported_script_keeps_every_critical_slot(gz, script):
     assert requirements.uncertain_slots(s) == []          # clean voice: no confirmation
 
 
-def test_scenario_2_from_scribe_mixed_devanagari_asks_type_and_operator(gz):
-    text, spans = SCENARIO_2_SPEECH["mixed_devanagari"]
-    merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
-    assert statuses(merge) == [
-        ("property_types", "ask", "unreadable"), ("location", "applied", None),
-        ("size", "applied", None), ("budget", "ask", "operator_unknown")]
-    assert keys(merge) == {"type_unclear", "budget_operator_ask"}
-    assert "budget" not in merge.slots and "purpose" not in merge.slots
+def test_the_live_scribe_transcript_reads_type_and_budget(gz):
+    """Live 2026-10-17 (C-02): Scribe wrote "घर" and "तक" in Devanagari, so the customer was
+    asked the type and the operator. Both are read now; the size is what was heard."""
+    text = "DHA phase 6 में 800 gaz का घर चाहिए budget 8 crore तक।"
+    merge = run(gz, {}, scenario_2_patch(["DHA phase 6", "800 gaz", "घर", "8 crore तक"]),
+                [("voice", text, False)])
+    s = merge.slots
+    assert s["property_types"]["value"] == ["house"]
+    assert (s["budget"]["value"]["mode"], s["budget"]["value"]["max"]) == ("max", 80_000_000)
+    assert s["size"]["value"]["value"] == 800
+    assert not keys(merge) & {"type_unclear", "budget_operator_ask", "budget_unclear"}
 
 
-def test_scenario_2_in_devanagari_asks_instead_of_guessing(gz):
+def test_scenario_2_in_devanagari_reads_type_and_budget_but_asks_the_place(gz):
+    # No Devanagari place names in the gazetteer: the place is never guessed.
     text, spans = SCENARIO_2_SPEECH["devanagari"]
     merge = run(gz, {}, scenario_2_patch(spans), [("voice", text, False)])
     by_slot = {slot: (status, detail) for slot, status, detail in statuses(merge)}
-    assert by_slot["property_types"] == ("ask", "unreadable")
-    assert by_slot["budget"] == ("ask", "unreadable")
-    assert by_slot["location"][0] in {"unknown", "rejected"}   # no Devanagari place names
-    assert {"type_unclear", "budget_unclear"} <= keys(merge)
-    assert not {"location", "property_types", "budget", "purpose"} & set(merge.slots)
+    assert by_slot["property_types"] == ("applied", None)
+    assert by_slot["budget"] == ("applied", None)
+    assert by_slot["location"][0] in {"unknown", "rejected"}
+    assert "location" not in merge.slots
+    assert merge.slots["property_types"]["value"] == ["house"]
 
 
 def test_the_model_can_mark_a_heard_value_uncertain_but_not_a_typed_one(gz):

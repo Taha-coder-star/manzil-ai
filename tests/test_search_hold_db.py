@@ -143,3 +143,24 @@ def test_a_retried_held_turn_asks_once_and_searches_nothing(st, monkeypatch):
         TEMPLATES["requirements_saved"] + "\n\n" + TEMPLATES["budget_unclear"]) == 1
     keys = [r[0] for r in st.query("SELECT dedupe_key FROM outbound_message")]
     assert len(keys) == len(set(keys))
+
+
+def test_a_house_budget_after_an_office_rent_search_is_a_sale_search(st):
+    """Live 2026-10-17: after "office on rent ... 5 lakh per month", the typed scenario 2
+    kept rent and searched houses at 8 crore a month (0 results). The amount re-infers sale."""
+    turn(st, "office on rent in karachi around 5 lakh per month",
+         update(p("property_types", "set", "office"), p("purpose", "set", "on rent"),
+                p("location", "set", "karachi"), p("budget", "set", "around 5 lakh per month")),
+         SEARCH)
+    assert runs(st) == 1
+    message = "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak"
+    house = turn(st, message,
+                 update(p("property_types", "set", "ghar"), p("location", "set", "DHA Phase 6"),
+                        p("size", "set", "500 gaz"), p("budget", "set", "budget aath crore tak")),
+                 SEARCH)
+    purpose = st.state()[1]["purpose"]
+    assert (purpose["value"], purpose["source"]) == ("sale", "inferred")
+    assert st.state()[1]["budget"]["value"]["period"] == "one_time"
+    assert runs(st) == 2 and cards_in(house)
+    said = sent_text(house)
+    assert "DH6-101" in said and "DH6-102" in said

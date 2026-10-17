@@ -159,6 +159,64 @@ UNIT_RE = re.compile(
 
 TOKEN_RE = re.compile(r"\d+(?:,\d{3})+(?:\.\d+)?|\d+[.,]\d+|\d+|[^\W\d_]+|[-–/]")
 
+# Devanagari (live 2026-10-17): Scribe writes Roman Urdu speech partly in Devanagari
+# ("DHA phase 6 में 800 gaz का घर चाहिए budget 8 crore तक"). Python's \w splits its words
+# at vowel signs, so the word lists above cannot hold them: romanise() maps known words
+# to the Roman spellings those lists read. Unknown words stay as they are, so NON_LATIN
+# still makes them asked, never guessed. Keys are written without nukta / chandrabindu.
+_DEVANAGARI_ROMAN = {
+    # property types / categories
+    "घर": "ghar", "मकान": "makaan", "हाउस": "house", "बंगला": "bungalow", "विला": "villa",
+    "फ्लैट": "flat", "फ्लेट": "flat",
+    "अपार्टमेंट": "apartment", "पेंटहाउस": "penthouse", "पोर्शन": "portion",
+    "प्लॉट": "plot", "प्लाट": "plot", "दुकान": "dukaan", "शॉप": "shop", "दफ्तर": "office",
+    "ऑफिस": "office", "आफिस": "office", "ऑफ़िस": "office", "शोरूम": "showroom",
+    "कमर्शियल": "commercial", "रेजिडेंशियल": "residential",
+    # budget operators
+    "तक": "tak", "से": "se", "कम": "kam", "ऊपर": "upar", "उपर": "upar",
+    "ज्यादा": "zyada", "जयादा": "zyada", "लगभग": "lagbhag", "तकरीबन": "taqreeban",
+    "करीब": "qareeb", "आसपास": "aas paas", "आस": "aas", "पास": "paas",
+    "मैक्सिमम": "maximum", "मिनिमम": "minimum", "अंडर": "under",
+    # purpose / period
+    "खरीदना": "khareedna", "खरीदनी": "khareedni", "खरीदने": "khareedne",
+    "खरीद": "khareed", "किराए": "kiraye", "किराये": "kiraye", "किराया": "kiraya",
+    "पर": "par", "पे": "pe", "रेंट": "rent", "सेल": "sale", "लेना": "lena", "लेनी": "leni",
+    "है": "hai", "महीना": "mahina", "महीने": "mahina", "मंथ": "month", "मंथली": "monthly",
+    # amounts, numbers and units
+    "करोड": "crore", "लाख": "lakh", "हजार": "hazar", "सौ": "sau", "अरब": "arab",
+    "रुपये": "rupay", "रुपए": "rupay", "एक": "ek", "दो": "do", "तीन": "teen",
+    "चार": "chaar", "पांच": "paanch", "छह": "chhe", "छे": "chhe", "सात": "saat",
+    "आठ": "aath", "नौ": "nau", "दस": "das", "बीस": "bees", "सवा": "sawa",
+    "साढे": "saade", "पौने": "paune", "डेढ": "dedh", "ढाई": "dhai",
+    "गज": "gaz", "मरला": "marla", "मरले": "marla", "कनाल": "kanal", "स्क्वायर": "square",
+    "फुट": "feet", "फीट": "feet", "यार्ड": "yard", "यार्ड्स": "yards",
+    # relative ops
+    "सस्ता": "sasta", "सस्ती": "sasti", "सस्ते": "saste", "महंगा": "mehnga",
+    "मेहंगा": "mehnga", "बड़ा": "bada", "बडा": "bada", "बड़ी": "badi", "बडी": "badi",
+    "थोड़ा": "thoda", "थोडा": "thoda",
+}
+DEVANAGARI = re.compile(r"[ऀ-ॿ]")
+# A word: letters and signs, without the danda (।, ॥) or the digits (०-९).
+_DEVANAGARI_WORD = re.compile(r"[ऀ-ॣ॰-ॿ]+")
+_DEVANAGARI_DIGITS = str.maketrans("०१२३४५६७८९", "0123456789")
+
+
+def _devanagari_key(word):
+    plain = unicodedata.normalize("NFD", word).replace("़", "").replace("ँ", "ं")
+    return unicodedata.normalize("NFC", plain)
+
+
+_ROMAN_BY_KEY = {_devanagari_key(word): roman for word, roman in _DEVANAGARI_ROMAN.items()}
+
+
+def romanise(text):
+    """Known Devanagari words (and digits) -> the Roman spellings the parsers read."""
+    if not text or not DEVANAGARI.search(text):
+        return text
+    text = text.translate(_DEVANAGARI_DIGITS)
+    return _DEVANAGARI_WORD.sub(
+        lambda m: _ROMAN_BY_KEY.get(_devanagari_key(m.group()), m.group()), text)
+
 
 # ---------------------------------------------------------------------------
 # Results
@@ -431,7 +489,7 @@ def find_areas(text):
 
 def parse_number(text):
     """The first number expression in text (any kind), or None."""
-    found = _scan(text or "")
+    found = _scan(romanise(text) or "")
     return found[0].value if found else None
 
 
@@ -497,6 +555,7 @@ def parse_area(span, *, property_type=None, marla_sqft=DEFAULT_MARLA_SQFT):
     apartment / shop / office / ... -> sq ft; anything else is ambiguous.
     """
     kind = canonical_type(property_type)
+    span = romanise(span)
     found = [m for m in _scan(span or "") if m.kind in ("area", "number")]
     if not found:
         return Area(span, NONE)
@@ -604,6 +663,7 @@ _RELATIVE = (
 def relative_op(span):
     """cheaper | higher | premium | bigger | None. The backend computes the new
     constraint from the last search (R17 4.5; 7.3), never the LLM."""
+    span = romanise(span)
     for name, pattern in _RELATIVE:
         if pattern.search(span or ""):
             return name
@@ -637,7 +697,7 @@ def parse_budget(span, *, purpose=None, after=""):
     (kam se kam / at least / se upar). The stated amount is kept apart from the
     min / max; search tolerances are applied by search (8.1), not here.
     """
-    span = span or ""
+    span, after = romanise(span or ""), romanise(after or "")
     monthly = bool(_MONTHLY.search(span))
     period = "monthly" if monthly else period_for(purpose)
     found = [m for m in _scan(span) if m.kind in ("money", "number")]
@@ -696,7 +756,7 @@ _SALE = [re.compile(p, re.IGNORECASE) for p in (
 def parse_purpose(text, *, source="text"):
     """Explicit sale / rent wording -> Purpose(source=text|voice), else status none.
     A monthly amount marker ("mahana", "per month") also means rent."""
-    text = text or ""
+    text = romanise(text or "")
     for value, patterns in (("rent", _RENT), ("sale", _SALE)):
         for pattern in patterns:
             match = pattern.search(text)

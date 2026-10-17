@@ -200,13 +200,13 @@ def test_designed_ambiguity_must_stay_ambiguous():
     assert resolved["location"]["reason"] == "resolved_instead_of_ambiguous"
 
 
-def test_devanagari_output_is_reported_and_costs_slots():
+def test_devanagari_output_is_reported_and_its_known_words_are_read():
     """The live 2026-10-12 finding: Scribe wrote Devanagari for Roman Urdu speech."""
     text = "DHA phase 6 में 500 gaz का घर, budget 8 crore तक का।"
     profile = stt_bench.script_profile(text)
     assert profile["devanagari"] > 0 and profile["arabic"] == 0
     slots = stt_bench.score_slots(text, gold("CV-06"), GAZETTEER)
-    assert not slots["budget"]["correct"]  # "तक" is not read as "tak" (max)
+    assert slots["budget"]["correct"]  # "तक" is read as "tak" (max) since 2026-10-17
 
 
 def test_error_rates_are_reported_with_punctuation_and_case_ignored():

@@ -9,6 +9,7 @@ speech are fictional."""
 # ruff: noqa: F811  (tests take the imported st fixture as a parameter)
 
 import logging
+import re
 import threading
 import time
 from types import SimpleNamespace
@@ -156,44 +157,40 @@ def test_scenario_2_in_urdu_script_gives_the_same_three_listings(vf):
 
 # --- budget operators in other scripts --------------------------------------------------------
 
-def test_scribe_devanagari_asks_type_then_operator_and_searches_nothing(vf):
-    """Scribe wrote "घर" and "8 crore तक": the type and the operator are unread. One
-    question per turn (type first, 7.3 order); the operator question stays open and is asked
-    next; nothing is searched until both are answered (never every type, never "around");
-    script alone confirms nothing else."""
+def test_scribe_devanagari_type_and_operator_are_read_and_searched(vf):
+    """Scribe wrote "घर" and "8 crore तक" (live 2026-10-12 and C-02 on 2026-10-17): the known
+    Devanagari words are read as "ghar" / "tak", so scenario 2 is searched at once, with
+    the budget as a max (never "around"); script alone confirms nothing else."""
     st = vf.st
     vf.scribe.script.append(scribe_body(DEVANAGARI, language="hin"))
     payloads = vf.say(vf.voice(), calls=search_calls(DEVANAGARI_PATCH))
     said = sent_text(payloads)
-    assert TEMPLATES["type_unclear"] in said
-    assert TEMPLATES["budget_operator_ask"].format(amount="8 crore") not in said
-    assert echo_question(payloads) is None and runs(st) == 0
+    assert TEMPLATES["type_unclear"] not in said
+    assert echo_question(payloads) is None and runs(st) == 1
+    assert SCENARIO_2_IDS <= set(re.findall(r"[A-Z0-9]+-\d+", said))
     state = slots(st)
-    assert not {"budget", "purpose", "property_types"} & set(state)
+    assert state["property_types"]["value"] == ["house"]
+    assert (state["budget"]["value"]["mode"], state["budget"]["value"]["max"]) == (
+        "max", 80_000_000)
     assert state["location"]["source"] == "voice" and "echo" not in state["location"]
-    [(ops,)] = st.query("SELECT ops FROM requirement_patch_log")
-    assert {e["slot"]: e.get("detail") for e in ops if e["status"] == "ask"} == {
-        "budget": "operator_unknown", "property_types": "unreadable"}
-
-    # The customer answers the type in writing: the operator question comes next.
-    typed = vf.say(text("ghar", sender=CUSTOMER_B),
-                   calls=search_calls([p("property_types", "set", "ghar")]))
-    assert slots(st)["property_types"]["value"] == ["house"]
-    assert sent_text(typed).endswith(TEMPLATES["budget_operator_ask"].format(amount="8 crore"))
-    assert runs(st) == 0
-    vf.say(text("8 crore tak", sender=CUSTOMER_B),
-           calls=search_calls([p("budget", "set", "8 crore tak")]))
-    budget = slots(st)["budget"]
-    assert budget["value"]["mode"] == "max" and budget["value"]["max"] == 80_000_000
-    assert budget["source"] == "text" and runs(st) == 1
 
 
-def test_an_amount_in_devanagari_is_asked_not_dropped(vf):
+def test_an_amount_in_devanagari_is_read(vf):
     st = vf.st
     spoken = "DHA Phase 6 mein 500 gaz ka ghar, budget 8 करोड़ तक"
     vf.scribe.script.append(scribe_body(spoken, language="hin"))
-    payloads = vf.say(vf.voice(), calls=search_calls([
+    vf.say(vf.voice(), calls=search_calls([
         p("location", "set", "DHA Phase 6"), p("budget", "set", "8 करोड़ तक")]))
+    budget = slots(st)["budget"]
+    assert (budget["value"]["mode"], budget["value"]["max"]) == ("max", 80_000_000)
+
+
+def test_an_amount_in_unread_devanagari_words_is_asked_not_dropped(vf):
+    st = vf.st
+    spoken = "DHA Phase 6 mein 500 gaz ka ghar, budget 8 करोड़ों तक"
+    vf.scribe.script.append(scribe_body(spoken, language="hin"))
+    payloads = vf.say(vf.voice(), calls=search_calls([
+        p("location", "set", "DHA Phase 6"), p("budget", "set", "8 करोड़ों तक")]))
     assert TEMPLATES["budget_unclear"] in sent_text(payloads)
     assert "budget" not in slots(st)
     [(ops,)] = st.query("SELECT ops FROM requirement_patch_log")

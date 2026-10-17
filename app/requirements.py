@@ -287,7 +287,7 @@ def parse_types(span):
     """Canonical property types named in a span, in order ("flat ya house" -> apartment,
     house); [] when no type word is there."""
     found = []
-    for word in re.findall(r"[^\W\d_]+", (span or "").casefold()):
+    for word in re.findall(r"[^\W\d_]+", (normalise.romanise(span) or "").casefold()):
         for candidate in (word, word.removesuffix("s"), word.removesuffix("es")):
             kind = _TYPE_WORDS.get(candidate) or normalise.canonical_type(candidate)
             if kind in _TYPES:
@@ -856,6 +856,9 @@ class Patch:
         entry = make_entry(value, span, ev, self.ctx, echo=echo, confirmed=not echo,
                            **self._flags(ev, reextracted))
         self.budget_given = True
+        # Live 2026-10-17: after "Kuch sasta dikhao", a restated "budget aath crore tak" still
+        # hid the listings the cheaper rule had excluded. A stated amount starts a new search.
+        self.slots.pop("excluded_property_ids", None)
         self._set(op, "budget", entry, notices)
 
     def _implausible(self, stated):
@@ -1025,6 +1028,10 @@ class Patch:
         if budget and not purpose and self.budget_given and not self.purpose_given:
             self._infer_purpose(budget)
             purpose = self.slots.get("purpose")
+        elif budget and purpose and self.budget_given and not self.purpose_given:
+            if self._stale_purpose(budget, purpose):
+                self._infer_purpose(budget)
+                purpose = self.slots.get("purpose")
         if budget and purpose and budget["value"].get("period") is None:
             budget["value"]["period"] = normalise.period_for(purpose["value"])
         if self.moved_budget and "budget" not in self.slots:
@@ -1033,6 +1040,30 @@ class Patch:
         if self.merge.changed and any(e["status"] == "applied" for e in self.merge.entries):
             self.merge.notices.insert(0, _notice("requirements_saved"))
         self.merge.slots = self.slots
+
+    def _stale_purpose(self, budget, purpose):
+        """Live 2026-10-17: after "office on rent", "500 gaz ka ghar, budget aath crore tak"
+        kept rent and searched 8 crore a month. A new amount with no purpose word that the
+        Data Model 4.4 thresholds put only in the other purpose drops the stored purpose
+        (and the budget's period), so _infer_purpose sets it again, inferred and noted.
+        Only after a residential <-> commercial switch in this patch, or over a purpose that
+        was itself inferred: a purpose the customer stated for the same kind of property is
+        kept, and an odd amount goes to the plausibility guard (R17 4.7)."""
+        value = budget["value"]
+        if value.get("relative"):
+            return False
+        if self.type_switch is None and purpose.get("source") != "inferred":
+            return False
+        if normalise.parse_purpose(budget.get("raw") or "").status == normalise.OK:
+            return False   # "3 lakh mahana": the amount says its own purpose
+        category = (self.slots.get("category") or {}).get("value")
+        found = normalise.infer_purpose(
+            value.get("stated_pkr") or value.get("max") or value.get("min"), category)
+        if found.status != normalise.OK or found.value == purpose["value"]:
+            return False
+        self.slots.pop("purpose")
+        value["period"] = normalise.period_for(found.value)
+        return True
 
     def _infer_purpose(self, budget):
         """Amount -> purpose only ever as source 'inferred', unconfirmed (R17 4.4 / 4.6)."""
