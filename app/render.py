@@ -59,6 +59,8 @@ TEXT = {
         "echo_size": "I took the size as {size} — correct me if that's wrong.",
         "no_match_cheaper": "No cheaper{what}{place} are available right now.",
         "no_match": "No{what}{place} match this budget{budget} right now.",
+        "no_match_open": "No{what}{place} are available right now.",
+        "budget_prompt": "What is your budget? I can look for other options with it.",
         "relaxed": "Some differ slightly in {steps}.",
         "lowest": "Prices there start from {amount}.",
         "nearby": "Nearby area", "more_budget": "Raise budget", "agent": "Talk to agent",
@@ -92,6 +94,9 @@ TEXT = {
         "echo_size": "Size main ne {size} samjha hai — ghalat ho to bata dein.",
         "no_match_cheaper": "{place}is se kam price ka{what} abhi available nahi.",
         "no_match": "{place}is budget{budget} mein{what} abhi available nahi.",
+        "no_match_open": "{place}{purpose}abhi koi {thing} available nahi.",
+        "budget_prompt": ("Aap ka budget kitna hai? Main us hisaab se doosri options dekh "
+                          "sakta hoon."),
         "relaxed": "Kuch options mein {steps} thoda alag hai.",
         "lowest": "Yahan price {amount} se shuru hoti hai.",
         "nearby": "Nearby area", "more_budget": "Budget barhayein", "agent": "Agent se baat",
@@ -432,17 +437,30 @@ def _no_match(payload, language, request, gazetteer):
     what = " " + _what(request, language)
     place = (f" in {names}" if language == ENGLISH else f"{names} mein ") if names else ""
     budget = _budget_text(request, language).lstrip(", ")
-    key = "no_match_cheaper" if request is not None and request.no_budget_relaxation \
-        else "no_match"
-    lines = [words[key].format(what=what, place=place,
-                               budget=f" ({budget})" if budget and key == "no_match" else "")]
+    cheaper = request is not None and request.no_budget_relaxation
+    key = "no_match_cheaper" if cheaper else "no_match"
+    open_budget = not budget and not cheaper   # no budget was given: say what was searched, ask
+    if open_budget and language == ENGLISH:
+        lines = [words["no_match_open"].format(what=what, place=place)]
+    elif open_budget:
+        thing = " ".join(p for p in (_size_text(request, language),
+                                     _things(request, language)) if p)
+        purpose = words.get(f"to_{request.purpose}", "") if request is not None else ""
+        lines = [words["no_match_open"].format(place=place, thing=thing,
+                                               purpose=f"{purpose} " if purpose else "")]
+    else:
+        lines = [words[key].format(what=what, place=place,
+                                   budget=f" ({budget})" if budget and key == "no_match" else "")]
     lowest = payload.get("lowest_price_pkr")
     if lowest:
         lines.append(words["lowest"].format(amount=amount_text(lowest)))
+    if open_budget:
+        lines.append(words["budget_prompt"])
     body = " ".join(lines)
     body = body[0].upper() + body[1:]
-    buttons = [(NEARBY, words["nearby"]), (MORE_BUDGET, words["more_budget"]),
-               (HANDOFF, words["agent"])]
+    # With no budget there is none to raise: the button would only ask the same question.
+    buttons = [(NEARBY, words["nearby"]), (HANDOFF, words["agent"])] if open_budget else [
+        (NEARBY, words["nearby"]), (MORE_BUDGET, words["more_budget"]), (HANDOFF, words["agent"])]
     facts = grounding.facts_for([], request=request, gazetteer=gazetteer,
                                 extra_money=[lowest] if lowest else ())
     return RenderPlan([whatsapp.reply_buttons(body, buttons)], NO_MATCH_KIND, language,

@@ -75,7 +75,7 @@ WORDS = {
         "more_results": "More results", "none": "No matching listings right now.",
     },
     ROMAN_URDU: {
-        "sale": "sale", "rent": "kiraye par", "no_cover": "photos jald",
+        "sale": "bikau", "rent": "kiraye par", "no_cover": "photos jald",
         "photos": "Aur photos", "visit": "Visit / Detail", "similar": "Milti-julti",
         "count": "{n} options:", "in_list": "#{a}-#{b} neeche list mein hain.",
         "reply": "Number likh kar jawab dein, ya {hint}.", "tap_card": "card par tap karein",

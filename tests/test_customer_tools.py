@@ -163,7 +163,7 @@ def test_an_unsupported_fact_is_replaced_by_agent_confirm_and_nothing_counts_as_
     out = ground_customer([card, shown], grounding.Facts(codes=frozenset({"DH6-101"})), None,
                           "english")
     assert out == [whatsapp.reply_buttons(
-        "I don't have that information -- the agent will confirm it.",
+        "I don't have that information — the agent will confirm it.",
         [("handoff:request", "Talk to agent")])]
 
 

@@ -6,7 +6,7 @@ A customer question about one listing ("gas connection hai?", "parking hai?",
 at answer time (load_known, v_public_listing, R-26):
 
 - a known field -> a template line built from the value;
-- an absent field -> "Ye maloomat mere paas nahi -- agent confirm kar denge." + an
+- an absent field -> "Ye maloomat mere paas nahi — agent confirm kar denge." + an
   agent button. Absence is unknown, never false (R-05);
 - legal / document questions -> always the agent, even when a related field exists;
 - price negotiation -> always the agent (no AI negotiation, CLAUDE.md section 10).
@@ -100,10 +100,10 @@ FIELD_PATTERNS = tuple((name, re.compile(p, re.IGNORECASE)) for name, p in (
 TEXT = {
     ENGLISH: {
         "fact": "{ref}: {fact}.",
-        "unknown": "I don't have that information -- the agent will confirm it.",
-        "legal": ("Documents and legal questions are always confirmed by the agent -- I can "
+        "unknown": "I don't have that information — the agent will confirm it.",
+        "legal": ("Documents and legal questions are always confirmed by the agent — I can "
                   "connect you."),
-        "negotiation": "Price discussions are handled by the agent -- I can connect you.",
+        "negotiation": "Price discussions are handled by the agent — I can connect you.",
         "agent": "Talk to agent",
         "parking": "{n} parking space(s)", "floor": "on floor {n}",
         "floors": "{n} floors in the building", "maintenance": "maintenance {amount} a month",
@@ -118,10 +118,10 @@ TEXT = {
     },
     ROMAN_URDU: {
         "fact": "{ref}: {fact}.",
-        "unknown": "Ye maloomat mere paas nahi -- agent confirm kar denge.",
-        "legal": ("Documents aur legal baatein hamesha agent hi confirm karte hain -- main aap "
+        "unknown": "Ye maloomat mere paas nahi — agent confirm kar denge.",
+        "legal": ("Documents aur legal baatein hamesha agent hi confirm karte hain — main aap "
                   "ko agent se mila sakta hoon."),
-        "negotiation": "Price ki baat agent hi karte hain -- main aap ko agent se mila sakta hoon.",
+        "negotiation": "Price ki baat agent hi karte hain — main aap ko agent se mila sakta hoon.",
         "agent": "Agent se baat",
         "parking": "{n} parking hain", "floor": "{n} floor par hai",
         "floors": "building mein {n} floors hain", "maintenance": "maintenance {amount} mahana",

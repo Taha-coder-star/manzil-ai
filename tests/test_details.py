@@ -19,7 +19,7 @@ DH6_108 = KnownListing("DH6-108", "rent", "office", features=("lift", "generator
                        public={"maintenance_pkr_month": 15_000,
                                "rent_security_deposit_pkr": 1_000_000,
                                "rent_advance_months": 2})
-AGENT_CONFIRM = "Ye maloomat mere paas nahi -- agent confirm kar denge."
+AGENT_CONFIRM = "Ye maloomat mere paas nahi — agent confirm kar denge."
 
 
 def body(payloads):
@@ -57,7 +57,7 @@ def test_an_unrecognised_question_is_unknown_too():
     assert body(answer_detail(DH6_101, ["nearby_places"], ROMAN_URDU)) == AGENT_CONFIRM
     assert field_for("kuch aur batao") == []
     assert body(answer_detail(DH6_101, [], ENGLISH)) == (
-        "I don't have that information -- the agent will confirm it.")
+        "I don't have that information — the agent will confirm it.")
 
 
 def test_a_listing_no_longer_public_takes_the_agent_path():

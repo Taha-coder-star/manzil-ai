@@ -532,6 +532,9 @@ def render_customer(outcome, customer):
         if summary:
             keys = [ai_tools.Notice("requirements_noted", (("summary", summary),))
                     if _key(k) == "requirements_saved" else k for k in keys]
+            # The summary already names the place: "Theek hai, Clifton Block 6." after
+            # "note kar liya: Clifton Block 6, flat." said it twice (live 2026-10-18).
+            keys = [k for k in keys if _key(k) != "location_chosen"]
     if not keys:
         return payloads
     note = whatsapp.text("\n\n".join(_template(k, language) for k in keys))

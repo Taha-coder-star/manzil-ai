@@ -478,4 +478,4 @@ def test_a_card_stating_an_unsupported_price_is_replaced_by_agent_confirm(st):
     shown = {"type": "manzil_shown", "search_run_id": "x", "items": []}
     out = turn_engine.ground_customer([card, shown], facts, st.cache.get(), "roman_urdu")
     assert [pl["interactive"]["body"]["text"] for pl in out] == [
-        "Ye maloomat mere paas nahi -- agent confirm kar denge."]  # and SHOWN dropped
+        "Ye maloomat mere paas nahi — agent confirm kar denge."]  # and SHOWN dropped

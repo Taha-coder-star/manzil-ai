@@ -77,7 +77,7 @@ def test_a_prohibited_promise_is_rejected(text):
 
 @pytest.mark.parametrize("text", [
     "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak -- ye options hain:",
-    "#1 DH6-102 · Ghar · sale · DHA Phase 6 · PKR 8 crore",
+    "#1 DH6-102 · Ghar · bikau · DHA Phase 6 · PKR 8 crore",
     "#2 DH6-101 PKR 7.8 crore, 4 bed / 5 bath",
     "DH7-101 saade saat crore ka hai, Phase 7 -- qareeb",   # true for DH7-101
     "DH6-102 corner hai aur basement bhi hai",
@@ -105,8 +105,8 @@ def test_units_counts_positions_codes_and_places():
 
 def test_the_bold_layout_is_checked_like_plain_text():
     """WhatsApp marks (*bold*, 📍) never hide a fact: a wrong pair or price is still found."""
-    assert kinds("*#1 DH6-102* · Ghar · sale\n📍 DHA Phase 6 · *PKR 8 crore*") == []
-    assert kinds("*#1 DH6-101* · Ghar · sale") == ["position"]     # #1 is DH6-102
+    assert kinds("*#1 DH6-102* · Ghar · bikau\n📍 DHA Phase 6 · *PKR 8 crore*") == []
+    assert kinds("*#1 DH6-101* · Ghar · bikau") == ["position"]     # #1 is DH6-102
     assert kinds("*#2 DH6-101* · Ghar\n📍 DHA Phase 6 · *PKR 7.6 crore*") == ["money"]
     assert kinds("💰 *PKR 9 crore*") == ["money"]
 

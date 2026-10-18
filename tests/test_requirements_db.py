@@ -327,8 +327,7 @@ def test_an_ambiguous_place_asks_and_the_answer_is_checked_against_the_stored_ca
 
     reply = st.say("Bahria", [p("location", "set", "Bahria")])
     assert st.nodes() == fix(st, "btk-p6")
-    assert reply == [noted("Bahria Precinct 6") + "\n\n" +
-                     TEMPLATES["location_chosen"].format(area="Bahria Precinct 6")]
+    assert reply == [noted("Bahria Precinct 6")]   # the summary names the place: said once
     assert [row[1] for row in st.pending()] == ["resolved"]
     assert st.state()[1]["location"]["method"] == "clarified"
 
@@ -676,8 +675,7 @@ def test_a_plain_haan_confirms_the_sole_fuzzy_candidate_without_a_tool_call(st):
     ask_zamzama(st)
     reply = st.say("haan")                                     # the model calls no tool
     assert st.nodes() == fix(st, "dha-ph5-zamzama")
-    assert reply == [noted("Zamzama Commercial") + "\n\n"
-                     + TEMPLATES["location_chosen"].format(area="Zamzama Commercial")]
+    assert reply == [noted("Zamzama Commercial")]
     assert [r[1] for r in st.pending()] == ["resolved"]
     ((_, ops, _), *_) = st.patches()[-1:]
     assert ops[0]["detail"] == "affirmed" and ops[0]["call"] == "end"
@@ -840,9 +838,7 @@ def _setup_fallback(st):
 
 def _setup_confirm(st):
     ask_zamzama(st)
-    expected = (noted("Zamzama Commercial") + "\n\n"
-                + TEMPLATES["location_chosen"].format(area="Zamzama Commercial"))
-    return "haan", expected, fix(st, "dha-ph5-zamzama")
+    return "haan", noted("Zamzama Commercial"), fix(st, "dha-ph5-zamzama")
 
 
 @pytest.mark.parametrize("setup", [_setup_cross_area, _setup_fallback, _setup_confirm],

@@ -140,13 +140,13 @@ def test_scenario_2_wrapper_neighbour_label_and_positions():
     assert body[1] == ("Ye khareedne ke options hain — agar kiraye par chahiye to "
                        "bata dein.")  # inferred purpose is echoed, never blocking
     assert body[2] == "" and body[3] == "*3 options:*"
-    assert body[5:7] == ["*#1 DH6-102* · Ghar · sale", "📍 DHA Phase 6 · *PKR 8 crore*"]
-    assert body[11:13] == ["*#3 DH7-101* · Ghar · sale",
+    assert body[5:7] == ["*#1 DH6-102* · Ghar · bikau", "📍 DHA Phase 6 · *PKR 8 crore*"]
+    assert body[11:13] == ["*#3 DH7-101* · Ghar · bikau",
                            "📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb"]
     assert body[-1] == "👉 Number likh kar jawab dein, ya card par tap karein."
     cards_ = plan.payloads[0]["interactive"]["action"]["cards"]
     assert cards_[2]["body"]["text"] == (
-        "*#3 DH7-101* · Ghar · sale\nDHA Phase 7 · 500 sq yd · 4 bed / 5 bath\n"
+        "*#3 DH7-101* · Ghar · bikau\nDHA Phase 7 · 500 sq yd · 4 bed / 5 bath\n"
         "*PKR 7.5 crore* · Tayyar · Phase 7 — qareeb")
     assert [code for _, _, code in plan.shown] == ["DH6-102", "DH6-101", "DH7-101"]
     assert [b["quick_reply"]["title"] for b in cards_[0]["action"]["buttons"]] == [
@@ -204,6 +204,32 @@ def test_no_match_without_the_cheaper_rule_names_the_budget():
         "right now.")
 
 
+NO_BUDGET = search.Request.from_slots({
+    "purpose": entry("sale"), "property_types": entry(["apartment"]),
+    "location": entry({"nodes": ["clf-b6"], "mode": "EXACT", "status": "RESOLVED"})})
+
+
+def test_a_no_match_without_a_budget_says_what_was_searched_and_asks_the_budget():
+    # Live 2026-10-18: "Clifton Block 6 mein is budget mein flat ..." when no budget was given.
+    plan = render.render_search(payload(search.NO_MATCH), [], ROMAN_URDU, request=NO_BUDGET,
+                                gazetteer=G)
+    [message] = plan.payloads
+    assert message["interactive"]["body"]["text"] == (
+        "Clifton Block 6 mein khareedne ke liye abhi koi flat / penthouse available nahi. "
+        "Aap ka budget kitna hai? Main us hisaab se doosri options dekh sakta hoon.")
+    assert [b["reply"]["id"] for b in message["interactive"]["action"]["buttons"]] == [
+        "nomatch:nearby", "handoff:request"]          # no budget to raise
+
+
+def test_a_no_match_without_a_budget_keeps_the_lowest_price_and_speaks_english():
+    plan = render.render_search(payload(search.NO_MATCH, lowest=32_000_000), [], ENGLISH,
+                                request=NO_BUDGET, gazetteer=G)
+    assert plan.payloads[0]["interactive"]["body"]["text"] == (
+        "No apartments / penthouses for sale in Clifton Block 6 are available right now. "
+        "Prices there start from 3.2 crore. "
+        "What is your budget? I can look for other options with it.")
+
+
 def test_scenario_3c_labels_the_above_budget_card():
     results = [result(1, DH8_102), result(2, DH8_101, above=True)]
     plan = render.render_search(payload(search.OK, results), [DH8_101, DH8_102],
@@ -251,7 +277,7 @@ def test_one_result_is_a_single_card_with_the_wrapper_in_its_body():
     assert card["interactive"]["type"] == "button"
     text = card["interactive"]["body"]["text"]
     assert text.startswith("Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:\n\n"
-                           "*DH6-101* · Ghar · sale")
+                           "*DH6-101* · Ghar · bikau")
     assert [b["reply"]["title"] for b in card["interactive"]["action"]["buttons"]] == [
         "Aur photos", "Visit / Detail", "Milti-julti"]
 
