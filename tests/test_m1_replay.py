@@ -167,10 +167,10 @@ def test_status_view_shows_coalescing_routes_and_photos(m1):
     post(envelope(change(PNID_A, messages=[message("wamid.M1B", TEXT, BROKER)])))
     m1.drain()
     # (b) a staff photo.
-    m1.channel.files["777"] = photo()
+    m1.channel.files["m1photo"] = photo()
     post(envelope(change(PNID_A, messages=[{
         "from": STAFF, "id": "wamid.M1P", "timestamp": str(int(time.time())),
-        "type": "image", "image": {"id": "777", "mime_type": "image/jpeg"}}])))
+        "type": "image", "image": {"id": "m1photo", "mime_type": "image/jpeg"}}])))
     m1.drain()
 
     out = io.StringIO()
@@ -184,7 +184,7 @@ def test_status_view_shows_coalescing_routes_and_photos(m1):
     assert f"original (private): tenant/{m1.agency}/inbound/" in text
     assert "card (public): https://demo-bucket.example/card/" in text
     assert "Inbound audio (M1(c)): table not present" in text or "Inbound audio (M1(c)): 0" in text
-    for private in (CUSTOMER, BROKER, STAFF, TEXT, "777", "wamid"):
+    for private in (CUSTOMER, BROKER, STAFF, TEXT, "m1photo", "wamid"):
         assert private not in text
 
 
