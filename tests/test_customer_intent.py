@@ -56,3 +56,31 @@ def test_a_fresh_search_command_is_found_and_marked_standalone_or_not(text, kind
 ])
 def test_ordinary_requests_are_not_commands(text):
     assert fresh_command(text) is None
+
+
+@pytest.mark.parametrize("text", [
+    "purani requirements mat hata do",          # "do not remove the old requirements"
+    "do not clear old requirements",
+    "don't clear old requirements",
+    "dont reset",
+    "nayi search nahi chahiye",                 # "I do not want a new search"
+    "nayi search mat karo",
+    "purani requirements na hata do",           # "na" is also a polite particle: ambiguous
+    "old filters delete mat karna",
+    "never reset my search",
+    "kya purani requirements hata sakte ho?",   # a question, not an instruction
+    "purani requirements hata do?",
+    "can you clear old requirements",
+    "agar nayi search karoon to kya hoga",      # a condition
+    "reset without losing my budget",
+])
+def test_a_negated_questioning_or_conditional_command_is_not_a_command(text):
+    assert fresh_command(text) is None
+
+
+@pytest.mark.parametrize("text", [
+    "nayi search karo", "nai search please", "start over", "purani requirements hata do",
+    "pichli search bhool jao", "reset", "clear old requirements",
+])
+def test_plain_affirmative_commands_still_work(text):
+    assert fresh_command(text) is not None

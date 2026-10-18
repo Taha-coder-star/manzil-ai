@@ -52,6 +52,17 @@ _NEW_SEARCH = [re.compile(p, re.IGNORECASE) for p in (
 )]
 
 
+# A fresh-search command is recognised only when it is plainly affirmative. Any negation
+# ("mat hata do", "do not clear", "nayi search nahi chahiye"), question ("kya ... sakte ho?")
+# or condition ("agar ...") makes it ambiguous, and an ambiguous command must not change
+# state: the message goes to the model instead. "na" is also Urdu's polite "please", so it
+# counts as ambiguous too.
+_NEGATORS = frozenset({"mat", "na", "nahi", "nahin", "nhi", "nahe", "no", "nope", "not", "dont",
+                       "donot", "never", "without", "bina", "kabhi"})
+_DOUBT = frozenset({"kya", "can", "could", "should", "would", "shall", "kaise", "kyun", "kyon",
+                    "why", "how", "agar", "if", "warna", "sirf", "only"})
+
+
 def _tokens(text):
     return _TOKEN.findall((text or "").casefold())
 
@@ -80,6 +91,9 @@ def fresh_command(text):
     nothing but greetings and fillers is left once the command is taken out, so there is no
     request for the model to read."""
     text = text or ""
+    words = set(_TOKEN.findall(text.casefold().replace("'", "").replace("\u2019", "")))
+    if "?" in text or "\uff1f" in text or "\u061f" in text or words & (_NEGATORS | _DOUBT):
+        return None
     for kind, patterns in ((CLEAR_OLD, _CLEAR_OLD), (NEW_SEARCH, _NEW_SEARCH)):
         for pattern in patterns:
             match = pattern.search(text)

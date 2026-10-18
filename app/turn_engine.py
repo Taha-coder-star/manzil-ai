@@ -82,7 +82,6 @@ from app import (
     details,
     grounding,
     llm,
-    requirements,
     staff_buffer,
     staff_cards,
     staff_drafts,
@@ -694,12 +693,8 @@ class TurnEngine:
         if command is None and answer is None:
             return None
         binding = self.requirements.binding(conn, turn, message_texts(turn))
-        names = binding.inherited()
+        _, names, token = binding.inherited_state()
         if answer is not None:
-            token = None
-            if names:
-                slots = binding.state_slots()
-                token = requirements.inherited_token(slots, names, turn.conversation_id)
             if not names or not binding.keep_asked(token):
                 return None   # no such question is open: an ordinary message
             customer = self._customer_binding(conn, turn, binding, language)

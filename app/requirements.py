@@ -267,14 +267,15 @@ def entry_time(entry):
     return max(times) if times else None
 
 
-def inherited_token(slots, names, conversation_id):
+def inherited_token(slots, names, conversation_id, session_start):
     """Names the question about these inherited filters: a hash of the conversation, the
-    slots and the times they were said. A button of an older question (other slots, or the
-    same slot said again since) or of another conversation carries another token and is
-    refused. "" when nothing is inherited."""
+    session, the slots and the times they were said. A button of an older question (other
+    slots, a slot said again since, an earlier session with the very same filters) or of
+    another conversation carries another token and is refused. "" when nothing is
+    inherited."""
     if not names:
         return ""
-    raw = "|".join([str(conversation_id)]
+    raw = "|".join([str(conversation_id), session_start.isoformat() if session_start else ""]
                    + [f"{n}@{entry_time(slots[n]).isoformat()}" for n in names])
     return hashlib.sha1(raw.encode()).hexdigest()[:8]
 
@@ -1729,9 +1730,9 @@ class RequirementService:
 
     # -- filters from an earlier session (owner decision 2026-10-18) --
 
-    def inherited(self, conn, turn):
-        """The filter slots that predate this session and were not kept: the search asks
-        about them first and never uses them unconfirmed."""
+    def inherited_state(self, conn, turn):
+        """(stored slots, the filter slots that predate this session and were not kept, the
+        question token). The search asks about them first and never uses them unconfirmed."""
         with tenant_transaction(conn, turn.agency_id):
             _set_timeout(conn)
             row = conn.execute("SELECT slots FROM requirement_state WHERE conversation_id = %s",
@@ -1740,28 +1741,34 @@ class RequirementService:
                                  (turn.id,)).fetchone()[0] or conn.execute(
                                      "SELECT now()").fetchone()[0]
             start = self._session_start(conn, turn, stamp)
-        return inherited_slots(row[0] if row else {}, start)
+        slots = row[0] if row else {}
+        names = inherited_slots(slots, start)
+        return slots, names, inherited_token(slots, names, turn.conversation_id, start)
 
-    def stored_slots(self, conn, turn):
-        with tenant_transaction(conn, turn.agency_id):
-            _set_timeout(conn)
-            row = conn.execute("SELECT slots FROM requirement_state WHERE conversation_id = %s",
-                               (turn.conversation_id,)).fetchone()
-        return row[0] if row else {}
+    def inherited(self, conn, turn):
+        return self.inherited_state(conn, turn)[1]
 
     def keep_question_sent(self, conn, turn, token):
-        """The question about exactly these inherited filters was already sent in this
-        conversation (the next one is a short reminder; a typed Haan / Nahi answers it)."""
+        """The question about exactly these inherited filters was already sent in THIS
+        session (the next one is a short reminder; a typed Haan / Nahi answers it). The
+        token binds the session, and only messages created since it began count, so an
+        unanswered question from an earlier session is never today's open question."""
         if not token:
             return False
         with tenant_transaction(conn, turn.agency_id):
             _set_timeout(conn)
-            # shortcut: scans one conversation's outbound rows of the last 7 days
+            stamp = conn.execute("SELECT max(created_at) FROM message WHERE turn_id = %s",
+                                 (turn.id,)).fetchone()[0] or conn.execute(
+                                     "SELECT now()").fetchone()[0]
+            start = self._session_start(conn, turn, stamp)
+            if start is None:
+                return False
+            # shortcut: scans one conversation's outbound rows since the session began
             # (outbound_message_conversation_idx); add a created_at index if it grows.
             return conn.execute(
-                "SELECT 1 FROM outbound_message WHERE conversation_id = %s AND created_at > "
-                "now() - interval '7 days' AND payload::text LIKE %s LIMIT 1",
-                (turn.conversation_id, f'%"keep:yes:{token}"%')).fetchone() is not None
+                "SELECT 1 FROM outbound_message WHERE conversation_id = %s AND created_at >= "
+                "%s AND payload::text LIKE %s LIMIT 1",
+                (turn.conversation_id, start, f'%"keep:yes:{token}"%')).fetchone() is not None
 
     def keep_inherited(self, conn, turn, token=None):
         """[Haan, wohi]: the customer wants the older filters. They are marked kept (so they
@@ -1778,7 +1785,7 @@ class RequirementService:
             version, slots = self._lock_state(conn, turn)
             names = inherited_slots(slots, ctx.session_start)
             if not names or (token is not None and token != inherited_token(
-                    slots, names, turn.conversation_id)):
+                    slots, names, turn.conversation_id, ctx.session_start)):
                 return None   # nothing to keep, or the button is of an older question
             patch = Patch(ctx, slots)
             for name in names:
@@ -1808,8 +1815,8 @@ class RequirementService:
                 return None
             version, slots = self._lock_state(conn, turn)
             names = inherited_slots(slots, ctx.session_start)
-            if token is not None and token != inherited_token(slots, names,
-                                                              turn.conversation_id):
+            if token is not None and token != inherited_token(
+                    slots, names, turn.conversation_id, ctx.session_start):
                 return None   # the button is of an older question
             if scope == "inherited":
                 if not names:
@@ -1867,8 +1874,8 @@ class TurnBinding:
     def inherited(self):
         return self.service.inherited(self.conn, self.turn)
 
-    def state_slots(self):
-        return self.service.stored_slots(self.conn, self.turn)
+    def inherited_state(self):
+        return self.service.inherited_state(self.conn, self.turn)
 
     def keep_asked(self, token):
         return self.service.keep_question_sent(self.conn, self.turn, token)

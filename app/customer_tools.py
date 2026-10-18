@@ -173,10 +173,10 @@ class CustomerBinding:
                                     {"status": "answer_first",
                                      "needs_answer": [slot for slot, _ in asks]},
                                     notice=tuple(asks[0][1]))
-            inherited = self.requirements.inherited()
+            stored, inherited, token = self.requirements.inherited_state()
             if inherited:
                 # Filters from an earlier session are asked about, never searched unconfirmed.
-                return self._keep_question(slots, inherited)
+                return self._keep_question(stored, inherited, token)
             if requirements.uncertain_slots(slots):
                 return self._voice_echo(slots, version)
         result = search.search_conversation(self.conn, turn.agency_id, turn.conversation_id,
@@ -210,21 +210,18 @@ class CustomerBinding:
         return self._result("search_properties", response, payloads, plan.facts,
                             plan.trusted_codes)
 
-    def _keep_question(self, slots, names):
+    def _keep_question(self, slots, names, token):
         """The filters of an earlier session, asked about with [Haan, wohi] / [Nayi search]
         (the taps are tap()'s keep:yes / keep:no). Nothing is searched until they answer."""
         old = {name: slots[name] for name in names}
-        token = requirements.inherited_token(slots, names, self.turn.conversation_id)
         again = self.requirements.keep_asked(token)   # asked before: a short reminder
         request = search.Request.from_slots(old)
         types = (old.get("property_types") or {}).get("value") or []
-        counts = grounding.Facts(
-            beds=frozenset({request.beds_min}) if request.beds_min else frozenset(),
-            baths=frozenset({request.baths_min}) if request.baths_min else frozenset())
-        facts = grounding.facts_for([], request=request, gazetteer=self.gazetteer).merge(counts)
+        category = (old.get("category") or {}).get("value")
+        facts = render.request_facts(request, self.gazetteer)
         try:
             plan = render.keep_question(request, types, self.language, self.gazetteer, facts,
-                                        token, again)
+                                        token, again, category)
         except render.GroundingError:
             logger.error("Turn %s: keep question failed grounding; not sent", self.turn.id)
             return ai_tools.ToolResult("search_properties", False,
@@ -242,8 +239,9 @@ class CustomerBinding:
         waiting = set(self.requirements.inherited())
         active = {name: entry for name, entry in slots.items() if name not in waiting}
         types = (active.get("property_types") or {}).get("value") or []
+        category = (active.get("category") or {}).get("value")
         return render.filters_line(search.Request.from_slots(active), types, self.language,
-                                   self.gazetteer)
+                                   self.gazetteer, category)
 
     def keep_answer(self, answer, service, token=None):
         """[Haan, wohi] / [Nayi search] (a tap, token = the question's) or the same typed

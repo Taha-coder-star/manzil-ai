@@ -499,3 +499,47 @@ def test_an_old_button_cannot_answer_after_a_full_reset_and_similar_filters(st):
     assert slots_of(st) == before and searches(st) == 0
     tap(st, keep_id(second, "yes"), sender=CUSTOMER_B)
     assert searches(st) == 1
+
+
+# --- negated commands, and a question left unanswered across a session gap --------------------
+
+def test_negated_commands_change_nothing_and_reach_the_model(st):
+    turn(st, SESSION_ONE, update(SESSION_ONE_PATCH))
+    before = slots_of(st)
+    versions = st.query("SELECT count(*) FROM requirement_patch_log")[0][0]
+    for body in ("purani requirements mat hata do", "do not clear old requirements",
+                 "nayi search nahi chahiye"):
+        requests = len(st.requests)
+        turn(st, body)                                           # the model answers; no tool
+        assert len(st.requests) == requests + 1, body            # it was the model's to read
+        assert slots_of(st) == before, body
+    assert st.query("SELECT count(*) FROM requirement_patch_log")[0][0] == versions
+
+
+def shift_history(st, hours, sender=CUSTOMER_B):
+    """Make every stored message look `hours` older (a quiet gap before the next message)."""
+    conv = conversation(st, sender)
+    with tenant_transaction(st.conn, st.agency):
+        for table in ("message", "outbound_message"):
+            st.conn.execute(f"UPDATE {table} SET created_at = created_at - %s * interval "
+                            "'1 hour' WHERE conversation_id = %s", (hours, conv))
+
+
+def test_a_question_ignored_across_a_session_gap_is_asked_again_in_full(st):
+    first = asked_with_new_area(st)
+    old_yes, old_no = keep_id(first, "yes"), keep_id(first, "no")
+    shift_history(st, 8)                                         # > 6 h of silence
+    # the same words again: the same filters are inherited, unchanged, in a NEW session
+    second = turn(st, "mera area hy dha phase 6", update([p("location", "set", "dha phase 6")]),
+                  SEARCH)
+    said = sent_text(second)
+    assert "Pichli search mein 500 gaz ghar, kiraye par tha" in said     # full question
+    assert TEMPLATES_REMINDER not in said                                 # not yesterday's reminder
+    assert keep_id(second, "yes") != old_yes
+    before = slots_of(st)
+    assert sent_text(tap(st, old_yes, sender=CUSTOMER_B)) == TEMPLATES["echo_stale"]
+    assert sent_text(tap(st, old_no, sender=CUSTOMER_B)) == TEMPLATES["echo_stale"]
+    assert slots_of(st) == before and searches(st) == 0
+    # and a typed answer counts only for the question of the current session
+    tap(st, keep_id(second, "yes"), sender=CUSTOMER_B)
+    assert searches(st) == 1

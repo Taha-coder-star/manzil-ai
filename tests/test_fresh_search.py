@@ -188,13 +188,16 @@ def test_a_fresh_start_infers_the_purpose_of_the_amount_that_lost_it(gz):
 def test_the_question_token_changes_with_the_inherited_filters_and_their_times():
     slots = {"purpose": entry("rent", RENT_TEST), "size": entry({"value": 500}, HOUSE_TURN)}
     names = ["purpose", "size"]
-    token = requirements.inherited_token(slots, names, "conv-1")
-    assert len(token) == 8 and token == requirements.inherited_token(slots, names, "conv-1")
-    assert token != requirements.inherited_token(slots, ["purpose"], "conv-1")  # another set
-    assert token != requirements.inherited_token(slots, names, "conv-2")        # another chat
+    token = requirements.inherited_token(slots, names, "conv-1", SESSION_17)
+    assert len(token) == 8
+    assert token == requirements.inherited_token(slots, names, "conv-1", SESSION_17)
+    assert token != requirements.inherited_token(slots, ["purpose"], "conv-1", SESSION_17)
+    assert token != requirements.inherited_token(slots, names, "conv-2", SESSION_17)  # another chat
+    # the very same filters, asked again in a later session: another question
+    assert token != requirements.inherited_token(slots, names, "conv-1", SESSION_18)
     said_again = {**slots, "size": entry({"value": 500}, HOUSE_TURN + timedelta(minutes=1))}
-    assert token != requirements.inherited_token(said_again, names, "conv-1")   # said again
-    assert requirements.inherited_token(slots, [], "conv-1") == ""
+    assert token != requirements.inherited_token(said_again, names, "conv-1", SESSION_17)
+    assert requirements.inherited_token(slots, [], "conv-1", SESSION_17) == ""
 
 
 def test_nahi_kharidna_hai_keeps_the_new_amount_and_gives_it_the_new_purpose(gz):
@@ -223,3 +226,47 @@ def test_slots_are_stamped_with_the_message_time_not_the_processing_time(gz):
     merge = merge_patch(ctx, {}, [op("location", "set", "dha phase 6")],
                         verify_ops([op("location", "set", "dha phase 6")], ctx.sources))
     assert merge.slots["location"]["updated_at"] == TODAY.isoformat()
+
+
+# --- every inherited filter is shown in the question that asks about it ---------------------
+
+SAMPLE = {   # slot -> (stored value, a piece of the Roman Urdu wording that must appear)
+    "purpose": ("rent", "kiraye par"),
+    "category": ("commercial", "commercial"),
+    "property_types": (["house"], "ghar"),
+    "location": ({"nodes": ["dha-ph6"], "mode": "EXACT", "status": "RESOLVED"}, "DHA Phase 6"),
+    "budget": ({"min": None, "max": 80_000_000, "mode": "max", "stated_pkr": 80_000_000},
+               "8 crore"),
+    "size": ({"value": 500, "unit": "sq_yd", "sqft": 4500, "nominal_sqyd": 500,
+              "mode": "target"}, "500 gaz"),
+    "beds_min": (3, "3+ bedroom"),
+    "baths_min": (2, "2+ bathroom"),
+    "construction": (["under_construction"], "under construction"),
+    "possession": (["on_ground"], "on ground"),
+    "investment": ({"tags": ["rental_income"]}, "rental income"),
+}
+
+
+def test_the_sample_covers_every_inherited_slot():
+    assert set(SAMPLE) == set(requirements.INHERIT_SLOTS)
+
+
+@pytest.mark.parametrize("slot", requirements.INHERIT_SLOTS)
+def test_each_inherited_filter_alone_is_described_and_the_question_is_grounded(gz, slot):
+    from app import render, search
+    value, expected = SAMPLE[slot]
+    old = {slot: entry(value, RENT_TEST)}
+    request = search.Request.from_slots(old)
+    types = value if slot == "property_types" else []
+    category = value if slot == "category" else None
+    line = render.filters_line(request, types, render.ROMAN_URDU, gz, category)
+    assert expected in line and line.strip(), (slot, line)
+    facts = render.request_facts(request, gz)
+    for language in (render.ROMAN_URDU, render.ENGLISH):
+        plan = render.keep_question(request, types, language, gz, facts, "abcd1234", False,
+                                    category)
+        body = plan.payloads[0]["interactive"]["body"]["text"]
+        assert body.strip() and "{" not in body and ": ," not in body
+        again = render.keep_question(request, types, language, gz, facts, "abcd1234", True,
+                                     category)
+        assert again.payloads[0]["interactive"]["action"]["buttons"][0]["reply"]["id"] ==             "keep:yes:abcd1234"

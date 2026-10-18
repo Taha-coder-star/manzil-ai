@@ -247,7 +247,11 @@ def _budget_text(request, language):
     return text + (words["per_month"] if request.purpose == "rent" else "")
 
 
-def filters_line(request, types, language, gazetteer=None):
+def _plain(value):
+    return str(value).replace("_", " ")
+
+
+def filters_line(request, types, language, gazetteer=None, category=None):
     """The filters in use, from stored values only: "DHA Phase 6, 500 gaz ghar, kiraye par,
     2 crore ke aas paas mahana". The purpose and the budget's period appear only when a
     purpose is stored in the request (an unconfirmed one is left out by the caller); an
@@ -260,21 +264,39 @@ def filters_line(request, types, language, gazetteer=None):
     else:
         kinds = " / ".join(TYPE_ONE[ROMAN_URDU].get(t, t) for t in types or ())
     purpose = words.get(f"to_{request.purpose}", "") if request.purpose in ("sale", "rent")         else ""
+    if not kinds and category:   # a category alone ("commercial") is a filter the customer set
+        kinds = _plain(category)
     parts = [names, " ".join(p for p in (size, kinds) if p), purpose,
              words["beds_n"].format(n=request.beds_min) if request.beds_min else "",
              words["baths_n"].format(n=request.baths_min) if request.baths_min else "",
+             ", ".join(_plain(v) for v in (*request.construction, *request.possession,
+                                           *request.investment_tags)),
              _budget_text(request, language).lstrip(", ")]
     return ", ".join(p for p in parts if p)
 
 
-def keep_question(request, types, language, gazetteer, facts, token, again=False):
+def request_facts(request, gazetteer):
+    """What a sentence that restates the customer's own request may say: its places, money and
+    sizes (grounding.facts_for) plus the bedroom / bathroom counts and the construction,
+    possession and investment words they asked for (these are filters, not claims about a
+    listing)."""
+    own = grounding.Facts(
+        beds=frozenset({request.beds_min}) if request.beds_min else frozenset(),
+        baths=frozenset({request.baths_min}) if request.baths_min else frozenset(),
+        features=frozenset((*request.construction, *request.possession,
+                            *request.investment_tags)))
+    return grounding.facts_for([], request=request, gazetteer=gazetteer).merge(own)
+
+
+def keep_question(request, types, language, gazetteer, facts, token, again=False,
+                  category=None):
     """Task "fresh search": filters saved in an earlier session are asked about before any
     search ("Pichli search mein 500 gaz ghar tha — kya ab bhi wohi chahiye?"), with
     [Haan, wohi] / [Nayi search]. Backend values only; checked against the facts the caller
     built from the same request (the grounding rule for every customer payload)."""
     words = TEXT[language]
     body = words["keep_again"] if again else words["keep_ask"].format(
-        old=filters_line(request, types, language, gazetteer))
+        old=filters_line(request, types, language, gazetteer, category))
     payload = whatsapp.reply_buttons(body, [(KEEP_YES.format(token), words["keep_yes"]),
                                             (KEEP_NO.format(token), words["keep_no"])])
     found = grounding.check_payloads([payload], facts, gazetteer)
