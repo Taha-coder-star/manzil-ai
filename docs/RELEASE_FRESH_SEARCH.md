@@ -6,7 +6,7 @@ deliberately **not** in this file: see `docs/RELEASE_FRESH_SEARCH_COST.md`.
 
 | Item | Value |
 |---|---|
-| Runtime candidate | `69820fe` on `release/fresh-search` (this runbook is the commit on top) |
+| Runtime candidate | `release/fresh-search`: see `COMMITS.md` for the exact tip; runtime commits `69820fe` + review fixes `f8b8044` |
 | Release image | `manzil-ai:fresh-<M7>`, `M` = the merge commit that is finally released |
 | Layered on | the image **currently running**, identified by the baseline gate (section 4) |
 | Migrations | none (RDS keeps 001-017) |
@@ -31,6 +31,7 @@ Included on top of P (15 runtime files; `git log 91b7cef..release/fresh-search`)
 | `6368cdd` | (this work) | filters from an earlier session, keep / new-search question, typed commands, greeting before the model, filter summaries in headers, "kharidna" |
 | `8310b2e` | (hotfix `608f4d6`) | carried because it is on a separate branch, **not** in `main`; without it this release would remove it |
 | `69820fe` | - | one test assertion updated for the new no-match wording |
+| `f8b8044` | (review fixes) | negated / questioning reset commands never mutate state; the question token and its "already asked" lookup are bound to the session; every inherited filter is described in the question |
 
 **Incident, 2026-10-17/18 (test number). Observed on production** (read-only query of the real database, run on
 the 18th): stored `purpose=rent` saved 2026-10-16 18:39; `property_types=house` and `size=500 gaz` saved 2026-10-17
@@ -57,8 +58,8 @@ session layer in `6368cdd`, which was never in production. Not observed, only in
 2. **PR approval and merge, then verification of the final release artifact.** `main` must contain the hotfix
    (`608f4d6`'s change) and the 15 files must be byte-identical to the reviewed candidate (section 3). On `M`:
    re-run the four test batches (expected totals in section 2), Ruff, `git diff --check`, rebuild the kit, run the
-   gate commands in section 3, compare hashes with the candidate's `SHA256SUMS`.
-3. **Deployment** (sections 4-8): baseline gate, transfer, build, image checks, switch, health.
+   artifact checks in section 3, compare hashes with the candidate's `SHA256SUMS`.
+3. **Deployment** (sections 4-8): transfer, baseline gate, build, image checks, switch (with automatic rollback), health.
 4. **Real WhatsApp smoke checks immediately afterwards** (section 9), with **rollback on any failure** (section 10).
 
 There is no WhatsApp staging environment, so phone checks against the new code **cannot** be a pre-deployment
@@ -85,10 +86,10 @@ No dependency, `Dockerfile`, migration, `demo/`, `deploy/` or compose change (Pi
 Candidate `69820fe`: 703 + 1,337 + 472 + 1,089 = **3,601 passed, 0 failed, 0 skipped** (= collect-only), Ruff clean,
 disposable PostgreSQL 18.6, `REQUIRE_DATABASE_TESTS=1`, four batches run one at a time. Re-run on `M`.
 
-## 3. Release artifact: build and verify (local, from the exact commit; never the E:\manzilai checkout)
+## 3. Release kit (local, from the exact commit; never the E:\manzilai checkout)
 
-The main checkout is CRLF (`core.autocrlf=true`); archive committed bytes with autocrlf off. The archive is made by
-`git archive` of **named paths from a commit**, so it can contain only committed files of that commit.
+The main checkout is CRLF (`core.autocrlf=true`); archive committed bytes with autocrlf off. Everything in the kit is
+read from **named paths of a commit** (`git archive` / `git show`), so it can only contain committed files of that commit.
 
 ```
 M=<merge commit>; S=${M:0:7}; K=release-kit; mkdir -p $K
@@ -96,98 +97,117 @@ CH="app/card_regen.py app/cards.py app/customer_intent.py app/customer_tools.py 
  app/handoff.py app/handoff_actions.py app/handoff_alert.py app/media.py app/normalise.py \
  app/render.py app/requirements.py app/search.py app/staff_cards.py app/turn_engine.py"
 git -c core.autocrlf=false archive --format=tar --prefix=release-fresh/ -o $K/manzil-fresh-$S.tar $M $CH
-for f in $CH; do printf '%s  %s\n' "$(git -c core.autocrlf=false show $M:$f | sha256sum | cut -d' ' -f1)" $f; done > $K/SHA256SUMS
+h() { git -c core.autocrlf=false show "$1:$2" | sha256sum | cut -d' ' -f1; }
+for f in $CH; do printf '%s  %s\n' "$(h $M $f)" $f; done > $K/SHA256SUMS                 # the 15 release files
+# the modules this release does not change, and the 12 it replaces that exist in 91b7cef (turn_engine.py has 3 allowed states)
 for f in $(git ls-tree -r --name-only $M app/ | grep '\.py$'); do case " $CH " in *" $f "*) ;; \
-  *) printf '%s  %s\n' "$(git -c core.autocrlf=false show $M:$f | sha256sum | cut -d' ' -f1)" $f;; esac; done > $K/SHA256SUMS.unchanged
+  *) printf '%s  %s\n' "$(h $M $f)" $f;; esac; done > $K/SHA256SUMS.unchanged
+for f in $CH; do case $f in app/turn_engine.py|app/card_regen.py|app/customer_intent.py) ;; \
+  *) printf '%s  %s\n' "$(h 91b7cef $f)" $f;; esac; done > $K/SHA256SUMS.base
+git ls-tree -r --name-only 91b7cef app/ | grep '\.py$' | LC_ALL=C sort > $K/FILES.expected
+printf '%s\n' d56191a8d449bc5837758936e6dce5689043ad2225e604430d902b0b64fe2617 \
+  8eb0b6256972b7e2d3f9987665e0a9c84d563439a7d0f84fb430c490bfb43777 \
+  7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00 > $K/TURN_ENGINE.allowed
+for f in fresh_search_baseline.sh fresh_search_switch.sh; do git -c core.autocrlf=false show $M:docs/release/$f > $K/$f; done
 printf 'FROM manzil-ai:<RUNNING_TAG>\nCOPY release-fresh/app/ /app/app/\n' > $K/Dockerfile.release
-( cd $K && sha256sum manzil-fresh-$S.tar > manzil-fresh-$S.tar.sha256 )
+( cd $K && sha256sum * > ../KIT.sha256 && mv ../KIT.sha256 KIT.sha256 )              # integrity of every kit file
 ```
 
-**Artifact checks (all must pass; rehearsed on `69820fe`, results in `artifact-verification.txt`):**
+`<RUNNING_TAG>` is only needed for the build; the baseline gate itself works on the running containers.
+
+**Artifact checks (all must pass; rehearsed on the tip commit, results in `evidence/artifact-verification.txt`):**
 
 | Check | Command / result |
 |---|---|
 | Only intended files | `tar -tf` lists exactly the 15 paths + 2 directories; 15 regular files, no links, no absolute paths |
-| Byte-exact | extracted files pass `sha256sum -c SHA256SUMS` (15 OK), which are the Git blobs' hashes |
-| Nothing unrelated | `git status` clean; `git diff --check` clean; the path gate above prints only the 15 files |
-| No secrets | regex scan of the tar contents (AWS / Google / Meta token shapes, private keys, credentialed URLs, quoted secrets): no hit. **gitleaks is not installed on this machine**: run it on the repository (`gitleaks detect`) as part of gate 2 |
+| Byte-exact | extracted files pass `sha256sum -c SHA256SUMS` (15 OK), the Git blobs' hashes |
+| Nothing unrelated | `git status` clean; `git diff --check` clean; `git diff --name-only 91b7cef $M -- app migrations requirements.txt Dockerfile demo deploy .dockerignore` prints exactly the 15 |
+| No secrets | regex scan of the kit (AWS / Google / Meta token shapes, private keys, credentialed URLs, quoted secrets): no hit. **gitleaks is not installed on this machine**: run it on the repository (`gitleaks detect`) as part of gate 2 |
 | No env / data files | none of `.env`, `*.env`, `demo/`, `migrations/`, `*.pem` is in the archive |
+| Scripts | `bash -n` on both; their stub tests (`tests/test_release_script.py`, 27 cases) pass on `M` |
 
-## 4. Baseline gate on EC2 (read-only; stop on any mismatch)
+## 4. Transfer (before anything is checked or changed on the server)
+
+One directory is used from here on: `REL=/home/ubuntu/release-fresh`.
+
+1. CloudShell upload every file of the kit (tar, `.tar.sha256`, `SHA256SUMS*`, `FILES.expected`, `TURN_ENGINE.allowed`,
+   `fresh_search_*.sh`, `Dockerfile.release`, `KIT.sha256`).
+2. CloudShell: `aws s3 cp <file> s3://<bucket>/staging/release-fresh/` for each (private prefix; never `tenant/` or `card/`).
+3. EC2: `mkdir -p $REL && cd $REL`, `aws s3 cp` each file down, then
+   `sha256sum -c KIT.sha256` (all OK), `sha256sum -c manzil-fresh-$S.tar.sha256`, `tar -xf manzil-fresh-$S.tar`,
+   `( cd release-fresh && sha256sum -c ../SHA256SUMS )` (15 OK), `chmod +x fresh_search_*.sh`.
+4. Delete the `staging/release-fresh/` objects after the build in section 6.
+
+## 5. Baseline gate on EC2 (read-only; stops on any mismatch)
 
 ```
-cd /home/ubuntu/manzil-ai
-docker compose -f deploy/compose.yml --env-file .env ps
-for c in deploy-web-1 deploy-worker-1; do docker inspect $c --format '{{.Name}} {{.Config.Image}} {{.Image}}'; done
-docker image ls manzil-ai --format '{{.Tag}} {{.ID}}' | head -20
+cd /home/ubuntu/release-fresh
+sudo --preserve-env=REL REL=$PWD ./fresh_search_baseline.sh
 ```
 
-Web and worker must show the same image ID. Record its tag as `<RUNNING_TAG>` and its ID as `<PRE_ID>`
-(the 2026-10-17 hotfix runbook used base `manzil-ai:switch-91b7cef`; read the real one, do not assume).
+It checks the **running** web and worker containers, not only the image, and writes `$REL/PRE_ID` (the image ID both run)
+only if everything passes:
 
-```
-docker run --rm --entrypoint sh -v "$PWD/SHA256SUMS.unchanged:/tmp/u:ro" <RUNNING_TAG> \
-  -c 'cd /app && sha256sum -c /tmp/u'                       # every line OK, else STOP
-docker run --rm --entrypoint sh <RUNNING_TAG> -c 'cd /app && sha256sum app/turn_engine.py'
-```
+- web and worker run one image ID;
+- `docker diff` shows no change under `/app` (other than `__pycache__`) since the container started: no in-place edit;
+- inside each running container: the 46 unchanged modules and the 12 replaced modules at their `91b7cef` versions
+  match their manifests; the list of `app/**/*.py` equals `FILES.expected` (no extra or missing module, so no
+  `card_regen.py` / `customer_intent.py` yet); `app/turn_engine.py` hashes to one of the three allowed states;
+- the image itself passes the same two manifests.
 
-The 15 files are all replaced, so they may be in any known state; `turn_engine.py` must be one of:
-
-| sha256 of app/turn_engine.py | state |
+| allowed sha256 of app/turn_engine.py | state |
 |---|---|
 | `d56191a8d449bc5837758936e6dce5689043ad2225e604430d902b0b64fe2617` | `91b7cef` |
 | `8eb0b6256972b7e2d3f9987665e0a9c84d563439a7d0f84fb430c490bfb43777` | + hotfix `608f4d6` |
 | `7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00` | + hotfix + greeting line (clean) |
 
-A hand-patched file will hash differently: then
-`docker run --rm --entrypoint cat <RUNNING_TAG> /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)`
-must show only the greeting-rule lines. Anything else, or any other of the 15 files not at the `91b7cef` hash,
-**stops the release**.
-
-## 5. Transfer (CloudShell -> private S3 staging -> EC2)
-
-1. CloudShell upload: tar, `.tar.sha256`, `SHA256SUMS`, `SHA256SUMS.unchanged`, `Dockerfile.release`.
-2. CloudShell: `aws s3 cp <file> s3://<bucket>/staging/release-fresh/` for each (private prefix; never `tenant/` or `card/`).
-3. EC2, in `/home/ubuntu/release-fresh/`: `aws s3 cp` each down; `sha256sum -c manzil-fresh-$S.tar.sha256`; `tar -xf`;
-   `( cd release-fresh && sha256sum -c ../SHA256SUMS )` (15 OK).
-4. Delete the `staging/release-fresh/` objects once the image is built.
+A hand-patched `turn_engine.py` will hash differently and the gate stops. Only then compare by hand:
+`docker exec deploy-web-1 cat /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)` must show only the
+greeting-rule lines. If it does, append that hash (not before) to `TURN_ENGINE.allowed` and re-run. Any other
+difference, or any other failed check, **stops the release**.
 
 ## 6. Build and image checks (no service touched yet)
 
 ```
+cd /home/ubuntu/release-fresh
+PRE=$(cat PRE_ID); sed -i "s#manzil-ai:<RUNNING_TAG>#$PRE#" Dockerfile.release       # build on the recorded ID, not a tag
 docker build -f Dockerfile.release -t manzil-ai:fresh-$S .
 docker run --rm --entrypoint sh -v "$PWD/SHA256SUMS:/tmp/S:ro" manzil-ai:fresh-$S -c 'cd /app && sha256sum -c /tmp/S'
-for i in <RUNNING_TAG> manzil-ai:fresh-$S; do docker run --rm --entrypoint sh $i -c 'cd /app && find app migrations demo -type f -not -name "*.pyc" | sort | xargs sha256sum' > "files-$(echo $i | tr ':/' '__').txt"; done
-diff files-<running>.txt files-manzil-ai_fresh-$S.txt     # only the 15 app/ lines (2 new, 13 changed)
+for i in $PRE manzil-ai:fresh-$S; do docker run --rm --entrypoint sh $i -c 'cd /app && find app migrations demo -type f -not -name "*.pyc" | sort | xargs sha256sum' > "files-$(echo $i | tr ':/' '__').txt"; done
+diff files-sha256_*.txt files-manzil-ai_fresh-$S.txt      # only the 15 app/ lines (2 new, 13 changed)
 docker run --rm --entrypoint python manzil-ai:fresh-$S -c "import app.web, app.worker, app.customer_intent, app.card_regen; print('ok')"
-docker run --rm --entrypoint id manzil-ai:fresh-$S        # appuser, not root
+docker run --rm --entrypoint id manzil-ai:fresh-$S         # appuser, not root
 ```
 
-Migration state is read-only and unchanged: the check of docs/RELEASE_10_2.md section 6 must still print `17 17 []`. Never run the migrator.
+Migration state is read-only and unchanged: the check of docs/RELEASE_10_2.md section 6 must still print `17 17 []`.
+Never run the migrator.
 
-## 7. Switch (web and worker only; Caddy untouched) and pinning
-
-Both services take the image from the **same tag**: `deploy/compose.yml` has `image: manzil-ai:latest` for `web` (it also
-has `build: ..`, which `--no-build` disables) and for `worker` (`pull_policy: never`). The switch moves that one tag and recreates
-both in one command, then proves by ID that both run the release image.
+## 7. Switch (web and worker only; Caddy untouched), pinning, stop and rollback behaviour
 
 ```
-cd /home/ubuntu/manzil-ai
-test "$(docker image inspect manzil-ai:latest --format '{{.Id}}')" = "<PRE_ID>" || echo "STOP: latest is not the recorded image"
-docker tag manzil-ai:latest manzil-ai:pre-fresh                  # rollback tag
-docker tag manzil-ai:fresh-$S manzil-ai:latest
-docker compose -f deploy/compose.yml --env-file .env up -d --no-deps --no-build --force-recreate web worker
-WANT=$(docker image inspect manzil-ai:fresh-$S --format '{{.Id}}')
-for c in deploy-web-1 deploy-worker-1; do
-  [ "$(docker inspect $c --format '{{.Image}}')" = "$WANT" ] && echo "$c: release image" || echo "$c: MISMATCH -> roll back"; done
-for s in web worker; do docker compose -f deploy/compose.yml --env-file .env exec -T $s sh -c 'cd /app && sha256sum -c -' < SHA256SUMS | grep -vc ': OK'; done   # 0, 0
-docker compose -f deploy/compose.yml --env-file .env ps         # caddy unchanged
+cd /home/ubuntu/release-fresh
+sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=$PWD ./fresh_search_switch.sh switch $S
 ```
 
-## 8. Health checks
+The script (`docs/release/fresh_search_switch.sh`, `set -Eeuo pipefail`, tested against stubs) works like this:
 
-- `curl -fsS https://<SITE_ADDRESS>/health` OK; `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<SITE_ADDRESS>/webhook -d '{}'` = 401 (signature refused: the route is alive).
-- `docker compose ... logs --since 5m worker`: `Worker started: ...`; no exit 78; no gazetteer error. `... logs web`: no traceback. Read no phone numbers, text or secrets.
+- **Preconditions stop before anything changes** (exit 1): `$REL/PRE_ID` present; `manzil-ai:latest` is the recorded ID;
+  web and worker both run the recorded ID; the release image exists and differs.
+- **Switch:** tags the recorded ID as `manzil-ai:pre-fresh`, moves `manzil-ai:latest` to the release image ID, recreates web
+  and worker in one command (`--no-deps --no-build`; `web` has `build: ..` and `worker` has `pull_policy: never`, so nothing
+  is rebuilt or pulled).
+- **Pinning:** both services use the single tag `manzil-ai:latest`. After the recreate the script requires, for **web and
+  worker**: container image ID equals the release image ID, `sha256sum -c SHA256SUMS` passes **inside the running
+  container**, `/health` answers, `POST /webhook` returns 401, and the worker log shows `Worker started`.
+- **Any failure after the switch triggers an explicit rollback by the recorded image ID** (never by the `pre-fresh` tag,
+  which the tests deliberately corrupt): re-tags the ID to `latest`, recreates both, requires both on the recorded ID and the
+  site answering. Exit 1 = rolled back; **exit 2 = the rollback itself could not be verified: manual intervention**.
+- Exit 0 means both services run the release image.
+
+## 8. After the script
+
+`docker compose -f deploy/compose.yml --env-file .env ps` (caddy unchanged); read `... logs --since 5m worker` and `... web` for
+tracebacks or exit 78, without copying phone numbers, text or secrets.
 
 ## 9. WhatsApp smoke checks (after deployment; failure => section 10)
 
@@ -216,13 +236,10 @@ unconfirmed budget monthly; the old greeting text; an unrendered card; web or wo
 
 ## 10. Rollback and compatibility
 
-```
-docker tag manzil-ai:pre-fresh manzil-ai:latest
-docker compose -f deploy/compose.yml --env-file .env up -d --no-deps --no-build --force-recreate web worker
-```
-
-then section 8 and the pinning loop of section 7 with `WANT` = `<PRE_ID>`. Keep `manzil-ai:pre-fresh`, `<RUNNING_TAG>`,
-the kit and the `files-*.txt` lists until the smoke checks are done.
+Automatic during the switch (section 7). Manual, later: `sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=/home/ubuntu/release-fresh ./fresh_search_switch.sh rollback`,
+which uses `$REL/PRE_ID`; by hand: `docker tag $(cat $REL/PRE_ID) manzil-ai:latest` then the same `up -d --no-deps --no-build --force-recreate web worker`.
+Check that both containers report the recorded ID (`docker inspect <c> --format '{{.Image}}'`). Keep `manzil-ai:pre-fresh`,
+the recorded image, the kit and the `files-*.txt` lists until the smoke checks are done.
 
 **Can the previous image read what this release wrote? Yes (tested).** `rollback-compat-run.txt`: states written by the
 new code (open question with an unlabelled budget, after keep, after "nayi search", after a full reset, with their patch-log
