@@ -20,6 +20,9 @@ import sys
 RELEASE_FILES = ["app/card_regen.py", "app/cards.py", "app/customer_intent.py", "app/customer_tools.py", "app/demo_media.py", "app/handoff.py", "app/handoff_actions.py", "app/handoff_alert.py", "app/media.py", "app/normalise.py", "app/render.py", "app/requirements.py", "app/search.py", "app/staff_cards.py", "app/turn_engine.py", "app/bench_live.py", "app/benchmark.py", "app/staff_bench.py"]
 
 
+LF, CRLF = bytes([10]), bytes([13, 10])
+
+
 def git(repo, *args):
     return subprocess.run(["git", "-c", "core.autocrlf=false", "-C", repo, *args],
                           capture_output=True, check=False)
@@ -137,7 +140,19 @@ def main(argv):
             if path in RELEASE_FILES:
                 profile.append(f"{path} ABSENT  # not on the server")
             continue
-        hits = blob_history(args.repo, path, cache).get(got)
+        history = blob_history(args.repo, path, cache)
+        hits = history.get(got)
+        crlf = None
+        if not hits and path.endswith(".sql"):
+            # the image may hold the CRLF working-copy form of a migration (historical, see the runbook)
+            for digest, commits in history.items():
+                blob = git(args.repo, "show", f"{commits[-1][0]}:{path}").stdout
+                if hashlib.sha256(blob.replace(LF, CRLF)).hexdigest() == got:
+                    hits, crlf = commits, digest
+                    break
+        if hits and crlf:
+            print(f"  mapped    {path} {got[:16]} <- CRLF form of the blob from {hits[-1][0]} (explained)")
+            continue
         if hits:
             first = ", ".join(f"{s} {subj[:50]}" for s, subj in hits[-1:])
             print(f"  mapped    {path} {got[:16]} <- {first}")
