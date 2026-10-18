@@ -261,6 +261,7 @@ def test_relative_formulas():
     ("apartment for sale", "sale", "for sale"),
     ("dukaan chahiye khareedne ke liye", "sale", "khareedne"),
     ("dukaan khareedni hai", "sale", "khareedni hai"),
+    ("nahi, kharidna hai", "sale", "kharidna"),   # the other common spelling
     ("10 marla ka ghar lena hai", "sale", "lena hai"),
 ])
 def test_explicit_purpose(text, value, raw):

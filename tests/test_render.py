@@ -136,7 +136,7 @@ def scenario_2():
 def test_scenario_2_wrapper_neighbour_label_and_positions():
     plan = scenario_2()
     body = plan.payloads[0]["interactive"]["body"]["text"].splitlines()
-    assert body[0] == "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:"
+    assert body[0] == "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:"
     assert body[1] == ("Ye khareedne ke options hain — agar kiraye par chahiye to "
                        "bata dein.")  # inferred purpose is echoed, never blocking
     assert body[2] == "" and body[3] == "*3 options:*"
@@ -160,7 +160,7 @@ def test_the_echo_can_be_left_to_the_caller():
     plan = render.render_search(payload(search.OK, results, echo=[("purpose", ("inferred",))]),
                                 [DH6_102, DH6_101], ROMAN_URDU, request=S2, gazetteer=G,
                                 echo=False)
-    assert "khareedne" not in joined(plan)
+    assert "Ye khareedne ke options" not in joined(plan)   # the echo; the header still says it
 
 
 def test_the_voice_echo_states_the_heard_values_with_yes_and_change():
@@ -188,7 +188,7 @@ def test_scenario_3b_is_an_honest_no_match_with_three_options():
     assert plan.trusted_codes == frozenset()
     [message] = plan.payloads
     assert message["interactive"]["body"]["text"] == (
-        "DHA Phase 6 mein is se kam price ka 500 gaz ghar abhi available nahi. "
+        "DHA Phase 6 mein is se kam price ka 500 gaz ghar, khareedne ke liye abhi available nahi. "
         "Yahan price 9.5 crore se shuru hoti hai.")
     assert [(b["reply"]["id"], b["reply"]["title"])
             for b in message["interactive"]["action"]["buttons"]] == [
@@ -200,7 +200,8 @@ def test_no_match_without_the_cheaper_rule_names_the_budget():
     plan = render.render_search(payload(search.NO_MATCH), [], ENGLISH, request=S2,
                                 gazetteer=G)
     assert plan.payloads[0]["interactive"]["body"]["text"] == (
-        "No 500 sq yd houses for sale in DHA Phase 6 match this budget right now.")
+        "No 500 sq yd houses for sale in DHA Phase 6 match this budget (up to 8 crore) "
+        "right now.")
 
 
 def test_scenario_3c_labels_the_above_budget_card():
@@ -208,8 +209,8 @@ def test_scenario_3c_labels_the_above_budget_card():
     plan = render.render_search(payload(search.OK, results), [DH8_101, DH8_102],
                                 ROMAN_URDU, request=S3C, gazetteer=G)
     body = plan.payloads[0]["interactive"]["body"]["text"].splitlines()
-    assert body[0] == ("Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz, pehle se kam price par "
-                       "— ye options hain:")
+    assert body[0] == ("Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz ghar, khareedne ke liye, pehle se "
+                       "kam price par — ye options hain:")
     cards_ = plan.payloads[0]["interactive"]["action"]["cards"]
     assert cards_[0]["body"]["text"].endswith("*PKR 6.9 crore*")  # DH8-102 has no status
     assert cards_[1]["body"]["text"].endswith("*PKR 7.4 crore* · Tayyar · budget se thoda upar")
@@ -249,7 +250,7 @@ def test_one_result_is_a_single_card_with_the_wrapper_in_its_body():
     [card] = plan.payloads
     assert card["interactive"]["type"] == "button"
     text = card["interactive"]["body"]["text"]
-    assert text.startswith("Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:\n\n"
+    assert text.startswith("Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:\n\n"
                            "*DH6-101* · Ghar · sale")
     assert [b["reply"]["title"] for b in card["interactive"]["action"]["buttons"]] == [
         "Aur photos", "Visit / Detail", "Milti-julti"]
@@ -389,3 +390,59 @@ def test_a_template_that_states_an_unsupported_fact_raises(monkeypatch):
     with pytest.raises(render.GroundingError):
         render.render_search(payload(search.OK, [result(1, DH6_101)]), [DH6_101], ENGLISH,
                              request=S2, gazetteer=G)
+
+
+# --- purpose, budget period and relaxed filters in the headers (fresh-search task) ------------
+
+RENT_SLOTS = {**S2_SLOTS, "purpose": entry("rent"),
+              "budget": entry({"min": None, "max": 200_000, "mode": "max",
+                               "stated_pkr": 200_000, "period": "monthly"})}
+RENT = search.Request.from_slots(RENT_SLOTS)
+
+
+def test_the_header_says_rent_and_the_monthly_period_in_both_languages():
+    rented = [listing("DH6-901", 180_000, "DHA Phase 6", purpose="rent")]
+    rows = [result(1, rented[0])]
+    ru = render.render_search(payload(search.OK, rows), rented, ROMAN_URDU, request=RENT,
+                              gazetteer=G)
+    en = render.render_search(payload(search.OK, rows), rented, ENGLISH, request=RENT,
+                              gazetteer=G)
+    assert joined(ru).startswith("Ji, DHA Phase 6 mein 500 gaz ghar, kiraye par, 2 lakh "
+                                 "tak mahana — ye options hain:")
+    assert joined(en).startswith("Here are 500 sq yd houses for rent in DHA Phase 6, up to "
+                                 "2 lakh per month:")
+
+
+def test_no_match_states_purpose_and_the_budget_with_its_period():
+    ru = render.render_search(payload(search.NO_MATCH), [], ROMAN_URDU, request=RENT,
+                              gazetteer=G)
+    en = render.render_search(payload(search.NO_MATCH), [], ENGLISH, request=RENT,
+                              gazetteer=G)
+    assert joined(ru).startswith("DHA Phase 6 mein is budget (2 lakh tak mahana) mein 500 gaz "
+                                 "ghar, kiraye par abhi available nahi.")
+    assert joined(en).startswith("No 500 sq yd houses for rent in DHA Phase 6 match this budget "
+                                 "(up to 2 lakh per month) right now.")
+
+
+def test_an_amount_without_a_purpose_is_never_labelled():
+    slots = {k: v for k, v in RENT_SLOTS.items() if k != "purpose"}
+    slots["budget"] = entry({"min": 18_000_000, "max": 22_000_000, "mode": "around",
+                             "stated_pkr": 20_000_000, "period": None})
+    request = search.Request.from_slots(slots)
+    line = render.filters_line(request, ["house"], ROMAN_URDU, G)
+    assert line == "DHA Phase 6, 500 gaz ghar, 2 crore ke aas paas"
+    assert "mahana" not in line and "khareed" not in line and "kiraye" not in line
+
+
+def test_a_relaxed_filter_is_named_in_the_header_and_on_the_card():
+    rows = [result(1, DH6_101, relaxations=["size"]), result(2, DH6_102)]
+    body = payload(search.OK, rows)
+    body["relaxations_applied"] = ["size", "budget"]
+    ru = render.render_search(body, [DH6_101, DH6_102], ROMAN_URDU, request=S2, gazetteer=G)
+    en = render.render_search(body, [DH6_101, DH6_102], ENGLISH, request=S2, gazetteer=G)
+    assert "Kuch options mein size, budget thoda alag hai." in ru.payloads[0][
+        "interactive"]["body"]["text"].splitlines()
+    assert "Some differ slightly in size, budget." in en.payloads[0][
+        "interactive"]["body"]["text"].splitlines()
+    assert ru.payloads[0]["interactive"]["action"]["cards"][0]["body"]["text"].endswith(
+        "size thoda alag")

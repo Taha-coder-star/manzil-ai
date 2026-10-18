@@ -76,11 +76,13 @@ import psycopg
 from app import (
     ai_tools,
     cards,
+    customer_intent,
     customer_reply,
     customer_tools,
     details,
     grounding,
     llm,
+    requirements,
     staff_buffer,
     staff_cards,
     staff_drafts,
@@ -92,6 +94,7 @@ from app.db import tenant_transaction
 from app.gazetteer import GazetteerUnavailable
 from app.llm import GeminiClient, ProviderError, Usage
 from app.queue import PermanentJobError
+from app.render import detect_language
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +166,17 @@ TEMPLATES = {
     # Task 7.3 requirement notices (Roman Urdu; wording pending owner approval). The {...}
     # values are canonical gazetteer names / fixed words from the backend, never model text.
     "requirements_saved": "Theek hai, aap ki requirements note kar li hain.",
+    # Fresh-search task (wording pending owner approval): the acknowledgement that names the
+    # filters in use, a greeting alone, and the fresh-search replies. {summary} is rendered
+    # from stored values by the backend (app.render.filters_line).
+    "requirements_noted": "Theek hai, note kar liya: {summary}.",
+    "greeting_salam": ("Wa alaikum assalam! Property dhoondne ke liye apna area, budget aur "
+                       "property ki qisam (ghar, flat, plot) likh kar bhejein."),
+    "greeting": ("Hello! Property dhoondne ke liye apna area, budget aur property ki qisam "
+                 "(ghar, flat, plot) likh kar bhejein."),
+    "fresh_all": ("Theek hai, purani requirements hata di hain. Naya area, budget aur "
+                  "property ki qisam likh kar bhejein."),
+    "fresh_kept": "Theek hai, nayi search. Abhi ye filters hain: {summary}. Baqi batayein.",
     "requirements_unclear": ("Aap ki baat main theek se samajh nahi saka. Please apni "
                              "requirement dobara likh kar bhejein."),
     "location_ambiguous": "Aap ka matlab kaunsa hai: {options}? Please naam likh kar bhejein.",
@@ -226,6 +240,14 @@ TEMPLATES_EN = {
     "refusal": "Sorry, I can't help with that. Please send your question about a property.",
     "customer_default": ("Thanks! To find a property, tell me the area, your budget and the "
                          "type of property (house, flat, plot)."),
+    "requirements_noted": "Okay, noted: {summary}.",
+    "greeting_salam": ("Wa alaikum assalam! To find a property, tell me the area, your budget "
+                       "and the type of property (house, flat, plot)."),
+    "greeting": ("Hello! To find a property, tell me the area, your budget and the type of "
+                 "property (house, flat, plot)."),
+    "fresh_all": ("Okay, I have cleared the old requirements. Please tell me the new area, "
+                  "budget and type of property."),
+    "fresh_kept": "Okay, new search. These filters are in use: {summary}. Tell me the rest.",
     "requirements_unavailable": "Saving requirements is not ready yet; nothing was saved.",
     "search_unavailable": "Property search is not ready yet; no search was run.",
     "photos_unavailable": "Sending photos is not ready yet; no photo was sent.",
@@ -493,6 +515,12 @@ def render_customer(outcome, customer):
     payloads = ground_customer(list(outcome.payloads), customer.facts, gazetteer, language)
     if not keys and not customer_reply.visible(payloads):
         keys = ["customer_default"]
+    summarise = getattr(customer, "filters_text", None)
+    if summarise is not None and any(_key(k) == "requirements_saved" for k in keys):
+        summary = summarise()   # the acknowledgement names the filters in use
+        if summary:
+            keys = [ai_tools.Notice("requirements_noted", (("summary", summary),))
+                    if _key(k) == "requirements_saved" else k for k in keys]
     if not keys:
         return payloads
     note = whatsapp.text("\n\n".join(_template(k, language) for k in keys))
@@ -608,6 +636,10 @@ class TurnEngine:
         if turn.route == "staff" and turn.staff_segment_id is not None and any(
                 len((m.text or "").strip()) > STAFF_MESSAGE_CHARS for m in turn.messages):
             return [whatsapp.text(TEMPLATES["staff_draft_too_long"])]  # never clip a listing
+        if turn.route == "customer":
+            early = self._customer_shortcut(conn, turn, turn_text)
+            if early is not None:
+                return early
         history = load_history(conn, turn)
         binding = None
         if self.requirements is not None and turn.route == "customer":
@@ -637,6 +669,63 @@ class TurnEngine:
             ", ".join(outcome.tools), int((self._clock() - start) * 1000),
         )
         return payloads
+
+    def _customer_shortcut(self, conn, turn, text):
+        """Answers a customer turn without the model, or None to go on: a greeting alone
+        gets a greeting (not the "Shukriya!" fallback); a plain Haan / Nahi to the open
+        keep-or-new-search question answers it; a fresh-search command is applied first.
+        A message that also states a request ("salam, DHA mein flat chahiye", "nahi,
+        kharidna hai") goes on to the model, which reads the explicit values."""
+        language = detect_language(text)
+        greeting = customer_intent.greeting_kind(text)
+        if greeting is not None:
+            key = "greeting_salam" if greeting == customer_intent.SALAM else "greeting"
+            return [whatsapp.text(_template(key, language))]
+        if self.requirements is None:
+            return None
+        command = customer_intent.fresh_command(text)
+        answer = customer_intent.confirmation(text) if command is None else None
+        if command is None and answer is None:
+            return None
+        binding = self.requirements.binding(conn, turn, message_texts(turn))
+        names = binding.inherited()
+        if answer is not None:
+            token = None
+            if names:
+                slots = binding.state_slots()
+                token = requirements.inherited_token(slots, names, turn.conversation_id)
+            if not names or not binding.keep_asked(token):
+                return None   # no such question is open: an ordinary message
+            customer = self._customer_binding(conn, turn, binding, language)
+            if customer is None:
+                return None
+            results = customer.keep_answer(answer, self.requirements, token)
+            return self._render_results(customer, results)
+        kind, standalone = command
+        # One meaning for the typed command and the button: drop the filters of earlier
+        # sessions, keep what this session stated. Only a standalone "purani requirements
+        # hata do" clears everything.
+        scope = "all" if kind == customer_intent.CLEAR_OLD and standalone else "inherited"
+        notices = ()
+        if scope == "all" or names:
+            notices = self.requirements.fresh_start(conn, turn, scope)
+        if not standalone:
+            return None
+        if notices is None:
+            return [whatsapp.text(_template("requirements_unavailable", language))]
+        customer = self._customer_binding(conn, turn, binding, language)
+        summary = customer.filters_text() if customer is not None and scope != "all" else ""
+        ack = (ai_tools.Notice("fresh_kept", (("summary", summary),)) if summary
+               else "fresh_all")
+        if customer is None:
+            return [whatsapp.text(_template(ack, language))]
+        return render_customer(Outcome("done", "fresh", (ack, *notices)), customer)
+
+    @staticmethod
+    def _render_results(customer, results):
+        notices = tuple(n for r in results for n in _notices(r))
+        payloads = tuple(p for r in results for p in r.payloads)
+        return render_customer(Outcome("done", "tap", notices, payloads=payloads), customer)
 
     def _customer_binding(self, conn, turn, binding, language=None):
         """Task 10.1: the real customer tool bodies (app.customer_tools) around the 7.3

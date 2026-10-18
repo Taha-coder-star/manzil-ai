@@ -66,6 +66,7 @@ QUESTION_ORDER = ("location_ambiguous", "location_confirm", "location_reask", "p
                   "type_unclear", "size_unit_ask", "size_ask", "budget_operator_ask",
                   "budget_unclear", "budget_implausible", "budget_ask")
 ECHO_TAP = re.compile(r"echo:(?:yes:(\d{1,9})|edit)")
+KEEP_TAP = re.compile(r"keep:(yes|no):([0-9a-f]{8})")
 # Task 11.1: a row of the "which property" question: the reason it was asked for, then
 # the listing or "all" (the shown ones, R-31 "Dono").
 _REASONS = "|".join(handoff.REASONS)
@@ -73,6 +74,7 @@ HANDOFF_TAP = re.compile(r"handoff:(" + _REASONS + r"):([A-Z0-9]{2,4}-[0-9]{3}|a
 TAP = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})"
                  r"|clarify:(location):(\d{1,2}|none)|clarify:(purpose):(sale|rent)"
                  r"|(nomatch):(nearby|budget)|(handoff):(request)|echo:(?:yes:\d{1,9}|edit)"
+                 r"|keep:(?:yes|no):[0-9a-f]{8}"
                  r"|handoff:(?:" + _REASONS + r"):(?:[A-Z0-9]{2,4}-[0-9]{3}|all)")
 
 # New customer wording of 10.1 (awaits owner approval; docs/RENDERER.md section 2).
@@ -171,6 +173,10 @@ class CustomerBinding:
                                     {"status": "answer_first",
                                      "needs_answer": [slot for slot, _ in asks]},
                                     notice=tuple(asks[0][1]))
+            inherited = self.requirements.inherited()
+            if inherited:
+                # Filters from an earlier session are asked about, never searched unconfirmed.
+                return self._keep_question(slots, inherited)
             if requirements.uncertain_slots(slots):
                 return self._voice_echo(slots, version)
         result = search.search_conversation(self.conn, turn.agency_id, turn.conversation_id,
@@ -187,8 +193,8 @@ class CustomerBinding:
         fallback = cards.fallback_status(self.conn, turn.agency_id, turn.conversation_id)[0]
         try:
             plan = render.render_search(
-                data, listings, self.language, request=search.Request.from_slots(slots),
-                gazetteer=gz, pending=pending, fallback=fallback, echo=not self.purpose_told)
+                data, listings, self.language,
+                request=result.request or search.Request.from_slots(slots), gazetteer=gz, pending=pending, fallback=fallback, echo=not self.purpose_told)
         except render.GroundingError:
             logger.error("Turn %s: search reply failed grounding; not sent", turn.id)
             return ai_tools.ToolResult("search_properties", False,
@@ -203,6 +209,56 @@ class CustomerBinding:
                                for position, _, code in plan.shown]
         return self._result("search_properties", response, payloads, plan.facts,
                             plan.trusted_codes)
+
+    def _keep_question(self, slots, names):
+        """The filters of an earlier session, asked about with [Haan, wohi] / [Nayi search]
+        (the taps are tap()'s keep:yes / keep:no). Nothing is searched until they answer."""
+        old = {name: slots[name] for name in names}
+        token = requirements.inherited_token(slots, names, self.turn.conversation_id)
+        again = self.requirements.keep_asked(token)   # asked before: a short reminder
+        request = search.Request.from_slots(old)
+        types = (old.get("property_types") or {}).get("value") or []
+        counts = grounding.Facts(
+            beds=frozenset({request.beds_min}) if request.beds_min else frozenset(),
+            baths=frozenset({request.baths_min}) if request.baths_min else frozenset())
+        facts = grounding.facts_for([], request=request, gazetteer=self.gazetteer).merge(counts)
+        try:
+            plan = render.keep_question(request, types, self.language, self.gazetteer, facts,
+                                        token, again)
+        except render.GroundingError:
+            logger.error("Turn %s: keep question failed grounding; not sent", self.turn.id)
+            return ai_tools.ToolResult("search_properties", False,
+                                       {"status": "error", "error": "render_failed"},
+                                       error="render_failed", notice="search_unavailable")
+        self.asked = True
+        return self._result("search_properties",
+                            {"status": "answer_first", "needs_answer": ["inherited_filters"]},
+                            plan.payloads, plan.facts)
+
+    def filters_text(self):
+        """The filters the search would use now (the acknowledgement shows them): stored
+        values only, without those still waiting for the customer's answer."""
+        slots, _, _ = self._state()
+        waiting = set(self.requirements.inherited())
+        active = {name: entry for name, entry in slots.items() if name not in waiting}
+        types = (active.get("property_types") or {}).get("value") or []
+        return render.filters_line(search.Request.from_slots(active), types, self.language,
+                                   self.gazetteer)
+
+    def keep_answer(self, answer, service, token=None):
+        """[Haan, wohi] / [Nayi search] (a tap, token = the question's) or the same typed
+        (token None: the question open in this conversation). The ToolResults: the
+        acknowledgement, then the search (which asks the next question, if any)."""
+        if answer == "yes":
+            notices = service.keep_inherited(self.conn, self.turn, token)
+        else:
+            notices = service.fresh_start(self.conn, self.turn, "inherited", token)
+        if notices is None:
+            return [self._result("keep", {"status": "stale"}, notice="echo_stale")]
+        if "purpose_inferred" in _keys(tuple(notices)):
+            self.purpose_told = True
+        return [self._result("keep", {"status": "ok"}, notice=tuple(notices)),
+                self.search_properties({}, None)]
 
     def _voice_echo(self, slots, version):
         """R16 7.4: a heard, uncertain price / size / location / purpose is echoed with
@@ -397,6 +453,9 @@ class CustomerBinding:
         chosen = HANDOFF_TAP.fullmatch(reply_id)
         if chosen:
             return self._handoff_tap(*chosen.groups())
+        keep = KEEP_TAP.fullmatch(reply_id)
+        if keep:
+            return self.keep_answer(keep.group(1), service, keep.group(2))
         echo = ECHO_TAP.fullmatch(reply_id)
         if echo and echo.group(1) is None:   # [Badlein]: the customer sends the correction
             return [self._result("echo", {"status": "edit"}, notice="echo_edit")]

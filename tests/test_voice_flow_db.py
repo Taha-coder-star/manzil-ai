@@ -134,7 +134,7 @@ def test_scenario_2_by_voice_gives_the_three_listings_in_roman_urdu(vf):
     # The inferred purpose is said once, as the note before the cards (D5).
     assert said.count("Raqam se main ne samjha ke aap khareedna chahte hain") == 1
     assert "Ye khareedne ke options hain" not in said
-    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:" in said
+    assert "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:" in said
     assert "Phase 7 — qareeb" in said
     assert runs(st) == 1
 
@@ -152,7 +152,7 @@ def test_scenario_2_in_urdu_script_gives_the_same_three_listings(vf):
     assert state["purpose"]["value"] == "sale"
     assert set(latest_shown(st)) == SCENARIO_2_IDS and echo_question(payloads) is None
     assert "Ji, DHA Phase 6 mein 500 gaz ghar, 8 crore tak" not in sent_text(payloads)
-    assert "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:" in sent_text(payloads)
+    assert "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:" in sent_text(payloads)
 
 
 # --- budget operators in other scripts --------------------------------------------------------

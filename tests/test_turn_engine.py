@@ -256,7 +256,7 @@ def test_the_prompt_and_tool_prefix_is_stable_across_turns(ai):
 ])
 def test_each_role_is_offered_only_its_tools(ai, sender, operation, names):
     ai.script.append(answer())
-    ai.deliver(text("hello", sender=sender))
+    ai.deliver(text("kuch dikhao", sender=sender))
     ai.drain()
     assert declared(ai.requests[0]) == names
     assert ai.usage()[0][2] == operation

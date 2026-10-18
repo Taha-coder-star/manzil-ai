@@ -166,6 +166,11 @@ def st(app_role_db):
     conn.close()
 
 
+def noted(summary):
+    """The acknowledgement that names the filters in use (render_customer)."""
+    return TEMPLATES["requirements_noted"].format(summary=summary)
+
+
 def p(slot, kind, span):
     return {"slot": slot, "op": kind, "raw_span": span}
 
@@ -182,7 +187,7 @@ def test_update_requirements_stores_a_versioned_patch_through_the_real_worker(st
         [p("purpose", "set", "buy"), p("property_types", "set", "ghar"),
          p("location", "set", "DHA Phase 6"), p("size", "set", "500 gaz"),
          p("budget", "set", "8 crore tak")])
-    assert reply == [TEMPLATES["requirements_saved"]]
+    assert reply == [noted("DHA Phase 6, 500 gaz ghar, khareedne ke liye, 8 crore tak")]
     version, slots = st.state()
     assert version == 1
     assert slots["location"]["value"]["nodes"] == fix(st, "dha-ph6")
@@ -214,7 +219,7 @@ def test_the_model_sees_outcomes_without_ids_or_customer_words(st):
 def test_follow_up_resolves_a_bare_level_inside_the_stored_area_and_bhi_adds(st):
     st.say("DHA Phase 6 mein ghar", [p("location", "set", "DHA Phase 6")])
     reply = st.say("Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")])
-    assert reply == [TEMPLATES["requirements_saved"]]
+    assert reply == [noted("DHA Phase 6 / DHA Phase 8")]
     assert st.nodes() == fix(st, "dha-ph6", "dha-ph8")
     assert st.state()[1]["location"]["method"] == "level_in_area"
     # No "bhi": the same words replace.
@@ -230,7 +235,7 @@ def test_a_stale_area_hint_never_becomes_the_active_area(st):
     assert st.nodes() == fix(st, "clf")                       # unchanged
     reply = st.say("block 5", [p("location", "set", "block 5")])   # still Clifton's context
     assert st.nodes() == fix(st, "clf-b5")
-    assert reply == [TEMPLATES["requirements_saved"]]
+    assert reply == [noted("Clifton Block 5")]
 
 
 def test_unknown_names_change_nothing_and_list_the_covered_areas(st):
@@ -246,7 +251,7 @@ def test_other_cities_are_declined_and_served_in_one_reply(st):
     reply = st.say("Clifton aur Lahore", [p("location", "set", "Clifton"),
                                             p("location", "add", "Lahore")])
     assert st.nodes() == fix(st, "clf")
-    assert reply == [TEMPLATES["requirements_saved"] + "\n\n" +
+    assert reply == [noted("Clifton") + "\n\n" +
                      TEMPLATES["location_out_of_coverage"].format(city="Karachi",
                                                                    other="Lahore")]
 
@@ -311,7 +316,7 @@ def test_an_ambiguous_place_asks_and_the_answer_is_checked_against_the_stored_ca
 
     reply = st.say("Bahria", [p("location", "set", "Bahria")])
     assert st.nodes() == fix(st, "btk-p6")
-    assert reply == [TEMPLATES["requirements_saved"] + "\n\n" +
+    assert reply == [noted("Bahria Precinct 6") + "\n\n" +
                      TEMPLATES["location_chosen"].format(area="Bahria Precinct 6")]
     assert [row[1] for row in st.pending()] == ["resolved"]
     assert st.state()[1]["location"]["method"] == "clarified"
@@ -320,7 +325,7 @@ def test_an_ambiguous_place_asks_and_the_answer_is_checked_against_the_stored_ca
 def test_an_unrelated_turn_keeps_the_question_and_re_asks_once(st):
     st.say("P6 mein ghar", [p("location", "set", "P6")])
     reply = st.say("3 bed chahiye", [p("beds_min", "set", "3 bed")])
-    assert reply[0].startswith(TEMPLATES["requirements_saved"])
+    assert reply[0].startswith(noted("3+ bedroom"))
     assert TEMPLATES["location_reask"].split("{")[0] in reply[0] and "DHA Phase 6" in reply[0]
     ((_, status, unanswered, _),) = st.pending()
     assert (status, unanswered) == ("open", 1)
@@ -388,7 +393,7 @@ def test_buy_to_rent_moves_the_budget_and_asks_for_the_monthly_one(st):
            [p("purpose", "set", "buy"), p("property_types", "set", "ghar"),
             p("location", "set", "DHA Phase 6"), p("budget", "set", "8 crore tak")])
     reply = st.say("rent pe bhi mil sakta hai?", [p("purpose", "set", "rent pe")])
-    assert reply == [TEMPLATES["requirements_saved"] + "\n\n" + TEMPLATES["budget_ask_rent"]]
+    assert reply == [noted("DHA Phase 6, ghar, kiraye par") + "\n\n" + TEMPLATES["budget_ask_rent"]]
     slots = st.state()[1]
     assert slots["purpose"]["value"] == "rent" and "budget" not in slots
     assert slots["previous_budget"]["value"]["max"] == 80_000_000
@@ -430,7 +435,7 @@ def test_an_inferred_purpose_is_labelled_and_echoed(st):
     reply = st.say("8 crore ka ghar", [p("budget", "set", "8 crore")])
     slots = st.state()[1]
     assert slots["purpose"]["source"] == "inferred" and slots["purpose"]["confirmed"] is False
-    assert reply == [TEMPLATES["requirements_saved"] + "\n\n"
+    assert reply == [noted("khareedne ke liye, 8 crore ke aas paas") + "\n\n"
                      + TEMPLATES["purpose_inferred"].format(purpose="khareedna")]
 
 
@@ -459,7 +464,7 @@ def test_a_voice_transcript_feeds_the_same_path_but_is_unconfirmed(st):
     assert slots["location"]["source"] == "voice" and slots["location"]["confirmed"] is False
     assert "echo" not in slots["location"]
     assert slots["budget"]["value"]["max"] == 80_000_000
-    assert st.sent_texts()[0].startswith(TEMPLATES["requirements_saved"])
+    assert st.sent_texts()[0].startswith(noted("Clifton Block 5, khareedne ke liye, 8 crore tak"))
 
 
 def test_a_weak_transcript_is_marked_for_an_echo(st):
@@ -510,7 +515,7 @@ def test_a_retried_turn_never_applies_a_patch_twice(st, monkeypatch):
     # "thoda upar" compounds (max x 1.10); a replay must not apply it a second time.
     assert st.state()[1]["budget"]["value"]["max"] == 88_000_000
     assert st.state()[0] == 2 and len(st.patches()) == 2
-    assert st.sent_texts()[-1] == TEMPLATES["requirements_saved"]
+    assert st.sent_texts()[-1] == noted("DHA Phase 6, ghar, khareedne ke liye, 8.8 crore tak")
 
 
 def test_a_retried_turn_counts_an_unanswered_question_once(st, monkeypatch):
@@ -649,7 +654,7 @@ def test_a_plain_haan_confirms_the_sole_fuzzy_candidate_without_a_tool_call(st):
     ask_zamzama(st)
     reply = st.say("haan")                                     # the model calls no tool
     assert st.nodes() == fix(st, "dha-ph5-zamzama")
-    assert reply == [TEMPLATES["requirements_saved"] + "\n\n"
+    assert reply == [noted("Zamzama Commercial") + "\n\n"
                      + TEMPLATES["location_chosen"].format(area="Zamzama Commercial")]
     assert [r[1] for r in st.pending()] == ["resolved"]
     ((_, ops, _), *_) = st.patches()[-1:]
@@ -711,7 +716,7 @@ def test_clifton_aur_dha_is_two_grounded_spans_in_one_patch(st):
     ((_, ops, _),) = st.patches()
     assert [(o["raw_span"], o["split_from"]) for o in ops] == [
         ("Clifton", "Clifton aur DHA"), ("DHA", "Clifton aur DHA")]
-    assert reply == [TEMPLATES["requirements_saved"]]
+    assert reply == [noted("Clifton / DHA Defence")]
 
 
 def test_an_impossible_budget_is_asked_then_kept_when_restated(st):
@@ -726,7 +731,7 @@ def test_an_impossible_budget_is_asked_then_kept_when_restated(st):
     reply = st.say("budget 5 lakh", [p("budget", "set", "5 lakh")])
     assert st.state()[1]["budget"]["echo"] == ["implausible"]
     assert st.state()[1]["budget"]["confirmed"] is False
-    assert reply == [TEMPLATES["requirements_saved"]]
+    assert reply == [noted("DHA Phase 6, ghar, khareedne ke liye, 5 lakh ke aas paas")]
     st.say("budget 8 crore tak", [p("budget", "set", "8 crore tak")])
     assert st.state()[1]["budget"]["value"]["max"] == 80_000_000
     assert "echo" not in st.state()[1]["budget"]
@@ -763,7 +768,7 @@ def test_the_model_sees_the_stored_state_and_the_open_question(st):
 
 
 def test_the_first_turn_has_no_snapshot(st):
-    st.say("hello", [])
+    st.say("kuch dikhao", [])
     parts = st.requests[0].body["contents"][0]["parts"]
     assert not any(part["text"].startswith("Stored state") for part in parts)
 
@@ -812,7 +817,7 @@ def _setup_fallback(st):
 
 def _setup_confirm(st):
     ask_zamzama(st)
-    expected = (TEMPLATES["requirements_saved"] + "\n\n"
+    expected = (noted("Zamzama Commercial") + "\n\n"
                 + TEMPLATES["location_chosen"].format(area="Zamzama Commercial"))
     return "haan", expected, fix(st, "dha-ph5-zamzama")
 

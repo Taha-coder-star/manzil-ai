@@ -748,7 +748,8 @@ _RENT = [re.compile(p, re.IGNORECASE) for p in (
 )]
 _SALE = [re.compile(p, re.IGNORECASE) for p in (
     r"\b(?:for|on)\s+sale\b", r"\bsale\s+(?:pe|par|ke\s+liye|ka|ki)\b", r"\bbuy(?:ing)?\b",
-    r"\bpurchase\b", r"\bkhareedn[aei](?:\s+hai)?\b", r"\bkhareed\w*", r"\blen[ai]\s+hai\b",
+    r"\bpurchase\b", r"\bkhareedn[aei](?:\s+hai)?\b", r"\bkhareed\w*", r"\bkharid\w*",
+    r"\blen[ai]\s+hai\b",
     r"\bsale\b", r"خرید\w*",
 )]
 

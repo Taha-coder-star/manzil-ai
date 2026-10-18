@@ -362,7 +362,7 @@ def turn_result(kind, payloads, *, searched, new_rows=0, shown=()):
 def no_match_text():
     from app import render
     return whatsapp.text(render.TEXT["roman_urdu"]["no_match"].format(
-        place="DHA Phase 6 mein ", what=" ghar"))
+        place="DHA Phase 6 mein ", what=" ghar", budget=""))
 
 
 @pytest.mark.parametrize(("payloads", "ok"), [
