@@ -577,7 +577,7 @@ def test_an_update_only_turn_with_no_match_gets_the_honest_no_match(vf):
         p("budget", "set", "5 crore tak")])
     assert runs(st) == 1 and latest_shown(st) == []
     said = sent_text(payloads)
-    assert "is budget mein" in said and "abhi available nahi" in said
+    assert "is budget (" in said and "abhi available nahi" in said
     no_contradiction(said)
 
 
