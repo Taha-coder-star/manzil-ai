@@ -173,6 +173,64 @@ because high similarity alone was wrong for places such as Gulshan-e-Maymar. A f
 therefore also never `confirmed`, and a place the customer did not type exactly is echoed
 (R-23).
 
+## Filters from an earlier session (owner decision 2026-10-18; no migration)
+
+Live 2026-10-17/18: a test number's stored requirements carried "rent" (16th), "ghar" and
+"500 gaz" (17th) into a new chat. "mera area dha phase 6" + "aur budget 2 crore" searched
+a monthly rent of 1.8-2.2 crore for a 500 gaz house and the no-match reply named only
+"500 gaz ghar". Why "aath crore tak" kept rent on the 17th: `_stale_purpose` runs only
+after a residential <-> commercial switch or over an inferred purpose; flat -> house is
+neither, and the rent was stated. The period then came from the stored purpose
+(`parse_budget(purpose=...)`). Pinned by `tests/test_fresh_search.py`.
+
+- **Session**: inbound customer messages (`message`, direction inbound; delivery statuses and
+  our replies never count) with no gap above 6 h (`SESSION_GAP`).
+  `RequirementService._session_start` = the newest message, up to the turn's own newest one,
+  that follows such a gap. By receipt time, so a retry or a late-processed turn gets the
+  same answer. Index `message_conversation_history_idx`, 90-day lookback.
+- **Slot time** (`updated_at`, `kept_at`) is the turn's newest message time (`Context.stamp`),
+  not the processing time: a message of an old session processed late is still old.
+- **Inherited**: a filter slot (`INHERIT_SLOTS`) whose newest time precedes the session start.
+  Derived, not stored. `kept_at` lives inside the slot entry in `requirement_state.slots`
+  (JSONB; the CHECK only constrains source / confidence / confirmed), written by the same
+  versioned UPDATE and `requirement_patch_log` row as every other change (call "keep").
+- **Gate**: `CustomerBinding.search_properties` asks before searching, after an open
+  location / purpose / size / budget question: "Pichli search mein 500 gaz ghar, kiraye par tha
+  - kya ab bhi wohi chahiye?" with `keep:yes:<token>` / `keep:no:<token>`. The token hashes
+  the inherited slots and their times (`inherited_token`); a button of an older question
+  (other set, or a slot said again) is refused inside the row lock (`echo_stale`). Buttons carry
+  no conversation data; the tap acts on its own turn's conversation under RLS. The next
+  message gets a short reminder (`keep_again`) while the same question stays open
+  (`keep_question_sent`: this conversation's outbound rows of the last 7 days). Search stays
+  blocked while any inherited filter is unresolved.
+- **Answers**: tapped, or typed when that question is open: "haan / wohi / ok" = keep,
+  "nahi" = new search (`customer_intent.confirmation`, no model call). Anything with a request
+  goes to the model and its explicit values replace the old ones: "nahi, kharidna hai" sets
+  the purpose, the amount said this session takes it (it is not moved aside), and only the
+  still-inherited filters are asked about, as a reminder.
+- **While it is open** an inherited purpose is invisible to the merge (`Patch._purpose_now`,
+  `_resolve_purpose`): a new amount stays unlabelled (`period` None) and the purpose is not
+  replaced. An unresolved purpose never gives a budget a period.
+- **keep:yes** (`keep_inherited`): `kept_at` on the inherited slots, so they are not asked again
+  this session; an unlabelled budget takes the kept purpose's period.
+- **keep:no / "nayi search"** (`fresh_start(..., "inherited")`): the same meaning typed or
+  tapped. Drops the inherited slots (and older backend-only memory: previous budget, excluded
+  listings, soft prefs), keeps everything said this session; an amount that lost its purpose
+  is inferred (told, R17 4.6) or asked. With nothing inherited it clears nothing. Mixed
+  "nayi search: DHA 6 mein flat" does the same first, then the model reads the request.
+- **Standalone "purani requirements hata do"** is the only full reset (`scope="all"`).
+- **Greeting alone** ("salam", "hi") is answered by `greeting` / `greeting_salam` before any
+  model call; "salam, DHA mein flat chahiye" is still a request.
+- **Acknowledgement and headers**: `requirements_saved` becomes `requirements_noted`, naming the
+  filters in use (`render.filters_line`). Result and no-match headers state purpose and the
+  budget's period when known, from the `Request` the search ran on (`Result.request`), and
+  name relaxed filters ("Kuch options mein size, budget thoda alag hai."). This changes the
+  Demo Scope scenario 2 sample line (now "... 500 gaz ghar, khareedne ke liye, 8 crore tak
+  ..."): owner-approved 2026-10-18.
+- "2 crore" -> 1.8-2.2 crore is the approved bare-amount rule (`around`, +/-10 %, owner
+  2026-10-12; `normalise.parse_budget`, docs/NORMALISATION.md). "kharidna" (with an i) is now
+  read as a purchase like "khareedna".
+
 ## Voice
 
 Voice-only slots are `confirmed = false`; weak signals (`stt_meta` has `fallback_reason`,
@@ -245,7 +303,7 @@ deliberate owner decision.
 
 Every new Roman Urdu notice of 7.3 (all in `turn_engine.TEMPLATES`; {...} values come from
 the backend: canonical gazetteer names or fixed words, never model text). Wording is
-awaiting owner approval.
+owner-approved 2026-10-18.
 
 | Key | Trigger | Exact text |
 |---|---|---|

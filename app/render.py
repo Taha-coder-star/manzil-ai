@@ -39,6 +39,8 @@ CLARIFY_LOCATION, CLARIFY_NONE = "clarify:location:{}", "clarify:location:none"
 CLARIFY_PURPOSE = "clarify:purpose:{}"
 # Task 10.2 voice echo: [Haan] carries the requirement_state version it was rendered from.
 ECHO_YES, ECHO_EDIT = "echo:yes:{}", "echo:edit"
+# Filters from an earlier session: keep them, or start a fresh search (customer_tools.tap).
+KEEP_YES, KEEP_NO = "keep:yes:{}", "keep:no:{}"
 
 # All customer-facing wording of this module (awaits owner approval; docs/RENDERER.md).
 TEXT = {
@@ -56,7 +58,8 @@ TEXT = {
         "echo_location": "I took the location as {place} — correct me if that's wrong.",
         "echo_size": "I took the size as {size} — correct me if that's wrong.",
         "no_match_cheaper": "No cheaper{what}{place} are available right now.",
-        "no_match": "No{what}{place} match this budget right now.",
+        "no_match": "No{what}{place} match this budget{budget} right now.",
+        "relaxed": "Some differ slightly in {steps}.",
         "lowest": "Prices there start from {amount}.",
         "nearby": "Nearby area", "more_budget": "Raise budget", "agent": "Talk to agent",
         "which_place": "Which place do you mean?",
@@ -68,6 +71,10 @@ TEXT = {
         "generic_ask": "Please tell me a little more about what you are looking for.",
         "voice_echo": "You said: {facts} — is that right?", "echo_yes": "Yes",
         "echo_edit": "Change", "to_sale": "to buy", "to_rent": "to rent",
+        "beds_n": "{n}+ bedrooms", "baths_n": "{n}+ bathrooms",
+        "keep_ask": "Your earlier search was for {old}. Do you still want that?",
+        "keep_yes": "Yes, keep it", "keep_no": "New search",
+        "keep_again": "Your earlier search is still pending. Keep it or start a new search?",
     },
     ROMAN_URDU: {
         "wrapper": "Ji, {place}{things}{budget} — ye options hain:",
@@ -84,7 +91,8 @@ TEXT = {
         "echo_location": "Jagah main ne {place} samjhi hai — ghalat ho to bata dein.",
         "echo_size": "Size main ne {size} samjha hai — ghalat ho to bata dein.",
         "no_match_cheaper": "{place}is se kam price ka{what} abhi available nahi.",
-        "no_match": "{place}is budget mein{what} abhi available nahi.",
+        "no_match": "{place}is budget{budget} mein{what} abhi available nahi.",
+        "relaxed": "Kuch options mein {steps} thoda alag hai.",
         "lowest": "Yahan price {amount} se shuru hoti hai.",
         "nearby": "Nearby area", "more_budget": "Budget barhayein", "agent": "Agent se baat",
         "which_place": "Aap ka matlab kaunsi jagah hai?",
@@ -98,8 +106,16 @@ TEXT = {
         "generic_ask": "Please thora aur bata dein ke aap ko kya chahiye.",
         "voice_echo": "Aap ne kaha: {facts} — sahi hai?", "echo_yes": "Haan",
         "echo_edit": "Badlein", "to_sale": "khareedne ke liye", "to_rent": "kiraye par",
+        "beds_n": "{n}+ bedroom", "baths_n": "{n}+ bathroom",
+        "keep_ask": "Pichli search mein {old} tha — kya ab bhi wohi chahiye?",
+        "keep_yes": "Haan, wohi", "keep_no": "Nayi search",
+        "keep_again": "Pichli search abhi baqi hai. Wohi rakhein ya nayi search?",
     },
 }
+RELAX_WORDS = {ENGLISH: {"budget": "budget", "size": "size", "beds": "bedrooms",
+                         "neighbour": "area"},
+               ROMAN_URDU: {"budget": "budget", "size": "size", "beds": "bedroom",
+                            "neighbour": "area"}}
 TYPE_ONE = {ROMAN_URDU: {"house": "ghar", "apartment": "flat", "shop": "dukaan",
                          "warehouse": "godown"}}
 TYPE_MANY = {ENGLISH: {"house": "houses", "apartment": "apartments", "penthouse": "penthouses",
@@ -200,6 +216,17 @@ def _things(request, language):
     return " / ".join(TYPE_ONE[ROMAN_URDU].get(t, t) for t in types) or "property"
 
 
+def _what(request, language):
+    """"500 gaz ghar, kiraye par" / "500 sq yd houses for rent": the size, type and purpose
+    the reply stands on (EN _things already adds the purpose)."""
+    size = _size_text(request, language)
+    thing = _things(request, language)
+    if language == ENGLISH:
+        return (f"{size} " if size else "") + thing
+    word = TEXT[language].get(f"to_{request.purpose}") if request is not None else None
+    return ", ".join([" ".join(p for p in (size, thing) if p)] + ([word] if word else []))
+
+
 def _budget_text(request, language):
     if request is None:
         return ""
@@ -220,6 +247,64 @@ def _budget_text(request, language):
     return text + (words["per_month"] if request.purpose == "rent" else "")
 
 
+def _plain(value):
+    return str(value).replace("_", " ")
+
+
+def filters_line(request, types, language, gazetteer=None, category=None):
+    """The filters in use, from stored values only: "DHA Phase 6, 500 gaz ghar, kiraye par,
+    2 crore ke aas paas mahana". The purpose and the budget's period appear only when a
+    purpose is stored in the request (an unconfirmed one is left out by the caller); an
+    amount without a purpose stays unlabelled. "" when nothing is stored."""
+    words = TEXT[language]
+    names = " / ".join(_place_names(request, gazetteer))
+    size = _size_text(request, language)
+    if language == ENGLISH:
+        kinds = " / ".join(TYPE_MANY[ENGLISH].get(t, t) for t in types or ())
+    else:
+        kinds = " / ".join(TYPE_ONE[ROMAN_URDU].get(t, t) for t in types or ())
+    purpose = words.get(f"to_{request.purpose}", "") if request.purpose in ("sale", "rent")         else ""
+    if not kinds and category:   # a category alone ("commercial") is a filter the customer set
+        kinds = _plain(category)
+    parts = [names, " ".join(p for p in (size, kinds) if p), purpose,
+             words["beds_n"].format(n=request.beds_min) if request.beds_min else "",
+             words["baths_n"].format(n=request.baths_min) if request.baths_min else "",
+             ", ".join(_plain(v) for v in (*request.construction, *request.possession,
+                                           *request.investment_tags)),
+             _budget_text(request, language).lstrip(", ")]
+    return ", ".join(p for p in parts if p)
+
+
+def request_facts(request, gazetteer):
+    """What a sentence that restates the customer's own request may say: its places, money and
+    sizes (grounding.facts_for) plus the bedroom / bathroom counts and the construction,
+    possession and investment words they asked for (these are filters, not claims about a
+    listing)."""
+    own = grounding.Facts(
+        beds=frozenset({request.beds_min}) if request.beds_min else frozenset(),
+        baths=frozenset({request.baths_min}) if request.baths_min else frozenset(),
+        features=frozenset((*request.construction, *request.possession,
+                            *request.investment_tags)))
+    return grounding.facts_for([], request=request, gazetteer=gazetteer).merge(own)
+
+
+def keep_question(request, types, language, gazetteer, facts, token, again=False,
+                  category=None):
+    """Task "fresh search": filters saved in an earlier session are asked about before any
+    search ("Pichli search mein 500 gaz ghar tha — kya ab bhi wohi chahiye?"), with
+    [Haan, wohi] / [Nayi search]. Backend values only; checked against the facts the caller
+    built from the same request (the grounding rule for every customer payload)."""
+    words = TEXT[language]
+    body = words["keep_again"] if again else words["keep_ask"].format(
+        old=filters_line(request, types, language, gazetteer, category))
+    payload = whatsapp.reply_buttons(body, [(KEEP_YES.format(token), words["keep_yes"]),
+                                            (KEEP_NO.format(token), words["keep_no"])])
+    found = grounding.check_payloads([payload], facts, gazetteer)
+    if found:
+        raise GroundingError(f"template stated unsupported facts: {found}")
+    return RenderPlan([payload], CONFIRMATION, language, facts=facts)
+
+
 def wrapper_line(request, language, gazetteer=None):
     """The templated wrapper (R-21: the model writes no facts). Roman Urdu follows Demo
     Scope scenario 2: "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:"."""
@@ -232,8 +317,7 @@ def wrapper_line(request, language, gazetteer=None):
         return words["wrapper"].format(things=things, place=place,
                                        budget=_budget_text(request, language))
     place = words["in_place"].format(place=names) if names else ""
-    things = _size_text(request, language) or _things(request, language)
-    return words["wrapper"].format(place=place, things=things,
+    return words["wrapper"].format(place=place, things=_what(request, language),
                                    budget=_budget_text(request, language))
 
 
@@ -327,6 +411,10 @@ def _results(payload, listings, language, request, gazetteer, fallback, echo):
         return RenderPlan(plan.payloads, plan.kind, language, facts=plan.facts,
                           dropped=dropped)
     lines = [wrapper_line(request, language, gazetteer)]
+    steps = [RELAX_WORDS[language][s] for s in payload.get("relaxations_applied") or ()
+             if s in RELAX_WORDS[language]]
+    if steps:   # a relaxed filter is never silent (R17 step 7): the cards say which one each
+        lines.append(TEXT[language]["relaxed"].format(steps=", ".join(steps)))
     if echo:
         lines += echo_lines(payload, request, language, gazetteer)
     payloads = cards.render(rendered, fallback=fallback, language=language, labels=labels,
@@ -341,17 +429,13 @@ def _results(payload, listings, language, request, gazetteer, fallback, echo):
 def _no_match(payload, language, request, gazetteer):
     words = TEXT[language]
     names = " / ".join(_place_names(request, gazetteer))
-    size = _size_text(request, language)
-    if language == ENGLISH:
-        what = (f" {size} " if size else " ") + _things(request, language)
-        place = f" in {names}" if names else ""
-    else:
-        thing = _things(request, language)
-        what = f" {size} {thing}" if size else f" {thing}"
-        place = f"{names} mein " if names else ""
+    what = " " + _what(request, language)
+    place = (f" in {names}" if language == ENGLISH else f"{names} mein ") if names else ""
+    budget = _budget_text(request, language).lstrip(", ")
     key = "no_match_cheaper" if request is not None and request.no_budget_relaxation \
         else "no_match"
-    lines = [words[key].format(what=what, place=place)]
+    lines = [words[key].format(what=what, place=place,
+                               budget=f" ({budget})" if budget and key == "no_match" else "")]
     lowest = payload.get("lowest_price_pkr")
     if lowest:
         lines.append(words["lowest"].format(amount=amount_text(lowest)))

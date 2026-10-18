@@ -410,6 +410,7 @@ class Result:
     search_run_id: object = None
     dropped: int = 0
     no_neighbours: bool = False   # nearby was asked for, but none is configured
+    request: object = None        # the Request this search ran on (what the reply must state)
 
     @property
     def codes(self):
@@ -554,7 +555,7 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     request = Request.from_slots(slots)
     if missing:
         return Result(CLARIFY, missing=missing, unmapped_prefs=list(request.unmapped),
-                      echo=list(request.echo))
+                      echo=list(request.echo), request=request)
     ids = {str(k): k for k in gazetteer.places}  # UUIDs in the database, keys in tests
     city_node = gazetteer.city_node(city_code)
     city = subtree(gazetteer, [city_node]) if city_node is not None else set()
@@ -632,7 +633,7 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     result = Result(OK if kept else NO_MATCH, hits=kept, total_matches=len(kept),
                     relaxations=relaxations, excluded_reasons=reasons,
                     unmapped_prefs=list(request.unmapped), echo=list(request.echo),
-                    lowest_price_pkr=lowest, dropped=dropped)
+                    lowest_price_pkr=lowest, dropped=dropped, request=request)
     result.search_run_id = conn.execute(
         """
         INSERT INTO search_run (agency_id, conversation_id, requirement_version, filters,

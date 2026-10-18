@@ -186,6 +186,9 @@ BUDGET = [
     ("2 crore se kam", None, "max", None, 20_000_000, None),
     ("8 کروڑ تک", "sale", "max", None, 80_000_000, "one_time"),
     ("budget aath crore tak", "sale", "max", None, 80_000_000, "one_time"),  # tak wins
+    ("8 crore tak.", None, "max", None, 80_000_000, None),   # turn 4b1d4b0f, no purpose yet
+    ("۸ کروڑ تک", "sale", "max", None, 80_000_000, "one_time"),   # Eastern Arabic digit
+    ("آٹھ کروڑ تک", "sale", "max", None, 80_000_000, "one_time"),
     ("around 5 lakh per month", "rent", "around", 450_000, 550_000, "monthly"),
     ("lagbhag 2 crore", None, "around", 18_000_000, 22_000_000, None),
     ("saadhe teen crore ke aas paas", "sale", "around", 31_500_000, 38_500_000, "one_time"),
@@ -207,6 +210,12 @@ def test_budget(span, purpose, mode, low, high, period):
     result = n.parse_budget(span, purpose=purpose)
     assert (result.status, result.mode, result.min, result.max, result.period) == (
         "ok", mode, low, high, period)
+
+
+def test_tak_right_after_the_span_makes_it_a_maximum():
+    # The model may copy only "8 crore"; the "tak" that follows it is still read.
+    result = n.parse_budget("8 crore", purpose="sale", after=" tak.")
+    assert (result.mode, result.min, result.max) == ("max", None, 80_000_000)
 
 
 def test_budget_keeps_the_stated_amount_apart_from_the_range():
@@ -261,6 +270,7 @@ def test_relative_formulas():
     ("apartment for sale", "sale", "for sale"),
     ("dukaan chahiye khareedne ke liye", "sale", "khareedne"),
     ("dukaan khareedni hai", "sale", "khareedni hai"),
+    ("nahi, kharidna hai", "sale", "kharidna"),   # the other common spelling
     ("10 marla ka ghar lena hai", "sale", "lena hai"),
 ])
 def test_explicit_purpose(text, value, raw):

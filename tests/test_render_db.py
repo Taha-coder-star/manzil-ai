@@ -93,7 +93,7 @@ def test_scenario_2_roman_urdu_with_the_labelled_neighbour(st):
     assert [pid for _, pid, _ in plan.shown] == [h.row.id for h in result.hits]
     rendered = texts(plan)
     assert rendered.startswith(
-        "Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:")
+        "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:")
     assert ("*#3 DH7-101* · Ghar · sale (photos jald)\n📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb"
             in rendered)
     assert rendered.count("qareeb") == 2  # the summary line and DH7-101's own card
@@ -107,7 +107,7 @@ def test_scenario_3b_and_3c(st):
     _, no_match, _ = answer(st, CUSTOMER_B, "Kuch sasta dikhao")
     assert no_match.kind == render.NO_MATCH_KIND
     assert texts(no_match).startswith(
-        "DHA Phase 6 mein is se kam price ka 500 gaz ghar abhi available nahi. "
+        "DHA Phase 6 mein is se kam price ka 500 gaz ghar, khareedne ke liye abhi available nahi. "
         "Yahan price 9.5 crore se shuru hoti hai.")
 
     st.say("Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")], sender=CUSTOMER_B)

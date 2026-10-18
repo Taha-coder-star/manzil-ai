@@ -140,7 +140,8 @@ def test_a_retried_held_turn_asks_once_and_searches_nothing(st, monkeypatch):
                     "WHERE e ->> 'slot' = 'budget' AND e ->> 'status' = 'ask'")[0][0]
     assert asks == 1
     assert st.sent_texts().count(
-        TEMPLATES["requirements_saved"] + "\n\n" + TEMPLATES["budget_unclear"]) == 1
+        TEMPLATES["requirements_noted"].format(
+            summary="DHA Phase 6, ghar, khareedne ke liye") + "\n\n" + TEMPLATES["budget_unclear"]) == 1
     keys = [r[0] for r in st.query("SELECT dedupe_key FROM outbound_message")]
     assert len(keys) == len(set(keys))
 

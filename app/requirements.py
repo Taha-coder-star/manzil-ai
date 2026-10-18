@@ -36,10 +36,11 @@ Never log message text, spans, keys, transcripts or ids of places: only counts a
 """
 
 import copy
+import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import psycopg
 from psycopg.types.json import Jsonb
@@ -57,6 +58,15 @@ CLARIFICATION_TTL = timedelta(hours=24)  # the 24 h window / position validity (
 EXPIRY_TURNS = 2                         # R17 edge 11: re-ask once, expire on the 2nd
 IDLE_RESET = timedelta(days=90)          # R17 5: requirements reset after 90 days
 SHOWN_WINDOW = "24 hours"                # positions of the latest search stay valid 24 h
+SESSION_GAP = timedelta(hours=6)         # no inbound customer message for this long = a new session
+SESSION_LOOKBACK = timedelta(days=90)    # bounds the session query; older state is reset anyway
+# The slots that are search filters the customer sees and may no longer want. A filter saved
+# before the current session and not kept since is "inherited": it is asked about, never
+# silently searched (owner decision 2026-10-18; docs/REQUIREMENTS.md).
+INHERIT_SLOTS = ("purpose", "category", "property_types", "location", "budget", "size",
+                 "beds_min", "baths_min", "construction", "possession", "investment")
+# Backend-only memory of an older search: dropped with it when a fresh search starts.
+FRESH_CLEARS = ("previous_budget", "excluded_property_ids", "soft_prefs", "unmapped_prefs")
 
 VALUE_SLOTS = ("purpose", "category", "property_types", "location", "budget", "size",
                "beds_min", "baths_min")
@@ -245,6 +255,44 @@ def uncertain_slots(slots):
             and UNCERTAIN & set(slots[name].get("echo") or ())]
 
 
+def entry_time(entry):
+    """When the customer last stated or kept this slot: the later of updated_at and kept_at;
+    None for an entry without a readable time (never treated as inherited)."""
+    times = []
+    for key in ("updated_at", "kept_at"):
+        try:
+            times.append(datetime.fromisoformat(entry[key]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return max(times) if times else None
+
+
+def inherited_token(slots, names, conversation_id, session_start):
+    """Names the question about these inherited filters: a hash of the conversation, the
+    session, the slots and the times they were said. A button of an older question (other
+    slots, a slot said again since, an earlier session with the very same filters) or of
+    another conversation carries another token and is refused. "" when nothing is
+    inherited."""
+    if not names:
+        return ""
+    raw = "|".join([str(conversation_id), session_start.isoformat() if session_start else ""]
+                   + [f"{n}@{entry_time(slots[n]).isoformat()}" for n in names])
+    return hashlib.sha1(raw.encode()).hexdigest()[:8]
+
+
+def inherited_slots(slots, session_start):
+    """The filter slots saved before this session and not kept since (INHERIT_SLOTS order)."""
+    if session_start is None:
+        return []
+    out = []
+    for name in INHERIT_SLOTS:
+        entry = (slots or {}).get(name)
+        stamp = entry_time(entry) if isinstance(entry, dict) else None
+        if stamp is not None and stamp < session_start:
+            out.append(name)
+    return out
+
+
 # --- locations ---------------------------------------------------------------------------
 
 def id_map(gazetteer):
@@ -345,6 +393,8 @@ class Context:
     band: object = None         # (purpose, types, node ids) -> (min, max) PKR | None
     prev_guard: int | None = None   # amount the previous patch asked about (plausibility)
     asked: bool = False         # the open question was sent in an earlier, replied turn
+    session_start: object = None   # first inbound message after a SESSION_GAP; None = unknown
+    stamp: object = None        # when the customer said it: the turn's newest message time
 
 
 @dataclass(frozen=True)
@@ -395,7 +445,7 @@ def make_entry(value, raw, ev, ctx, *, base=1.0, confirmed=True, **extra):
         echo += ev.flags
     entry = {"value": value, "raw": raw, "source": source,
              "confidence": _confidence(base, ev), "confirmed": bool(confirmed),
-             "updated_at": ctx.now.isoformat()}
+             "updated_at": (ctx.stamp or ctx.now).isoformat()}
     if echo:
         entry["echo"] = sorted(set(echo))
     entry.update(extra)
@@ -547,7 +597,13 @@ class Patch:
         entry = make_entry(parsed.value, op["raw_span"], ev, self.ctx,
                            confirmed=parsed.confirmed, **self._flags(ev, reextracted))
         notices = ()
-        if old and old["value"] != parsed.value and "budget" in self.slots:
+        budget = self.slots.get("budget")
+        # "Nahi, kharidna hai" over an inherited rent: the amount said this session has no
+        # period yet, so it is not a rent figure to move aside; it takes the new purpose.
+        awaiting = (self._purpose_inherited() and budget is not None
+                    and budget["value"].get("period") is None
+                    and not inherited_slots({"budget": budget}, self.ctx.session_start))
+        if old and old["value"] != parsed.value and budget and not awaiting:
             # Buy <-> rent (R17 4.4): a rent figure is no sale budget. The old budget moves
             # aside, location / type / beds stay; an amount in the same patch is used.
             moved = copy.deepcopy(self.slots.pop("budget"))
@@ -808,8 +864,16 @@ class Patch:
 
     # -- budget / size / counts --
 
+    def _purpose_inherited(self):
+        """The stored purpose is from an earlier session, unkept and not restated by this
+        patch: it is asked about, so it must neither label a new amount as monthly rent nor
+        be replaced by a guess."""
+        entry = self.slots.get("purpose")
+        return (entry is not None and entry == self.before.get("purpose")
+                and "purpose" in inherited_slots({"purpose": entry}, self.ctx.session_start))
+
     def _purpose_now(self):
-        return self._value("purpose")
+        return None if self._purpose_inherited() else self._value("purpose")
 
     def _budget(self, op, ev, reextracted=False):
         span = op["raw_span"]
@@ -1023,6 +1087,20 @@ class Patch:
     def _finalise(self):
         if self.type_switch is not None:
             self._switch_sizes(self.type_switch)
+        self._resolve_purpose()
+        if self.moved_budget and "budget" not in self.slots:
+            key = "budget_ask_rent" if self.moved_budget == "rent" else "budget_ask_sale"
+            self.merge.notices.append(_notice(key))
+        if self.merge.changed and any(e["status"] == "applied" for e in self.merge.entries):
+            self.merge.notices.insert(0, _notice("requirements_saved"))
+        self.merge.slots = self.slots
+
+    def _resolve_purpose(self):
+        """A new amount's purpose (R17 4.4) and the budget's period. An inherited purpose is
+        left alone: the amount stays unlabelled until the customer answers the question
+        about the older filters (Patch.fresh_start infers it only if they start afresh)."""
+        if self._purpose_inherited():
+            return
         budget = self.slots.get("budget")
         purpose = self.slots.get("purpose")
         if budget and not purpose and self.budget_given and not self.purpose_given:
@@ -1034,12 +1112,6 @@ class Patch:
                 purpose = self.slots.get("purpose")
         if budget and purpose and budget["value"].get("period") is None:
             budget["value"]["period"] = normalise.period_for(purpose["value"])
-        if self.moved_budget and "budget" not in self.slots:
-            key = "budget_ask_rent" if self.moved_budget == "rent" else "budget_ask_sale"
-            self.merge.notices.append(_notice(key))
-        if self.merge.changed and any(e["status"] == "applied" for e in self.merge.entries):
-            self.merge.notices.insert(0, _notice("requirements_saved"))
-        self.merge.slots = self.slots
 
     def _stale_purpose(self, budget, purpose):
         """Live 2026-10-17: after "office on rent", "500 gaz ka ghar, budget aath crore tak"
@@ -1260,9 +1332,27 @@ class RequirementService:
         names = sorted(p.display_name for p in gz.places.values() if p.level == "area")
         ctx = Context(gz, id_map(gz), city, gz.places[node].display_name, marla, sources,
                       None, str(turn.id), call_id, now, areas=names)
+        ctx.stamp = conn.execute("SELECT max(created_at) FROM message WHERE turn_id = %s",
+                                 (turn.id,)).fetchone()[0] or now
+        ctx.session_start = self._session_start(conn, turn, ctx.stamp)
         ctx.shown = lambda: self._shown(conn, turn)
         ctx.band = lambda purpose, types, nodes: self._band(conn, gz, purpose, types, nodes)
         return ctx
+
+    def _session_start(self, conn, turn, upto):
+        """When the session of this turn began: the newest inbound customer message, up to the
+        turn's own newest one, that came more than SESSION_GAP after the one before it (the
+        first message ever also starts one). Only `message` rows count (delivery statuses are
+        outbound_message / events), by their receipt time, so a retry or a late-processed turn
+        sees the same answer. Bounded: the (agency, conversation, created_at) index and
+        SESSION_LOOKBACK. Filters saved before it are inherited. None without any message."""
+        row = conn.execute(
+            "SELECT max(created_at) FROM (SELECT created_at, created_at - lag(created_at) "
+            "OVER (ORDER BY created_at, id) AS gap FROM message WHERE conversation_id = %s "
+            "AND direction = 'inbound' AND created_at <= %s AND created_at > %s) m "
+            "WHERE gap IS NULL OR gap > %s",
+            (turn.conversation_id, upto, upto - SESSION_LOOKBACK, SESSION_GAP)).fetchone()
+        return row[0] if row else None
 
     def _band(self, conn, gz, purpose, types, nodes):
         """(min, max) price of the active listings of this purpose, optionally of these
@@ -1439,7 +1529,7 @@ class RequirementService:
         was stored). Expiry and reset entries never add "requirements_saved"."""
         notices = [ai_tools.Notice(n["key"], tuple(sorted(n.get("params", {}).items())))
                    for e in entries for n in e.get("notices", ())]
-        if any(e["status"] == "applied" and e.get("kind") not in ("expiry", "reset")
+        if any(e["status"] == "applied" and e.get("kind") not in ("expiry", "reset", "keep")
                for e in entries):
             notices.insert(0, _notice("requirements_saved"))
         return notices
@@ -1638,6 +1728,123 @@ class RequirementService:
             self._write(conn, turn, current, patch.slots, patch.merge.entries, [], ctx)
             return "confirmed"
 
+    # -- filters from an earlier session (owner decision 2026-10-18) --
+
+    def inherited_state(self, conn, turn):
+        """(stored slots, the filter slots that predate this session and were not kept, the
+        question token). The search asks about them first and never uses them unconfirmed."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            row = conn.execute("SELECT slots FROM requirement_state WHERE conversation_id = %s",
+                               (turn.conversation_id,)).fetchone()
+            stamp = conn.execute("SELECT max(created_at) FROM message WHERE turn_id = %s",
+                                 (turn.id,)).fetchone()[0] or conn.execute(
+                                     "SELECT now()").fetchone()[0]
+            start = self._session_start(conn, turn, stamp)
+        slots = row[0] if row else {}
+        names = inherited_slots(slots, start)
+        return slots, names, inherited_token(slots, names, turn.conversation_id, start)
+
+    def inherited(self, conn, turn):
+        return self.inherited_state(conn, turn)[1]
+
+    def keep_question_sent(self, conn, turn, token):
+        """The question about exactly these inherited filters was already sent in THIS
+        session (the next one is a short reminder; a typed Haan / Nahi answers it). The
+        token binds the session, and only messages created since it began count, so an
+        unanswered question from an earlier session is never today's open question."""
+        if not token:
+            return False
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            stamp = conn.execute("SELECT max(created_at) FROM message WHERE turn_id = %s",
+                                 (turn.id,)).fetchone()[0] or conn.execute(
+                                     "SELECT now()").fetchone()[0]
+            start = self._session_start(conn, turn, stamp)
+            if start is None:
+                return False
+            # shortcut: scans one conversation's outbound rows since the session began
+            # (outbound_message_conversation_idx); add a created_at index if it grows.
+            return conn.execute(
+                "SELECT 1 FROM outbound_message WHERE conversation_id = %s AND created_at >= "
+                "%s AND payload::text LIKE %s LIMIT 1",
+                (turn.conversation_id, start, f'%"keep:yes:{token}"%')).fetchone() is not None
+
+    def keep_inherited(self, conn, turn, token=None):
+        """[Haan, wohi]: the customer wants the older filters. They are marked kept (so they
+        are not asked about again this session) and an unlabelled budget now takes the kept
+        purpose's period. Returns the notices, or None when nothing is inherited any more (an
+        old tap: nothing changes). One patch row (call "keep")."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            if self._stored_call(conn, turn, "keep") is not None:
+                return ()
+            ctx = self._context(conn, turn, [], "keep")
+            if ctx is None:
+                return None
+            version, slots = self._lock_state(conn, turn)
+            names = inherited_slots(slots, ctx.session_start)
+            if not names or (token is not None and token != inherited_token(
+                    slots, names, turn.conversation_id, ctx.session_start)):
+                return None   # nothing to keep, or the button is of an older question
+            patch = Patch(ctx, slots)
+            for name in names:
+                before = patch.slots[name]
+                kept = patch.slots[name] = dict(before,
+                                                kept_at=(ctx.stamp or ctx.now).isoformat())
+                patch._record({"slot": name, "op": "set", "raw_span": "(kept)"}, "applied",
+                              "kept", slot=name, before=before, after=kept, kind="keep")
+            patch._resolve_purpose()
+            self._write(conn, turn, version, patch.slots, patch.merge.entries, [], ctx)
+            return ()
+
+    def fresh_start(self, conn, turn, scope, token=None):
+        """A fresh search. scope "inherited": drop the filters from earlier sessions, keep
+        what was stated in this one (the new area and budget), and let an amount that lost
+        its purpose be inferred or asked. scope "all": drop every stored requirement. Open
+        questions about a dropped slot are cancelled. Returns the notices (empty when
+        nothing was stored; no patch row then), or None when scope "inherited" finds nothing
+        inherited. One patch row (call "fresh")."""
+        with tenant_transaction(conn, turn.agency_id):
+            _set_timeout(conn)
+            stored = self._stored_call(conn, turn, "fresh")
+            if stored is not None:
+                return tuple(self.replay_notices(stored[1]))
+            ctx = self._context(conn, turn, [], "fresh")
+            if ctx is None:
+                return None
+            version, slots = self._lock_state(conn, turn)
+            names = inherited_slots(slots, ctx.session_start)
+            if token is not None and token != inherited_token(
+                    slots, names, turn.conversation_id, ctx.session_start):
+                return None   # the button is of an older question
+            if scope == "inherited":
+                if not names:
+                    return None
+                names += [n for n in FRESH_CLEARS if n in slots and isinstance(slots[n], dict)
+                          and (entry_time(slots[n]) or ctx.now) < ctx.session_start]
+            else:
+                names = list(slots)
+            if not names:
+                return ()
+            patch = Patch(ctx, slots)
+            for name in names:
+                before = patch.slots.pop(name)
+                patch._record({"slot": name, "op": "clear", "raw_span": "(fresh search)"},
+                              "applied", "fresh_search", slot=name, before=before, kind="reset")
+            effects = []
+            pending = self._pending(conn, turn)
+            if pending is not None and (scope == "all" or pending.slot in names):
+                effects.append(("close", pending.id, "cancelled"))
+            elif pending is not None:
+                ctx.pending = pending
+            if scope == "inherited" and patch.slots.get("budget"):
+                patch.budget_given = True   # an amount without a purpose: infer it or ask
+                patch._resolve_purpose()
+            self._write(conn, turn, version, patch.slots, patch.merge.entries,
+                        effects + patch.merge.effects, ctx)
+            return tuple(patch.merge.notices)
+
     def _reask(self, pending):
         if pending.slot == "purpose":
             return _notice("purpose_ask")
@@ -1663,6 +1870,15 @@ class TurnBinding:
 
     def open_asks(self):
         return self.service.open_asks(self.conn, self.turn)
+
+    def inherited(self):
+        return self.service.inherited(self.conn, self.turn)
+
+    def inherited_state(self):
+        return self.service.inherited_state(self.conn, self.turn)
+
+    def keep_asked(self, token):
+        return self.service.keep_question_sent(self.conn, self.turn, token)
 
     def finish(self):
         return self.service.finish_turn(self.conn, self.turn, self.texts)
