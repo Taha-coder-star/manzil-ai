@@ -304,6 +304,8 @@ def test_a_restated_budget_after_cheaper_shows_the_listings_again(st):
 def test_scenario_3b_cheaper_is_an_honest_no_match_with_three_buttons(st):
     [reply] = cheaper(st)
     assert button_ids(reply) == ["nomatch:nearby", "nomatch:budget", "handoff:request"]
+    said = sent_text([reply])
+    assert "Yahan price 7.8 crore se shuru hoti hai." in said and "9.5 crore" not in said
     assert st.state()[1]["budget"]["value"]["max"] <= 80_000_000  # never raised
 
 

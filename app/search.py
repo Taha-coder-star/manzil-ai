@@ -626,8 +626,9 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     relaxations = [s for s in LADDER if any(s in h.needed for h in kept)]
     lowest = None
     if not kept:
-        prices = [r.price_pkr for r in rows
-                  if r.location_id in requested and r.id not in request.excluded]
+        # Every ACTIVE listing in scope counts, the shown / excluded ones too (live
+        # 2026-10-18: after "Kuch sasta" the line said 9.5 crore while 7.8 crore was shown).
+        prices = [r.price_pkr for r in rows if r.location_id in requested]
         lowest = min(prices) if prices else None
 
     result = Result(OK if kept else NO_MATCH, hits=kept, total_matches=len(kept),

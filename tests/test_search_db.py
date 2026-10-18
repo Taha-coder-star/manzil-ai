@@ -100,7 +100,8 @@ def test_scenario_3b_cheaper_is_an_honest_no_match(st):
     assert result.status == search.NO_MATCH and result.hits == []
     assert result.relaxations == []
     assert result.excluded_reasons["already_shown"] == 3  # DH6-101 / 102 + neighbour DH7-101
-    assert result.lowest_price_pkr == 95_000_000          # R17 edge 8: "shuru 9.5 crore se"
+    # R17 edge 8: the lowest ACTIVE price in the requested scope, the shown ones too
+    assert result.lowest_price_pkr == 78_000_000          # DH6-101 (live 2026-10-18: not 9.5 cr)
 
 
 def test_scenario_3c_phase_8_added_with_the_cheaper_budget_kept(st):

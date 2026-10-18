@@ -108,7 +108,7 @@ def test_scenario_3b_and_3c(st):
     assert no_match.kind == render.NO_MATCH_KIND
     assert texts(no_match).startswith(
         "DHA Phase 6 mein is se kam price ka 500 gaz ghar, khareedne ke liye abhi available nahi. "
-        "Yahan price 9.5 crore se shuru hoti hai.")
+        "Yahan price 7.8 crore se shuru hoti hai.")
 
     st.say("Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")], sender=CUSTOMER_B)
     _, phase_8, _ = answer(st, CUSTOMER_B, "Phase 8 mein bhi dekho")
