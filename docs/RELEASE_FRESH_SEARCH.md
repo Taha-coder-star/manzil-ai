@@ -70,7 +70,7 @@ and the rollback-compatibility run. The only pre-deployment phone action is **se
 ## 2. Runtime change set and test evidence
 
 `git diff --name-only 91b7cef <M> -- app migrations requirements.txt Dockerfile demo deploy .dockerignore` must print
-exactly these 15 files (rehearsed on `69820fe`: **GATE OK**):
+exactly these 15 files (the build script enforces it); three more files are replaced because production lags (section 3):
 
 ```
 app/card_regen.py (new)    app/cards.py            app/customer_intent.py (new)
@@ -86,107 +86,101 @@ No dependency, `Dockerfile`, migration, `demo/`, `deploy/` or compose change (Pi
 Candidate `69820fe`: 703 + 1,337 + 472 + 1,089 = **3,601 passed, 0 failed, 0 skipped** (= collect-only), Ruff clean,
 disposable PostgreSQL 18.6, `REQUIRE_DATABASE_TESTS=1`, four batches run one at a time. Re-run on `M`.
 
-## 3. Release kit (local, from the exact commit; never the E:\manzilai checkout)
+## 3. Release kit v2: 18 files (local, from the exact commit; never the E:\manzilai checkout)
 
-The main checkout is CRLF (`core.autocrlf=true`); archive committed bytes with autocrlf off. Everything in the kit is
-read from **named paths of a commit** (`git archive` / `git show`), so it can only contain committed files of that commit.
+**Why 18, not 15.** The real baseline gate (2026-10-18) found production different from `91b7cef` in three offline
+benchmark tools: `app/bench_live.py` missing, `app/benchmark.py` and `app/staff_bench.py` older. They are Task 10.3 tooling
+(`b7cf3d3`, 2026-10-16), unchanged between `91b7cef` and the merge commit `46c44d8`, and no earlier layered release shipped
+them (each release layered only the runtime files it changed). Production's versions are expected to be those of `7f5cd3d`
+(the 10.1 base: `benchmark.py` `0b6c65b1...`, `staff_bench.py` `1bd84df4...`, `bench_live.py` not yet existing). That is a
+**hypothesis until the gate confirms it by hash**: the gate accepts exactly those blobs (or ABSENT for `bench_live.py`) and
+stops, printing the real hash, on anything else. No web or worker module imports them (`bench_live` imports `benchmark`,
+`staff_bench`, `stt_bench`; `staff_bench` imports `bench_live` lazily inside one function; nothing in `web`/`worker`/`handlers`
+does), so the old versions are harmless today, and replacing them makes `app/` byte-identical to the tested commit.
+
+Between `7f5cd3d` and `46c44d8` there is no change in `migrations/`, `demo/`, `requirements.txt` or the `Dockerfile`
+(`git diff 7f5cd3d 46c44d8 -- migrations demo requirements.txt Dockerfile` is empty), so replacing the 18 `app/` files is
+sufficient for the image's `app/`, `migrations/` and `demo/` trees to equal the tested commit. Dependencies are the image's
+own (unchanged requirements). The image check in section 6 proves the tree equality on the assembled image.
+
+Build, in Git Bash from a clean checkout of the repository (the script pins `core.autocrlf=false` on every git call, stops if
+the changed-file set vs `91b7cef` is not exactly the expected 15, and verifies the archive against the Git blobs):
 
 ```
-M=<merge commit>; S=${M:0:7}; K=release-kit; mkdir -p $K
-CH="app/card_regen.py app/cards.py app/customer_intent.py app/customer_tools.py app/demo_media.py \
- app/handoff.py app/handoff_actions.py app/handoff_alert.py app/media.py app/normalise.py \
- app/render.py app/requirements.py app/search.py app/staff_cards.py app/turn_engine.py"
-git -c core.autocrlf=false archive --format=tar --prefix=release-fresh/ -o $K/manzil-fresh-$S.tar $M $CH
-h() { git -c core.autocrlf=false show "$1:$2" | sha256sum | cut -d' ' -f1; }
-for f in $CH; do printf '%s  %s\n' "$(h $M $f)" $f; done > $K/SHA256SUMS                 # the 15 release files
-# the modules this release does not change, and the 12 it replaces that exist in 91b7cef (turn_engine.py has 3 allowed states)
-for f in $(git ls-tree -r --name-only $M app/ | grep '\.py$'); do case " $CH " in *" $f "*) ;; \
-  *) printf '%s  %s\n' "$(h $M $f)" $f;; esac; done > $K/SHA256SUMS.unchanged
-for f in $CH; do case $f in app/turn_engine.py|app/card_regen.py|app/customer_intent.py) ;; \
-  *) printf '%s  %s\n' "$(h 91b7cef $f)" $f;; esac; done > $K/SHA256SUMS.base
-git ls-tree -r --name-only 91b7cef app/ | grep '\.py$' | LC_ALL=C sort > $K/FILES.expected
-printf '%s\n' d56191a8d449bc5837758936e6dce5689043ad2225e604430d902b0b64fe2617 \
-  8eb0b6256972b7e2d3f9987665e0a9c84d563439a7d0f84fb430c490bfb43777 \
-  7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00 > $K/TURN_ENGINE.allowed
-for f in fresh_search_baseline.sh fresh_search_switch.sh; do git -c core.autocrlf=false show $M:docs/release/$f > $K/$f; done
-printf 'FROM manzil-ai:<RUNNING_TAG>\nCOPY release-fresh/app/ /app/app/\n' > $K/Dockerfile.release
-( cd $K && sha256sum * > ../KIT.sha256 && mv ../KIT.sha256 KIT.sha256 )              # integrity of every kit file
+bash docs/release/build_kit.sh <M> <outdir>        # e.g. 46c44d8; scripts are taken from HEAD (or a third argument)
 ```
 
-`<RUNNING_TAG>` is only needed for the build; the baseline gate itself works on the running containers.
+It writes: the 18-file tar, `SHA256SUMS` (18), `SHA256SUMS.unchanged` (43 other app modules), `SHA256SUMS.base` (12 replaced
+modules at their `91b7cef` versions), `SHA256SUMS.data` (22 migrations 005+/demo files), `FILES.expected` (the `91b7cef`
+file list), `FILES.release` (the merge commit's file list), `STATES.allowed`, the three scripts, `Dockerfile.release`,
+`KIT.sha256` and `manzil-fresh-<S>-kit.zip`.
 
-**Artifact checks (all must pass; rehearsed on the tip commit, results in `evidence/artifact-verification.txt`):**
+`STATES.allowed` is the only place an unusual production state is permitted, one line per path and hash (or `ABSENT`):
+`turn_engine.py` x3 (`91b7cef`; + hotfix `608f4d6`; + hotfix + the greeting line), `benchmark.py` and `staff_bench.py` at
+`7f5cd3d`, `bench_live.py` ABSENT, and migrations 001-004 as Git LF blob or CRLF working-copy form (historical RDS checksums
+for 001/002 are CRLF while Git stores LF).
 
-| Check | Command / result |
+**Artifact checks (rehearsed on `46c44d8`; the build script enforces the first four):**
+
+| Check | Result |
 |---|---|
-| Only intended files | `tar -tf` lists exactly the 15 paths + 2 directories; 15 regular files, no links, no absolute paths |
-| Byte-exact | extracted files pass `sha256sum -c SHA256SUMS` (15 OK), the Git blobs' hashes |
-| Nothing unrelated | `git status` clean; `git diff --check` clean; `git diff --name-only 91b7cef $M -- app migrations requirements.txt Dockerfile demo deploy .dockerignore` prints exactly the 15 |
-| No secrets | regex scan of the kit (AWS / Google / Meta token shapes, private keys, credentialed URLs, quoted secrets): no hit. **gitleaks is not installed on this machine**: run it on the repository (`gitleaks detect`) as part of gate 2 |
-| No env / data files | none of `.env`, `*.env`, `demo/`, `migrations/`, `*.pem` is in the archive |
-| Scripts | `bash -n` on both; their stub tests (`tests/test_release_script.py`, 27 cases) pass on `M` |
+| changed set vs `91b7cef` | exactly the expected 15 files; the 3 benchmark tools are identical between `91b7cef` and `M` |
+| archive | exactly the 18 paths, bytes equal to the Git blobs |
+| text files | no CR byte in any manifest, script or Dockerfile |
+| counts | 18 + 43 = 61 app modules = every `.py` of `M`; no path in two manifests |
+| no secrets | regex scan of the kit; **gitleaks is not installed on this machine**: run it on the repository |
+| scripts | `bash -n`; 42 stub tests; run for real against Docker (section 11) |
 
 ## 4. Transfer (before anything is checked or changed on the server)
 
-One directory is used from here on: `REL=/home/ubuntu/release-fresh`.
+One directory from here on: `REL=/home/ubuntu/release-fresh`. The ZIP is flat and has no mode bits: run scripts with `bash`.
 
-1. CloudShell upload every file of the kit (tar, `.tar.sha256`, `SHA256SUMS*`, `FILES.expected`, `TURN_ENGINE.allowed`,
-   `fresh_search_*.sh`, `Dockerfile.release`, `KIT.sha256`).
-2. CloudShell: `aws s3 cp <file> s3://<bucket>/staging/release-fresh/` for each (private prefix; never `tenant/` or `card/`).
-3. EC2: `mkdir -p $REL && cd $REL`, `aws s3 cp` each file down, then
-   `sha256sum -c KIT.sha256` (all OK), `sha256sum -c manzil-fresh-$S.tar.sha256`, `tar -xf manzil-fresh-$S.tar`,
-   `( cd release-fresh && sha256sum -c ../SHA256SUMS )` (15 OK), `chmod +x fresh_search_*.sh`.
-4. Delete the `staging/release-fresh/` objects after the build in section 6.
+1. CloudShell: upload `manzil-fresh-<S>-kit.zip`; `aws s3 cp manzil-fresh-<S>-kit.zip s3://<bucket>/staging/release-fresh/` (private prefix; never `tenant/` or `card/`).
+2. EC2: `mkdir -p $REL && cd $REL && aws s3 cp s3://<bucket>/staging/release-fresh/manzil-fresh-<S>-kit.zip . && python3 -m zipfile -e manzil-fresh-<S>-kit.zip .`
+3. `sha256sum -c KIT.sha256` (every line OK), `sha256sum -c manzil-fresh-<S>.tar.sha256`, `tar -xf manzil-fresh-<S>.tar`,
+   `( cd release-fresh && sha256sum -c ../SHA256SUMS | grep -vc ': OK' )` prints 0.
 
 ## 5. Baseline gate on EC2 (read-only; stops on any mismatch)
 
 ```
 cd /home/ubuntu/release-fresh
-sudo --preserve-env=REL REL=$PWD ./fresh_search_baseline.sh
+sudo --preserve-env=REL REL=$PWD bash ./fresh_search_baseline.sh
 ```
 
-It checks the **running** web and worker containers, not only the image, and writes `$REL/PRE_ID` (the image ID both run)
-only if everything passes:
+The gate checks the **running** web and worker containers and the image, **collects every mismatch** and prints them all with
+the actual hashes (one run is enough to see everything), then exits 1; it writes `$REL/PRE_ID` only on a clean pass:
 
-- web and worker run one image ID;
-- `docker diff` shows no change under `/app` (other than `__pycache__`) since the container started: no in-place edit;
-- inside each running container: the 46 unchanged modules and the 12 replaced modules at their `91b7cef` versions
-  match their manifests; the list of `app/**/*.py` equals `FILES.expected` (no extra or missing module, so no
-  `card_regen.py` / `customer_intent.py` yet); `app/turn_engine.py` hashes to one of the three allowed states;
-- the image itself passes the same two manifests.
+- web and worker run one image ID; `docker diff` shows no change under `/app` (other than `__pycache__`) = no in-place edit;
+- inside each running container (`docker exec -i`, so the manifests really reach the checker): the 43 unchanged modules, the 12
+  replaced modules at their `91b7cef` versions and the 22 data files match; every path in `STATES.allowed` is in one of its
+  listed states; the file list has no extra file and no missing file except those marked ABSENT;
+- the image itself passes the three manifests.
 
-| allowed sha256 of app/turn_engine.py | state |
-|---|---|
-| `d56191a8d449bc5837758936e6dce5689043ad2225e604430d902b0b64fe2617` | `91b7cef` |
-| `8eb0b6256972b7e2d3f9987665e0a9c84d563439a7d0f84fb430c490bfb43777` | + hotfix `608f4d6` |
-| `7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00` | + hotfix + greeting line (clean) |
+A hand-patched `turn_engine.py` hashes differently and is reported; compare it by hand
+(`docker exec deploy-web-1 cat /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)` must show only the
+greeting-rule lines) and only then add its hash to `STATES.allowed`. For a benchmark tool whose hash is not the `7f5cd3d`
+blob, send the printed hash: it is mapped to a commit before anything is accepted. Never edit a manifest to make a check pass.
 
-A hand-patched `turn_engine.py` will hash differently and the gate stops. Only then compare by hand:
-`docker exec deploy-web-1 cat /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)` must show only the
-greeting-rule lines. If it does, append that hash (not before) to `TURN_ENGINE.allowed` and re-run. Any other
-difference, or any other failed check, **stops the release**.
-
-## 6. Build and image checks (no service touched yet)
+## 6. Build and image check (no service touched yet)
 
 ```
-cd /home/ubuntu/release-fresh
-PRE=$(cat PRE_ID); sed -i "s#manzil-ai:<RUNNING_TAG>#$PRE#" Dockerfile.release       # build on the recorded ID, not a tag
-docker build -f Dockerfile.release -t manzil-ai:fresh-$S .
-docker run --rm --entrypoint sh -v "$PWD/SHA256SUMS:/tmp/S:ro" manzil-ai:fresh-$S -c 'cd /app && sha256sum -c /tmp/S'
-for i in $PRE manzil-ai:fresh-$S; do docker run --rm --entrypoint sh $i -c 'cd /app && find app migrations demo -type f -not -name "*.pyc" | sort | xargs sha256sum' > "files-$(echo $i | tr ':/' '__').txt"; done
-diff files-sha256_*.txt files-manzil-ai_fresh-$S.txt      # only the 15 app/ lines (2 new, 13 changed)
-docker run --rm --entrypoint python manzil-ai:fresh-$S -c "import app.web, app.worker, app.customer_intent, app.card_regen; print('ok')"
-docker run --rm --entrypoint id manzil-ai:fresh-$S         # appuser, not root
+cd /home/ubuntu/release-fresh; PRE=$(cat PRE_ID); S=<S>
+sudo docker tag "$PRE" manzil-ai:base-$S            # FROM needs a tag, not an image id
+test "$(sudo docker image inspect manzil-ai:base-$S --format '{{.Id}}')" = "$PRE" && echo "base = recorded image"
+sudo docker build -f Dockerfile.release -t manzil-ai:fresh-$S .
+sudo --preserve-env=REL REL=$PWD bash ./fresh_search_image_check.sh manzil-ai:fresh-$S
 ```
 
-Migration state is read-only and unchanged: the check of docs/RELEASE_10_2.md section 6 must still print `17 17 []`.
-Never run the migrator.
+The image check proves the assembled image equals the tested commit: the 18 released files, the 43 other modules and the 22
+data files match their manifests; the file list equals `FILES.release`; migrations 001-004 are in an explained state; the user
+is `appuser`; the runtime and the three benchmark modules import. It prints every problem it finds and exits 1.
+Migration state is read-only and unchanged: the check of docs/RELEASE_10_2.md section 6 must still print `17 17 []`. Never run the migrator.
 
 ## 7. Switch (web and worker only; Caddy untouched), pinning, stop and rollback behaviour
 
 ```
 cd /home/ubuntu/release-fresh
-sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=$PWD ./fresh_search_switch.sh switch $S
+sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=$PWD bash ./fresh_search_switch.sh switch $S
 ```
 
 The script (`docs/release/fresh_search_switch.sh`, `set -Eeuo pipefail`, tested against stubs) works like this:
@@ -236,7 +230,7 @@ unconfirmed budget monthly; the old greeting text; an unrendered card; web or wo
 
 ## 10. Rollback and compatibility
 
-Automatic during the switch (section 7). Manual, later: `sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=/home/ubuntu/release-fresh ./fresh_search_switch.sh rollback`,
+Automatic during the switch (section 7). Manual, later: `sudo --preserve-env=SITE,REL SITE=<SITE_ADDRESS> REL=/home/ubuntu/release-fresh bash ./fresh_search_switch.sh rollback`,
 which uses `$REL/PRE_ID`; by hand: `docker tag $(cat $REL/PRE_ID) manzil-ai:latest` then the same `up -d --no-deps --no-build --force-recreate web worker`.
 Check that both containers report the recorded ID (`docker inspect <c> --format '{{.Image}}'`). Keep `manzil-ai:pre-fresh`,
 the recorded image, the kit and the `files-*.txt` lists until the smoke checks are done.
@@ -269,3 +263,18 @@ data change by itself.
 - The "question already sent" check scans one conversation's outbound rows of the last 7 days (2.5 ms at 5,003 rows); the
   session query is 4.4 ms at 10,005 messages (`query-plans-and-timings.txt`). Migration 018 is deferred until real history is larger.
 - Existing card images are not rebuilt by this release (`card_regen` is out of scope; old cards keep the cropped layout).
+
+## 12. Validation of the v2 kit against real Docker (local, 2026-10-18)
+
+Nothing in production was touched. A reference image was built from `46c44d8` (LF export, repo `Dockerfile`); a **pseudo-production**
+image was made from it by putting back the `91b7cef` versions of the 12 files, `turn_engine.py` at the hotfix + greeting state,
+the `7f5cd3d` benchmark tools, and removing `card_regen.py`, `customer_intent.py`, `bench_live.py`. Then, with real Docker and Compose:
+
+1. `fresh_search_baseline.sh` on two containers of the pseudo-production image: **OK**, `PRE_ID` written. With an in-place edit
+   (`render.py`, `benchmark.py` appended, `cards.py` deleted) it listed all four problems with the hashes and wrote nothing.
+2. Image built `FROM manzil-ai:base-<S>` (a `FROM sha256:...` is rejected by Docker: found and fixed here), then
+   `fresh_search_image_check.sh`: **OK**; the same check on the pseudo-production image fails with 5 problems.
+3. `fresh_search_switch.sh switch` through a real Compose project named `deploy` (containers `deploy-web-1`/`deploy-worker-1`):
+   a tampered `SHA256SUMS` made the in-container check fail and the script **rolled back by the recorded ID**; with the good
+   kit it switched, 18/18 files verified inside both running containers (`compose exec -T` forwards stdin); a second switch
+   stopped at its precondition; `rollback` returned both to the recorded ID.
