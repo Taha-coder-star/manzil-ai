@@ -1,43 +1,75 @@
 # Fresh-search release runbook (prepared, not run)
 
-Status: prepared locally on `release/fresh-search`; **no production step has been run**. Owner-run,
-after the independent diff review and the PR merge. Nothing here is pushed or deployed.
+Status: prepared and reviewed locally on `release/fresh-search`. **No production step has been run;
+nothing is pushed or deployed; `card_regen` is out of scope.** Shutdown / cost-saving commands are
+deliberately **not** in this file: see `docs/RELEASE_FRESH_SEARCH_COST.md`.
 
 | Item | Value |
 |---|---|
-| Release candidate | `69820fe` on `release/fresh-search` = `6368cdd` (fresh-search work) + `8310b2e` (cherry-pick of hotfix `608f4d6`) + a one-line test fix |
-| Release image | `manzil-ai:fresh-<M7>`, `M` = the merge commit that is finally released (its tree must equal the candidate's for the 15 files below) |
-| Layered on | the image **currently running** (step 3 identifies it); not rebuilt from a checkout |
-| Migrations | none (RDS keeps 001-017). New customer-state keys (`kept_at`) are extra JSON in `requirement_state.slots` |
+| Runtime candidate | `69820fe` on `release/fresh-search` (this runbook is the commit on top) |
+| Release image | `manzil-ai:fresh-<M7>`, `M` = the merge commit that is finally released |
+| Layered on | the image **currently running**, identified by the baseline gate (section 4) |
+| Migrations | none (RDS keeps 001-017) |
 | Caddy | unchanged (`caddy:2`, not recreated) |
-| Snapshot | none needed (no schema change, rollback is code-only). Skipped to save cost; the latest automated backup stays |
+| Snapshot | none: no schema change, rollback is code-only (the latest automated backup stays) |
 
-## 0. Decisions and facts the owner must see first
+## 0. What ships, and the corrected incident explanation
 
-1. **The hotfix must travel with this release.** Production runs `91b7cef` + hotfix `608f4d6`
-   (the voice update-only loop) + the hand-patched greeting line. `608f4d6` is on
-   `hotfix/switch-91b7cef-voice-update-loop` and is **not** in `main` or in `6368cdd`. Releasing
-   `6368cdd` alone would silently remove it. The candidate carries it (clean cherry-pick; its test
-   needed one wording update, committed as `69820fe`).
-2. **The release is bigger than the fresh-search work.** Production is at `91b7cef`; `main` has
-   since merged PR #45 (WhatsApp layout, uncropped card images), #46 (size on type switch) and #47
-   (Devanagari words, stale-purpose re-inference, "cheaper" exclusion). They are in the candidate
-   because the fresh-search commit sits on top of them. Per-file: 15 runtime files change, listed in
-   section 1. The alternative (a narrow release of only the fresh-search work on `91b7cef`) needs a
-   new branch and conflict resolution in `render.py`, `requirements.py`, `normalise.py`,
-   `customer_tools.py`: not prepared; say so if you prefer it.
-3. **Root cause correction.** The 2026-10-18 failure ("aath crore tak" kept rent) happened on the
-   `91b7cef` build. PR #47's re-inference fix (`7e899f6`) was not deployed then. The fresh-search work
-   adds the session / question layer on top; both reach production with this release.
-4. **Still pending before go:** independent diff review; real WhatsApp verification (section 9);
-   merge of the PR(s). Demo Scope scenario 2 wording is approved (2026-10-18).
-5. **Not part of this release:** `python -m app.card_regen` (rebuilds existing card images from PR #45;
-   writes S3 and RDS rows). Decide separately; until it runs, old cards keep the cropped layout.
+**Expected production build (P)** = `91b7cef` + hotfix `608f4d6` (voice update-only loop) + the greeting line
+hand-patched into `turn_engine.py` on 2026-10-18 (`f4cc48d`'s one-line change). P is the commit
+`fdd4de3` (tag `review/prod-expected-fdd4de3`), rebuilt locally; **it is not yet verified on the server**:
+the baseline gate (section 4) is what verifies it.
 
-## 1. Runtime change set (re-check at release time)
+Included on top of P (15 runtime files; `git log 91b7cef..release/fresh-search`):
 
-`git diff --name-only 91b7cef <M> -- app migrations requirements.txt Dockerfile demo deploy .dockerignore`
-must print exactly these 15 files (rehearsed on `69820fe`: **GATE OK**):
+| Commit(s) | PR | Purpose |
+|---|---|---|
+| `a0df4c9` | #45 | WhatsApp layout (bold codes / prices, spacing), uncropped card images (new cards only) |
+| `6df8fa2` | #46 (merge) | size asked again on house <-> office switch (`91b7cef` is already in production) |
+| `15dd521` `7e899f6` `6f9c988` | #47 | Devanagari words; re-infer a stale purpose only after a type switch / over an inferred one; a stated budget ends the "cheaper" exclusion |
+| `f4cc48d` | #48 | the bare-greeting prompt rule (already hand-patched in production) |
+| `6368cdd` | (this work) | filters from an earlier session, keep / new-search question, typed commands, greeting before the model, filter summaries in headers, "kharidna" |
+| `8310b2e` | (hotfix `608f4d6`) | carried because it is on a separate branch, **not** in `main`; without it this release would remove it |
+| `69820fe` | - | one test assertion updated for the new no-match wording |
+
+**Incident, 2026-10-17/18 (test number). Observed on production** (read-only query of the real database, run on
+the 18th): stored `purpose=rent` saved 2026-10-16 18:39; `property_types=house` and `size=500 gaz` saved 2026-10-17
+22:06; `budget` 1.8-2.2 crore saved 18th 04:42 with **`period: monthly`**; the 04:41 "hi" produced a rejected
+`set purpose` op; the reply sent was "DHA Phase 6 mein is budget mein 500 gaz ghar abhi available nahi."
+
+**Replayed through code** (`incident-replay.txt`, same slots and patches through the merge code of each tree):
+
+| Tree | 17th "ghar + aath crore tak" | 18th "aur budget 2 crore" |
+|---|---|---|
+| P (expected production) | purpose rent, period monthly | purpose rent, period **monthly** (matches the observed row) |
+| candidate without a session layer (= PR #47 code) | identical | identical |
+| candidate with the session layer | period null, purpose asked about | period null |
+
+So: the observed behaviour is reproduced by P's code; **PR #47 does not change it** (the rent was stated, and a
+flat -> house change is not a type switch). My earlier note that PR #47 fixed this was wrong. What fixes it is the
+session layer in `6368cdd`, which was never in production. Not observed, only inferred: the exact ops of the 17th
+22:06 patch (the query output was truncated) and the production image's hashes (gate, section 4).
+
+## 1. Release gates (in this order; each must pass before the next)
+
+1. **Independent diff review** of the review package (runtime, tests, docs diffs, this runbook, the incident
+   replay, the rollback-compatibility run). Findings are fixed on the branch and the package regenerated.
+2. **PR approval and merge, then verification of the final release artifact.** `main` must contain the hotfix
+   (`608f4d6`'s change) and the 15 files must be byte-identical to the reviewed candidate (section 3). On `M`:
+   re-run the four test batches (expected totals in section 2), Ruff, `git diff --check`, rebuild the kit, run the
+   gate commands in section 3, compare hashes with the candidate's `SHA256SUMS`.
+3. **Deployment** (sections 4-8): baseline gate, transfer, build, image checks, switch, health.
+4. **Real WhatsApp smoke checks immediately afterwards** (section 9), with **rollback on any failure** (section 10).
+
+There is no WhatsApp staging environment, so phone checks against the new code **cannot** be a pre-deployment
+gate. Before deployment the evidence is automated: the test suite on disposable PostgreSQL, the incident replay,
+and the rollback-compatibility run. The only pre-deployment phone action is **seeding**, which exercises the
+*current* production code, not the new code (section 9.0).
+
+## 2. Runtime change set and test evidence
+
+`git diff --name-only 91b7cef <M> -- app migrations requirements.txt Dockerfile demo deploy .dockerignore` must print
+exactly these 15 files (rehearsed on `69820fe`: **GATE OK**):
 
 ```
 app/card_regen.py (new)    app/cards.py            app/customer_intent.py (new)
@@ -47,16 +79,16 @@ app/normalise.py           app/render.py           app/requirements.py
 app/search.py              app/staff_cards.py      app/turn_engine.py
 ```
 
-No dependency, `Dockerfile`, migration, `demo/`, `deploy/` or compose change; Pillow is already in the
-image. Anything else in that diff stops the runbook (plan a full rebuild).
+No dependency, `Dockerfile`, migration, `demo/`, `deploy/` or compose change (Pillow is already in the image).
+`app/card_regen.py` ships as inert code: nothing imports it and nothing runs it.
 
-Tests on the candidate (disposable PostgreSQL 18.6, `REQUIRE_DATABASE_TESTS=1`, four batches run one
-at a time): 703 + 1,337 + 472 + 1,089 = **3,601 passed, 0 failed, 0 skipped** (= collect-only 3,601).
-Ruff clean. Re-run on `M` if `M`'s tree differs from the candidate.
+Candidate `69820fe`: 703 + 1,337 + 472 + 1,089 = **3,601 passed, 0 failed, 0 skipped** (= collect-only), Ruff clean,
+disposable PostgreSQL 18.6, `REQUIRE_DATABASE_TESTS=1`, four batches run one at a time. Re-run on `M`.
 
-## 2. Release kit (local, from the exact commit; never the E:\manzilai checkout)
+## 3. Release artifact: build and verify (local, from the exact commit; never the E:\manzilai checkout)
 
-The main checkout is CRLF (`core.autocrlf=true`); archive committed bytes with autocrlf off.
+The main checkout is CRLF (`core.autocrlf=true`); archive committed bytes with autocrlf off. The archive is made by
+`git archive` of **named paths from a commit**, so it can contain only committed files of that commit.
 
 ```
 M=<merge commit>; S=${M:0:7}; K=release-kit; mkdir -p $K
@@ -65,164 +97,158 @@ CH="app/card_regen.py app/cards.py app/customer_intent.py app/customer_tools.py 
  app/render.py app/requirements.py app/search.py app/staff_cards.py app/turn_engine.py"
 git -c core.autocrlf=false archive --format=tar --prefix=release-fresh/ -o $K/manzil-fresh-$S.tar $M $CH
 for f in $CH; do printf '%s  %s\n' "$(git -c core.autocrlf=false show $M:$f | sha256sum | cut -d' ' -f1)" $f; done > $K/SHA256SUMS
-# every other app module: must already match in production (baseline gate)
 for f in $(git ls-tree -r --name-only $M app/ | grep '\.py$'); do case " $CH " in *" $f "*) ;; \
   *) printf '%s  %s\n' "$(git -c core.autocrlf=false show $M:$f | sha256sum | cut -d' ' -f1)" $f;; esac; done > $K/SHA256SUMS.unchanged
 printf 'FROM manzil-ai:<RUNNING_TAG>\nCOPY release-fresh/app/ /app/app/\n' > $K/Dockerfile.release
 ( cd $K && sha256sum manzil-fresh-$S.tar > manzil-fresh-$S.tar.sha256 )
-tar -xOf $K/manzil-fresh-$S.tar release-fresh/app/requirements.py | sha256sum   # = its SHA256SUMS line
 ```
 
-Rehearsed on `69820fe` (kit in `E:\manzilai-fresh-review\kit-rehearsal`): 15 + 46 checksum lines. File hashes
-depend only on content, so they hold for `M` when the 15 files are unchanged. Also copy
-`stored_requirements.py` (read-only state check from the earlier review) for step 9.
+**Artifact checks (all must pass; rehearsed on `69820fe`, results in `artifact-verification.txt`):**
 
-## 3. Baseline gate on EC2 (read-only; stop on any mismatch)
+| Check | Command / result |
+|---|---|
+| Only intended files | `tar -tf` lists exactly the 15 paths + 2 directories; 15 regular files, no links, no absolute paths |
+| Byte-exact | extracted files pass `sha256sum -c SHA256SUMS` (15 OK), which are the Git blobs' hashes |
+| Nothing unrelated | `git status` clean; `git diff --check` clean; the path gate above prints only the 15 files |
+| No secrets | regex scan of the tar contents (AWS / Google / Meta token shapes, private keys, credentialed URLs, quoted secrets): no hit. **gitleaks is not installed on this machine**: run it on the repository (`gitleaks detect`) as part of gate 2 |
+| No env / data files | none of `.env`, `*.env`, `demo/`, `migrations/`, `*.pem` is in the archive |
+
+## 4. Baseline gate on EC2 (read-only; stop on any mismatch)
 
 ```
 cd /home/ubuntu/manzil-ai
 docker compose -f deploy/compose.yml --env-file .env ps
 for c in deploy-web-1 deploy-worker-1; do docker inspect $c --format '{{.Name}} {{.Config.Image}} {{.Image}}'; done
-docker image ls manzil-ai --format '{{.Tag}} {{.ID}}' | head -20      # note the running tag and ID
+docker image ls manzil-ai --format '{{.Tag}} {{.ID}}' | head -20
 ```
 
-Web and worker must be on one image. Record its tag as `<RUNNING_TAG>` and ID. (The 2026-10-17 hotfix
-runbook used base `manzil-ai:switch-91b7cef`, ID `sha256:60f94ec1...876bfda`; the hotfix and the
-greeting patch were layered after it: do not assume, read it.)
-
-Check the 46 modules this release does **not** change, and see which state the 15 are in:
+Web and worker must show the same image ID. Record its tag as `<RUNNING_TAG>` and its ID as `<PRE_ID>`
+(the 2026-10-17 hotfix runbook used base `manzil-ai:switch-91b7cef`; read the real one, do not assume).
 
 ```
 docker run --rm --entrypoint sh -v "$PWD/SHA256SUMS.unchanged:/tmp/u:ro" <RUNNING_TAG> \
-  -c 'cd /app && sha256sum -c /tmp/u'                     # every line OK, else STOP
-docker run --rm --entrypoint sh <RUNNING_TAG> -c 'cd /app && sha256sum app/turn_engine.py app/requirements.py app/customer_tools.py'
+  -c 'cd /app && sha256sum -c /tmp/u'                       # every line OK, else STOP
+docker run --rm --entrypoint sh <RUNNING_TAG> -c 'cd /app && sha256sum app/turn_engine.py'
 ```
 
-Allowed states of the 15 files (they are all replaced): all at `91b7cef`, or `turn_engine.py` at one of
+The 15 files are all replaced, so they may be in any known state; `turn_engine.py` must be one of:
 
-| turn_engine.py sha256 | state |
+| sha256 of app/turn_engine.py | state |
 |---|---|
 | `d56191a8d449bc5837758936e6dce5689043ad2225e604430d902b0b64fe2617` | `91b7cef` |
 | `8eb0b6256972b7e2d3f9987665e0a9c84d563439a7d0f84fb430c490bfb43777` | + hotfix `608f4d6` |
 | `7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00` | + hotfix + greeting line (clean) |
 
-A hand-patched file (nano / sed on 2026-10-18) will have another hash: then
+A hand-patched file will hash differently: then
 `docker run --rm --entrypoint cat <RUNNING_TAG> /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)`
-must show only the greeting-rule lines (`A greeting or thanks alone ...`). Any other difference, or any
-other file of the 15 not at `91b7cef`, STOPS the release and goes back to the owner.
+must show only the greeting-rule lines. Anything else, or any other of the 15 files not at the `91b7cef` hash,
+**stops the release**.
 
-## 4. Transfer (CloudShell -> private S3 staging -> EC2)
+## 5. Transfer (CloudShell -> private S3 staging -> EC2)
 
-1. CloudShell upload: `manzil-fresh-$S.tar`, `.tar.sha256`, `SHA256SUMS`, `SHA256SUMS.unchanged`, `Dockerfile.release`, `stored_requirements.py`.
-2. CloudShell: `aws s3 cp <file> s3://<bucket>/staging/release-fresh/` for each (private prefix only; never `tenant/` or `card/`).
-3. EC2, in `/home/ubuntu/release-fresh/`: `aws s3 cp` each down; `sha256sum -c manzil-fresh-$S.tar.sha256`; `tar -xf`; `( cd ... && sha256sum -c SHA256SUMS )` from the extracted dir (15 OK).
+1. CloudShell upload: tar, `.tar.sha256`, `SHA256SUMS`, `SHA256SUMS.unchanged`, `Dockerfile.release`.
+2. CloudShell: `aws s3 cp <file> s3://<bucket>/staging/release-fresh/` for each (private prefix; never `tenant/` or `card/`).
+3. EC2, in `/home/ubuntu/release-fresh/`: `aws s3 cp` each down; `sha256sum -c manzil-fresh-$S.tar.sha256`; `tar -xf`;
+   `( cd release-fresh && sha256sum -c ../SHA256SUMS )` (15 OK).
 4. Delete the `staging/release-fresh/` objects once the image is built.
 
-## 5. Build and image checks (no service touched yet)
+## 6. Build and image checks (no service touched yet)
 
 ```
 docker build -f Dockerfile.release -t manzil-ai:fresh-$S .
 docker run --rm --entrypoint sh -v "$PWD/SHA256SUMS:/tmp/S:ro" manzil-ai:fresh-$S -c 'cd /app && sha256sum -c /tmp/S'
 for i in <RUNNING_TAG> manzil-ai:fresh-$S; do docker run --rm --entrypoint sh $i -c 'cd /app && find app migrations demo -type f -not -name "*.pyc" | sort | xargs sha256sum' > "files-$(echo $i | tr ':/' '__').txt"; done
-diff files-<running>.txt files-manzil-ai_fresh-$S.txt      # only the 15 app/ lines (2 new files, 13 changed)
+diff files-<running>.txt files-manzil-ai_fresh-$S.txt     # only the 15 app/ lines (2 new, 13 changed)
 docker run --rm --entrypoint python manzil-ai:fresh-$S -c "import app.web, app.worker, app.customer_intent, app.card_regen; print('ok')"
-docker run --rm --entrypoint id manzil-ai:fresh-$S         # appuser, not root
+docker run --rm --entrypoint id manzil-ai:fresh-$S        # appuser, not root
 ```
 
-## 6. Migration state (read-only; nothing to apply)
+Migration state is read-only and unchanged: the check of docs/RELEASE_10_2.md section 6 must still print `17 17 []`. Never run the migrator.
 
-Same check as docs/RELEASE_10_2.md section 6 using `migrate.env`: expect `17 17 []`. Do not run the migrator.
+## 7. Switch (web and worker only; Caddy untouched) and pinning
 
-## 7. Switch (web and worker only; Caddy untouched)
+Both services take the image from the **same tag**: `deploy/compose.yml` has `image: manzil-ai:latest` for `web` (it also
+has `build: ..`, which `--no-build` disables) and for `worker` (`pull_policy: never`). The switch moves that one tag and recreates
+both in one command, then proves by ID that both run the release image.
 
 ```
 cd /home/ubuntu/manzil-ai
-docker tag manzil-ai:latest manzil-ai:pre-fresh                 # rollback tag (must be <RUNNING_TAG>'s image)
+test "$(docker image inspect manzil-ai:latest --format '{{.Id}}')" = "<PRE_ID>" || echo "STOP: latest is not the recorded image"
+docker tag manzil-ai:latest manzil-ai:pre-fresh                  # rollback tag
 docker tag manzil-ai:fresh-$S manzil-ai:latest
 docker compose -f deploy/compose.yml --env-file .env up -d --no-deps --no-build --force-recreate web worker
-docker compose -f deploy/compose.yml --env-file .env ps       # web, worker recreated; caddy unchanged
+WANT=$(docker image inspect manzil-ai:fresh-$S --format '{{.Id}}')
+for c in deploy-web-1 deploy-worker-1; do
+  [ "$(docker inspect $c --format '{{.Image}}')" = "$WANT" ] && echo "$c: release image" || echo "$c: MISMATCH -> roll back"; done
+for s in web worker; do docker compose -f deploy/compose.yml --env-file .env exec -T $s sh -c 'cd /app && sha256sum -c -' < SHA256SUMS | grep -vc ': OK'; done   # 0, 0
+docker compose -f deploy/compose.yml --env-file .env ps         # caddy unchanged
 ```
 
 ## 8. Health checks
 
 - `curl -fsS https://<SITE_ADDRESS>/health` OK; `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<SITE_ADDRESS>/webhook -d '{}'` = 401 (signature refused: the route is alive).
-- `docker compose ... logs --since 5m worker`: `Worker started: ...`, no exit 78, no gazetteer error; `... logs web`: no traceback. Read no phone numbers, text or secrets.
+- `docker compose ... logs --since 5m worker`: `Worker started: ...`; no exit 78; no gazetteer error. `... logs web`: no traceback. Read no phone numbers, text or secrets.
 
-## 9. Acceptance on a real phone (pending; the owner's two test numbers)
+## 9. WhatsApp smoke checks (after deployment; failure => section 10)
 
-**Why two phases:** the inherited-filter check needs a number idle for more than 6 hours. Seed it before
-the shutdown block, finish it after the servers come back (the session is computed from stored message
-times, so the gap counts while the servers are stopped).
+**9.0 Seed before deployment (exercises the old code, not the new).** For the stale-filter check, a test number X must
+have stored filters and **no inbound message for more than 6 hours before the first post-deploy message**.
+At least 7 h before the switch, send from X: `DHA Phase 6 mein 500 gaz ka ghar kiraye par chahiye`. Do not message from X again until 9.2.
+(The session is computed from stored message times, so the gap counts while nothing is running.)
 
-Phase A (now, ~15 min):
+**9.1 Immediately after the switch (number Y, a second test number, any state):**
 1. `salam` -> "Wa alaikum assalam! ..." (not "Shukriya!"); `hi` -> "Hello! ...".
-2. `salam, DHA phase 6 mein flat chahiye` -> a normal request answer, no greeting template.
-3. Typed commands on a number with fresh filters: `nayi search` clears nothing and lists the filters; `purani requirements hata do` -> "...hata di hain..."; then ask again from scratch.
-4. Results / no-match headers state purpose and the monthly period for a rent search ("... kiraye par, 2 lakh tak mahana ..."), and the cards use the new WhatsApp layout (PR #45).
-5. Voice: the ~8 s Roman Urdu note scenario from turn `4b1d4b0f` gets a search reply, worker log has `iteration_limit_search` at WARNING (hotfix kept).
-6. Seed for phase B on test number X: send `DHA Phase 6 mein 500 gaz ka ghar kiraye par chahiye`; leave it idle.
+2. `salam, DHA phase 6 mein flat chahiye` -> a normal request answer, not the greeting template.
+3. A rent search: the header says purpose and period ("... kiraye par, 2 lakh tak mahana ...").
+4. `nayi search` (nothing inherited) -> lists the filters, clears nothing; `purani requirements hata do` -> "...hata di hain...".
+5. Voice: the ~8 s Roman Urdu note scenario of turn `4b1d4b0f` gets a search reply; the worker log shows `iteration_limit_search` at WARNING (hotfix kept).
+6. A card carousel and a single card render (PR #45 layout).
 
-Phase B (after more than 6 h idle, services back up):
-7. `mera area hy dha phase 6` -> "Theek hai, note kar liya: DHA Phase 6." + "Pichli search mein 500 gaz ghar, kiraye par tha - kya ab bhi wohi chahiye?" with [Haan, wohi] [Nayi search]; no listings.
-8. `aur budget hy 2 crore` -> "... 2 crore ke aas paas." + the short reminder; read-only check shows the budget has `period` null (`stored_requirements.py`, phone masked).
-9. Tap [Nayi search] -> inferred-purchase note + a no-match / results line with no "500 gaz", no "mahana". On a second idle test: tap [Haan, wohi] -> rent kept, "mahana" in the header. Try a typed `haan` and `nahi`, and `nahi, kharidna hai` (purpose set, question about the rest).
-10. Tap an old [Haan] after answering -> "Ye sawal ab purana ho gaya hai", nothing changes.
+**9.2 Number X (idle > 6 h, seeded in 9.0):**
+7. `mera area hy dha phase 6` -> "Theek hai, note kar liya: DHA Phase 6." + "Pichli search mein 500 gaz ghar, kiraye par tha - kya ab bhi wohi chahiye?" [Haan, wohi] [Nayi search]; no listings.
+8. `aur budget hy 2 crore` -> "... 2 crore ke aas paas." + the short reminder. Read-only check of the stored budget: `period` null (`stored_requirements.py`, phone masked).
+9. Tap [Nayi search] -> the inferred-purchase note + a result / no-match line with no "500 gaz" and no "mahana".
+10. Repeat 7-8 on a second idle number or after another 6 h gap: tap [Haan, wohi] -> rent kept, "mahana" in the header; try typed `haan`, `nahi`, `nahi, kharidna hai`.
+11. An old, already-answered button -> "Ye sawal ab purana ho gaya hai", nothing changes.
 
-Stop and roll back (section 10) on: a traceback, a reply that restores house / rent, a monthly label on an
-unconfirmed budget, the old greeting text, or a card that does not render.
+**Roll back immediately** on: a traceback or exit 78; a failed turn; a reply that restores house / rent or labels an
+unconfirmed budget monthly; the old greeting text; an unrendered card; web or worker not on the release image.
 
-## 10. Rollback (code only; no schema or data to undo)
+## 10. Rollback and compatibility
 
 ```
 docker tag manzil-ai:pre-fresh manzil-ai:latest
 docker compose -f deploy/compose.yml --env-file .env up -d --no-deps --no-build --force-recreate web worker
 ```
 
-then section 8. The old code ignores the extra `kept_at` key and does not know the `keep:` buttons: a tap on an already-sent question gets the old stub reply and changes no data.
-Keep `manzil-ai:pre-fresh`, `<RUNNING_TAG>`, the kit and the `files-*.txt` lists until
-acceptance is complete.
+then section 8 and the pinning loop of section 7 with `WANT` = `<PRE_ID>`. Keep `manzil-ai:pre-fresh`, `<RUNNING_TAG>`,
+the kit and the `files-*.txt` lists until the smoke checks are done.
 
-## 11. Known limits and follow-ups
+**Can the previous image read what this release wrote? Yes (tested).** `rollback-compat-run.txt`: states written by the
+new code (open question with an unlabelled budget, after keep, after "nayi search", after a full reset, with their patch-log
+rows) were installed under the *previous* code (`fdd4de3`); it then ran an update + search, a plain text, an unknown `keep:`
+tap and a type change on each. All turns replied, none failed, the state was extended normally.
 
-- No staging environment: verification is on production with the owner's own numbers.
-- The "question already sent" check scans one conversation's outbound rows of the last 7 days
-  (2.5 ms at 5,003 rows); the session query is 4.4 ms at 10,005 messages. Migration 018 (index on
-  `outbound_message(agency_id, conversation_id, created_at)`) is deferred until real history is larger.
-- Existing card images are not rebuilt by this release (`card_regen`, section 0.5).
-- Slot times are now the customer's message time; older slots keep their processing times (differences of seconds).
+**What a code-only rollback leaves behind** (no schema is involved, so nothing blocks the old code):
 
-## 12. After acceptance: cost block (owner runs; AWS budget is $10)
+| Persisted by this release | Effect after rollback |
+|---|---|
+| `requirement_state.slots[*].kept_at` (extra JSON key) | ignored by the old code |
+| `updated_at` of slots = the customer's message time (not processing time) | harmless (a few seconds) |
+| `requirement_patch_log` rows with call `keep` / `fresh`, `kind` keep / reset, `detail` kept / fresh_search, ops `set` / `clear` | valid under the table CHECK; the old hold logic reads them as "answered" |
+| Slots cleared by "nayi search" / "purani requirements hata do" (incl. previous budget, excluded listings, soft prefs) | **stay cleared**; the previous values survive only in `requirement_patch_log` (`before`), not restored automatically |
+| `pending_clarification` rows closed as `cancelled`; a purpose question opened by a fresh search | valid statuses; the old code answers an open purpose question as before |
+| `search_run`, `shown_item`, `message`, `outbound_message`, `conversation_turn` rows, incl. sent messages with `keep:yes:<token>` buttons | history only |
+| S3 | nothing (no card regeneration) |
 
-Fill `REGION`, `EC2_ID`, `RDS_ID` from `aws ec2 describe-instances` / `aws rds describe-db-instances`
-(do not guess). Delete only snapshots made for this release, by name, with the owner's yes (none are
-planned); never the latest automated backup.
+Behavioural differences after rollback: (a) a conversation whose state is "inherited, question open" goes back to the old
+behaviour: the stale filters are searched without a question and an unlabelled budget of a stored rent is shown as monthly;
+(b) a tap on an earlier `keep:` button is not recognised and reaches the model as ordinary text ("Haan, wohi"), with no
+data change by itself.
 
-**Shut down:**
+## 11. Known limits
 
-```
-REGION=<REGION>; EC2_ID=<i-...>; RDS_ID=<db-identifier>
-aws s3 rm s3://<bucket>/staging/release-fresh/ --recursive            # staging only
-aws rds describe-db-snapshots --db-instance-identifier $RDS_ID --region $REGION --query 'DBSnapshots[].[DBSnapshotIdentifier,SnapshotCreateTime,SnapshotType]' --output table
-# aws rds delete-db-snapshot --db-snapshot-identifier <NAMED_RELEASE_SNAPSHOT> --region $REGION    # only if one exists
-aws ec2 stop-instances --instance-ids $EC2_ID --region $REGION
-aws rds stop-db-instance --db-instance-identifier $RDS_ID --region $REGION
-```
-
-**Bring production back:**
-
-```
-aws rds start-db-instance --db-instance-identifier $RDS_ID --region $REGION
-aws rds wait db-instance-available --db-instance-identifier $RDS_ID --region $REGION
-aws ec2 start-instances --instance-ids $EC2_ID --region $REGION
-aws ec2 wait instance-running --instance-ids $EC2_ID --region $REGION
-aws ec2 describe-instances --instance-ids $EC2_ID --region $REGION --query 'Reservations[].Instances[].PublicIpAddress'
-# then on the instance:
-cd /home/ubuntu/manzil-ai && docker compose -f deploy/compose.yml --env-file .env up -d web worker caddy
-docker compose -f deploy/compose.yml --env-file .env ps
-curl -fsS https://<SITE_ADDRESS>/health
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<SITE_ADDRESS>/webhook -d '{}'      # 401 = alive
-```
-
-Cautions: a stopped RDS instance **restarts by itself after 7 days**; a stopped EC2 instance gets a new
-public IP unless an Elastic IP is attached (the Meta webhook URL / DNS depends on it: re-check
-`<SITE_ADDRESS>` resolves to the new IP before testing); confirm the $10 budget alert exists in the AWS console.
+- No staging environment: verification is on production with the owner's own numbers (section 9).
+- The "question already sent" check scans one conversation's outbound rows of the last 7 days (2.5 ms at 5,003 rows); the
+  session query is 4.4 ms at 10,005 messages (`query-plans-and-timings.txt`). Migration 018 is deferred until real history is larger.
+- Existing card images are not rebuilt by this release (`card_regen` is out of scope; old cards keep the cropped layout).
