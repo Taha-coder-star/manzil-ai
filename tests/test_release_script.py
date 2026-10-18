@@ -183,7 +183,6 @@ case "$1" in
           in=""; [[ -n $interactive ]] && in=$(cat)
           [[ -n $in ]] || { echo "sha256sum: standard input: no properly formatted checksum lines found"; exit 1; }
           [[ $in == u* && -n ${BAD_UNCHANGED:-} ]] && { echo "app/a.py: FAILED"; exit 1; }
-          [[ $in == b* && -n ${BAD_BASE:-} ]] && { echo "app/b.py: FAILED"; exit 1; }
           [[ $in == d* && -n ${BAD_DATA:-} ]] && { echo "demo/x.csv: FAILED"; exit 1; }
           exit 0 ;;
       *"if [ -e"*) f="$S/states/$(echo "$6" | tr '/' '_')"; if [[ -e $f ]]; then cat "$f"; else echo ABSENT; fi ;;
@@ -209,7 +208,6 @@ def baseline(tmp_path, *, script=None, **env):
     if "diff" in env:
         (state / "diff_deploy-web-1").write_text(env.pop("diff"))
     (rel / "SHA256SUMS.unchanged").write_text("u  app/a.py\n")
-    (rel / "SHA256SUMS.base").write_text("b  app/b.py\n")
     (rel / "SHA256SUMS.data").write_text("d  demo/x.csv\n")
     (rel / "FILES.expected").write_text("app/a.py\napp/b.py\napp/bench_live.py\napp/benchmark.py\n")
     (rel / "STATES.allowed").write_text(
@@ -246,7 +244,6 @@ def test_forgetting_docker_exec_i_is_caught_by_the_stub(tmp_path):
     ({"worker": "sha256:" + "e" * 64}, "not on one image"),
     ({"diff": "C /app/app\nC /app/app/render.py\n"}, "changes under /app"),
     ({"BAD_UNCHANGED": "1"}, "SHA256SUMS.unchanged"),
-    ({"BAD_BASE": "1"}, "SHA256SUMS.base"),
     ({"BAD_DATA": "1"}, "SHA256SUMS.data"),
     ({"listing": "app/a.py\napp/b.py\napp/benchmark.py\napp/extra.py"}, "extra file app/extra.py"),
     ({"listing": "app/a.py\napp/benchmark.py"}, "missing file app/b.py"),
@@ -265,11 +262,11 @@ def test_any_baseline_mismatch_stops_and_records_nothing(tmp_path, env, expect):
 
 def test_the_gate_reports_every_mismatch_in_one_run(tmp_path):
     """Three different problems on the server: one run lists them all, with the hashes."""
-    done, pre = baseline(tmp_path, BAD_UNCHANGED="1", BAD_BASE="1",
+    done, pre = baseline(tmp_path, BAD_UNCHANGED="1", BAD_DATA="1",
                          states={"app/benchmark.py": "9" * 64,
                                  "app/bench_live.py": "8" * 64})
     assert done.returncode == 1 and "8 mismatch(es)" in done.stderr   # 4 per container
-    for expect in ("SHA256SUMS.unchanged", "SHA256SUMS.base", "9" * 64, "8" * 64):
+    for expect in ("SHA256SUMS.unchanged", "SHA256SUMS.data", "9" * 64, "8" * 64):
         assert expect in done.stderr
     assert not pre.exists()
 

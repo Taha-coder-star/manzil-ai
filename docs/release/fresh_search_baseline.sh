@@ -4,12 +4,12 @@
 #
 #   sudo --preserve-env=REL bash ./fresh_search_baseline.sh
 #
-# Needs in $REL (transferred and checksum-verified): SHA256SUMS.unchanged, SHA256SUMS.base,
-# SHA256SUMS.data, FILES.expected, STATES.allowed. The gate collects EVERY mismatch, prints them
-# all (with the actual hashes) and exits 1; nothing is accepted without an explained state:
-# STATES.allowed lists, per path, the sha256 values (or ABSENT) production may legitimately
-# hold, each with its provenance in the runbook. On success it writes $REL/PRE_ID (the image id
-# both services run), which the switch and the rollback use instead of any tag.
+# Needs in $REL (transferred and checksum-verified): SHA256SUMS.unchanged, SHA256SUMS.data,
+# FILES.expected (the merge commit's file list), STATES.allowed (the verified production profile:
+# every released file with the sha256 values, or ABSENT, production may hold).
+# The gate collects EVERY mismatch, prints them all (with the actual hashes) and exits 1;
+# nothing is accepted without an explained state. On success it writes $REL/PRE_ID (the image
+# id both services run), which the switch and the rollback use instead of any tag.
 set -Eeuo pipefail
 
 REL=${REL:-/home/ubuntu/release-fresh}
@@ -18,7 +18,7 @@ problems=()
 note() { problems+=("$*"); }
 die()  { echo "STOP: $*" >&2; exit 1; }
 
-for f in SHA256SUMS.unchanged SHA256SUMS.base SHA256SUMS.data FILES.expected STATES.allowed; do
+for f in SHA256SUMS.unchanged SHA256SUMS.data FILES.expected STATES.allowed; do
   [[ -s "$REL/$f" ]] || die "$REL/$f is missing: transfer and verify the kit first"
 done
 
@@ -42,7 +42,7 @@ for c in deploy-web-1 deploy-worker-1; do
   [[ -z "$changed" ]] || note "$c: changes under /app that are not in its image: $(tr '\n' ';' <<<"$changed")"
 
   # what the running container really holds
-  for m in SHA256SUMS.unchanged SHA256SUMS.base SHA256SUMS.data; do manifest_ok "$c" "$REL/$m"; done
+  for m in SHA256SUMS.unchanged SHA256SUMS.data; do manifest_ok "$c" "$REL/$m"; done
 
   # files whose production state is explained one by one (hash values or ABSENT)
   for p in $paths; do
@@ -62,7 +62,7 @@ done
 
 # the image new containers would start from (and the rollback target)
 $DOCKER run --rm --entrypoint sh -v "$REL:/rel:ro" "$web_image" -c \
-  'cd /app && sha256sum -c /rel/SHA256SUMS.unchanged >/dev/null && sha256sum -c /rel/SHA256SUMS.base >/dev/null && sha256sum -c /rel/SHA256SUMS.data >/dev/null' \
+  'cd /app && sha256sum -c /rel/SHA256SUMS.unchanged >/dev/null && sha256sum -c /rel/SHA256SUMS.data >/dev/null' \
   || note "the image $web_image does not match the expected build"
 
 if ((${#problems[@]})); then

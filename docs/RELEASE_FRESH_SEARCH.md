@@ -91,34 +91,36 @@ disposable PostgreSQL 18.6, `REQUIRE_DATABASE_TESTS=1`, four batches run one at 
 **Why 18, not 15.** The real baseline gate (2026-10-18) found production different from `91b7cef` in three offline
 benchmark tools: `app/bench_live.py` missing, `app/benchmark.py` and `app/staff_bench.py` older. They are Task 10.3 tooling
 (`b7cf3d3`, 2026-10-16), unchanged between `91b7cef` and the merge commit `46c44d8`, and no earlier layered release shipped
-them (each release layered only the runtime files it changed). Production's versions are expected to be those of `7f5cd3d`
-(the 10.1 base: `benchmark.py` `0b6c65b1...`, `staff_bench.py` `1bd84df4...`, `bench_live.py` not yet existing). That is a
-**hypothesis until the gate confirms it by hash**: the gate accepts exactly those blobs (or ABSENT for `bench_live.py`) and
-stops, printing the real hash, on anything else. No web or worker module imports them (`bench_live` imports `benchmark`,
-`staff_bench`, `stt_bench`; `staff_bench` imports `bench_live` lazily inside one function; nothing in `web`/`worker`/`handlers`
-does), so the old versions are harmless today, and replacing them makes `app/` byte-identical to the tested commit.
+them. No web or worker module imports them (`bench_live` imports `benchmark`, `staff_bench`, `stt_bench`; `staff_bench` imports
+`bench_live` lazily inside one function), so the old versions are harmless today; replacing them makes `app/` byte-identical
+to the tested commit. The archive is therefore the same 18 files (15 changed + these 3) whatever production holds.
+
+**The production profile.** What production holds is not assumed. The owner reported (same day, image
+`sha256:5a85de4c...e14758`, shared by web and worker) that eight of the released files **already equal the candidate**:
+`card_regen.py`, `cards.py`, `demo_media.py`, `handoff.py`, `handoff_actions.py`, `handoff_alert.py`, `media.py`,
+`staff_cards.py` (the PR #45 files: that part was deployed before). For the other ten, the hashes come from one read-only
+command (section 4a), are mapped to Git blobs by `docs/release/map_production_hashes.py`, and are recorded one state per line in
+`docs/release/production_profile.txt`. `build_kit.sh` **refuses to build** unless every one of the 18 released files has a state
+and every state is `ABSENT`, a blob that exists in the repository history, or explicitly marked `diffed` (compared by hand).
+The profile becomes `STATES.allowed` in the kit; the gate accepts exactly those values and nothing else.
 
 Between `7f5cd3d` and `46c44d8` there is no change in `migrations/`, `demo/`, `requirements.txt` or the `Dockerfile`
 (`git diff 7f5cd3d 46c44d8 -- migrations demo requirements.txt Dockerfile` is empty), so replacing the 18 `app/` files is
-sufficient for the image's `app/`, `migrations/` and `demo/` trees to equal the tested commit. Dependencies are the image's
-own (unchanged requirements). The image check in section 6 proves the tree equality on the assembled image.
+sufficient for the image's `app/`, `migrations/` and `demo/` trees to equal the tested commit; the image check in section 6
+proves it on the assembled image. Dependencies are the image's own (unchanged requirements).
 
-Build, in Git Bash from a clean checkout of the repository (the script pins `core.autocrlf=false` on every git call, stops if
-the changed-file set vs `91b7cef` is not exactly the expected 15, and verifies the archive against the Git blobs):
+Build, in Git Bash from a clean checkout of the repository (every git call pins `core.autocrlf=false`; the script stops if the
+changed-file set vs `91b7cef` is not exactly the expected 15, and verifies the archive against the Git blobs):
 
 ```
-bash docs/release/build_kit.sh <M> <outdir>        # e.g. 46c44d8; scripts are taken from HEAD (or a third argument)
+bash docs/release/build_kit.sh <M> <outdir>        # e.g. 46c44d8; scripts and profile are taken from HEAD
 ```
 
-It writes: the 18-file tar, `SHA256SUMS` (18), `SHA256SUMS.unchanged` (43 other app modules), `SHA256SUMS.base` (12 replaced
-modules at their `91b7cef` versions), `SHA256SUMS.data` (22 migrations 005+/demo files), `FILES.expected` (the `91b7cef`
-file list), `FILES.release` (the merge commit's file list), `STATES.allowed`, the three scripts, `Dockerfile.release`,
-`KIT.sha256` and `manzil-fresh-<S>-kit.zip`.
-
-`STATES.allowed` is the only place an unusual production state is permitted, one line per path and hash (or `ABSENT`):
-`turn_engine.py` x3 (`91b7cef`; + hotfix `608f4d6`; + hotfix + the greeting line), `benchmark.py` and `staff_bench.py` at
-`7f5cd3d`, `bench_live.py` ABSENT, and migrations 001-004 as Git LF blob or CRLF working-copy form (historical RDS checksums
-for 001/002 are CRLF while Git stores LF).
+It writes: the 18-file tar (unchanged by the profile), `SHA256SUMS` (18), `SHA256SUMS.unchanged` (43 other app modules),
+`SHA256SUMS.data` (22 migrations 005+/demo files), `FILES.release`/`FILES.expected` (the merge commit's file list: production
+may lack only files whose state is ABSENT), `STATES.allowed`, `production_profile.txt`, the three scripts,
+`Dockerfile.release`, `KIT.sha256` and `manzil-fresh-<S>-kit.zip`. `STATES.allowed` also lists migrations 001-004 as Git LF blob
+or CRLF working-copy form (historical RDS checksums for 001/002 are CRLF while Git stores LF).
 
 **Artifact checks (rehearsed on `46c44d8`; the build script enforces the first four):**
 
@@ -127,7 +129,7 @@ for 001/002 are CRLF while Git stores LF).
 | changed set vs `91b7cef` | exactly the expected 15 files; the 3 benchmark tools are identical between `91b7cef` and `M` |
 | archive | exactly the 18 paths, bytes equal to the Git blobs |
 | text files | no CR byte in any manifest, script or Dockerfile |
-| counts | 18 + 43 = 61 app modules = every `.py` of `M`; no path in two manifests |
+| counts | 18 + 43 = 61 app modules = every `.py` of `M`; no path in two manifests; every one of the 18 has a profile state |
 | no secrets | regex scan of the kit; **gitleaks is not installed on this machine**: run it on the repository |
 | scripts | `bash -n`; 42 stub tests; run for real against Docker (section 11) |
 
@@ -140,6 +142,20 @@ One directory from here on: `REL=/home/ubuntu/release-fresh`. The ZIP is flat an
 3. `sha256sum -c KIT.sha256` (every line OK), `sha256sum -c manzil-fresh-<S>.tar.sha256`, `tar -xf manzil-fresh-<S>.tar`,
    `( cd release-fresh && sha256sum -c ../SHA256SUMS | grep -vc ': OK' )` prints 0.
 
+### 4a. The one read-only command (needed once, to fill the production profile)
+
+Prints the sha256 of every file of `app/`, `migrations/` and `demo/` in the **running web and worker containers**, their image
+IDs and their `docker diff`. It changes nothing. Run it on EC2 and paste `prod-tree.txt` (hashes only, no secrets):
+
+```
+cd /home/ubuntu && { echo "IMAGE web=$(sudo docker inspect deploy-web-1 --format '{{.Image}}') worker=$(sudo docker inspect deploy-worker-1 --format '{{.Image}}')"; for c in deploy-web-1 deploy-worker-1; do echo "== $c"; sudo docker exec $c sh -c "cd /app && find app migrations demo -type f ! -name '*.pyc' ! -path '*__pycache__*' | LC_ALL=C sort | xargs sha256sum"; echo "-- docker diff /app"; sudo docker diff $c | grep -E '^[ACD] /app' | grep -v __pycache__ || true; done; } | tee prod-tree.txt | wc -l
+```
+
+Locally: `python docs/release/map_production_hashes.py prod-tree.txt --profile` prints, per file, "= merge" (already final),
+"mapped" (the exact commit that introduced that content), `ABSENT`, or **UNMAPPED / EXTRA / DIFFERENT** (no commit has that content,
+a file the merge commit does not have, or web and worker disagree): any of those stops the release until explained. The
+`--profile` lines go into `docs/release/production_profile.txt`; nothing is added for an unmapped hash.
+
 ## 5. Baseline gate on EC2 (read-only; stops on any mismatch)
 
 ```
@@ -151,15 +167,15 @@ The gate checks the **running** web and worker containers and the image, **colle
 the actual hashes (one run is enough to see everything), then exits 1; it writes `$REL/PRE_ID` only on a clean pass:
 
 - web and worker run one image ID; `docker diff` shows no change under `/app` (other than `__pycache__`) = no in-place edit;
-- inside each running container (`docker exec -i`, so the manifests really reach the checker): the 43 unchanged modules, the 12
-  replaced modules at their `91b7cef` versions and the 22 data files match; every path in `STATES.allowed` is in one of its
-  listed states; the file list has no extra file and no missing file except those marked ABSENT;
-- the image itself passes the three manifests.
+- inside each running container (`docker exec -i`, so the manifests really reach the checker): the 43 unchanged modules and
+  the 22 data files match; every path in `STATES.allowed` (the 18 released files and migrations 001-004) is in one of its
+  listed states; the file list equals the merge commit's with no extra file and no missing file except those marked ABSENT;
+- the image itself passes the two manifests.
 
-A hand-patched `turn_engine.py` hashes differently and is reported; compare it by hand
+A hand-patched file (for example `turn_engine.py`) hashes differently and is reported; compare it by hand
 (`docker exec deploy-web-1 cat /app/app/turn_engine.py | diff - <(git show 608f4d6:app/turn_engine.py)` must show only the
-greeting-rule lines) and only then add its hash to `STATES.allowed`. For a benchmark tool whose hash is not the `7f5cd3d`
-blob, send the printed hash: it is mapped to a commit before anything is accepted. Never edit a manifest to make a check pass.
+greeting-rule lines) and only then add its hash to `production_profile.txt` with the word `diffed` and rebuild the kit. For any
+other hash, send it: it is mapped to a commit before anything is accepted. Never edit a manifest to make a check pass.
 
 ## 6. Build and image check (no service touched yet)
 

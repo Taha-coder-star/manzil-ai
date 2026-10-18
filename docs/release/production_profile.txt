@@ -1,0 +1,19 @@
+# Verified production combination for the fresh-search release (one state per line):
+#   <path> <sha256 | ABSENT>   # provenance
+# A state must be a blob that exists in the repository history, or carry the word "diffed" (the
+# owner compared the file by hand). build_kit.sh refuses to build while any of the 18 released
+# files has no state, so an unverified combination cannot ship.
+#
+# STATUS: INCOMPLETE. Reported by the owner on 2026-10-18 (image
+# sha256:5a85de4c57ac2cea33118d6c76b4db9d586d3f30ac950dd17ef77c9331e14758): these eight files
+# already equal the merge commit 46c44d8. The other ten are filled from the output of the one
+# read-only command in docs/RELEASE_FRESH_SEARCH.md section 4a, mapped with
+# docs/release/map_production_hashes.py --profile.
+app/card_regen.py 5496d9c326682ce5956cda6109604802a1b36c9d0294b597376d1f6d2991eb4b  # equals 46c44d8 (owner-verified identical to the candidate)
+app/cards.py b6495f8465241957fc49533d32b1090e5ffb4a053b7480b56ff4a564b5880891  # equals 46c44d8 (owner-verified identical to the candidate)
+app/demo_media.py bc02dbf4066e8a2caf70b83f0a0872168cc4be1464aad23d4bc1fd97d79f020c  # equals 46c44d8 (owner-verified identical to the candidate)
+app/handoff.py 63300631f930c142f86c281f4f6fe5ed9707aeb6b2099a4d8644c69871bba3b3  # equals 46c44d8 (owner-verified identical to the candidate)
+app/handoff_actions.py 246bd9347402b5a23f01aa07a47c5cde1780ddd096a76c7014bfa2057ce1b491  # equals 46c44d8 (owner-verified identical to the candidate)
+app/handoff_alert.py 38346e8e55a61cf131c3b20044fab8a5aaa3dec1f60a52d3dd8423e48224bd6c  # equals 46c44d8 (owner-verified identical to the candidate)
+app/media.py 854bd0f06f1290dd557f369c34bca0c0cca6c15f24d52e8590896dbfb6ff301d  # equals 46c44d8 (owner-verified identical to the candidate)
+app/staff_cards.py 81dd49daa4e25081c6994fe1c1de7906909a934aa0bd538a8c9e3f7385e39acc  # equals 46c44d8 (owner-verified identical to the candidate)
