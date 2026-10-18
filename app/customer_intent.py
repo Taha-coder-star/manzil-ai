@@ -123,3 +123,17 @@ def confirmation(text):
     if any(t in _NO_CORE for t in tokens):
         return NO
     return YES if any(t in _YES_CORE for t in tokens) else None
+
+
+# The customer asks for a person or a visit in their own words (the handoff triggers of R6 D4:
+# "agent se baat", visit, booking). A question about documents alone is not one.
+_AGENT_ASK = re.compile(
+    r"\b(?:agent|broker|consultant|dealer|insaan|insan|human|banda|bande|call|phone|rabta|"
+    r"contact|visit|appointment|meeting|milna|milwa\w*|book\w*)\b|\bkisi\s+se\s+baat\b",
+    re.IGNORECASE)
+
+
+def asks_for_agent(text):
+    """True when the text asks to talk to an agent, to visit or to book (live 2026-10-18:
+    "Is ghar ke documents clear hain?" opened a handoff; it only needs the agent's answer)."""
+    return bool(_AGENT_ASK.search(text or ""))

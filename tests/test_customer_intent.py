@@ -7,6 +7,7 @@ from app.customer_intent import (
     HELLO,
     NEW_SEARCH,
     SALAM,
+    asks_for_agent,
     fresh_command,
     greeting_kind,
 )
@@ -84,3 +85,20 @@ def test_a_negated_questioning_or_conditional_command_is_not_a_command(text):
 ])
 def test_plain_affirmative_commands_still_work(text):
     assert fresh_command(text) is not None
+
+
+@pytest.mark.parametrize("text", [
+    "agent se baat karao", "mujhe visit karni hai", "I want to talk to an agent",
+    "documents ke liye agent se baat karni hai", "kisi se baat karwa dein", "call me please",
+    "booking karni hai", "broker ka number do",
+])
+def test_asking_for_a_person_or_a_visit_is_asking_for_the_agent(text):
+    assert asks_for_agent(text) is True
+
+
+@pytest.mark.parametrize("text", [
+    "Is ghar ke documents clear hain?", "is the title clear", "registry ho jayegi?",
+    "DH6-101 mein gas connection hai?", "", None,
+])
+def test_a_question_about_the_listing_is_not_asking_for_the_agent(text):
+    assert asks_for_agent(text) is False

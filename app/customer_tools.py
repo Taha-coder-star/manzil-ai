@@ -35,6 +35,7 @@ import re
 from app import (
     ai_tools,
     cards,
+    customer_intent,
     customer_reply,
     details,
     grounding,
@@ -401,6 +402,13 @@ class CustomerBinding:
 
     def request_handoff(self, args, context, items=None, reason=None):
         reason = reason or args.get("reason") or "agent"
+        if (items is None and details.LEGAL in details.field_for(self.text)
+                and not customer_intent.asks_for_agent(self.text)):
+            # Live 2026-10-18: "Is ghar ke documents clear hain?" opened the handoff list (one
+            # tap = a lead nobody asked for). A documents question gets the agent offer; the
+            # [Agent se baat] button (or the customer asking for one) opens the handoff.
+            return self._result("request_handoff", {"status": "offered", "reason": "legal"},
+                                details.answer_detail(None, [details.LEGAL], self.language))
         if items is None:
             # Only the customer's words name a listing here (R-31): no model position, no
             # focus. Several shown and nothing named -> ask.
