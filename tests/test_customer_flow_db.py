@@ -401,8 +401,22 @@ def test_a_place_that_was_not_found_never_searches_the_old_one(st):
         ("search_properties", {}))
     said = sent_text(reply)
     assert "DHA Defence mein ye jagah mujhe nahi mili" in said
-    assert "is se kam price" not in said
+    assert "is se kam price" not in said and "500 gaz" not in said
     assert st.query("SELECT count(*) FROM search_run")[0][0] == runs
+
+
+def test_a_new_type_after_cheaper_has_neither_the_old_cap_nor_the_gaz_size(st):
+    """Live 2026-10-18: "flat chahiye" after "Kuch sasta" searched "is se kam price ka
+    500 gaz flat"."""
+    cheaper(st)
+    reply = turn(st, "flat chahiye", ("update_requirements", {"patch": [
+        p("property_types", "set", "flat")]}), ("search_properties", {}))
+    said = sent_text(reply)
+    assert "is se kam price" not in said and "500 gaz" not in said
+    assert TEMPLATES["size_ask"] in said          # the size is asked; the search waits for it
+    slots = st.state()[1]
+    assert slots["budget"]["value"]["max"] == 80_000_000
+    assert "excluded_property_ids" not in slots and "size" not in slots
 
 
 def test_a_found_place_next_to_a_missing_one_still_searches(st):
