@@ -187,11 +187,27 @@ def test_a_purpose_button_answers_the_purpose_question(st):
     assert [r[1] for r in st.pending()] == ["resolved"]
 
 
+def test_the_search_gates_purpose_buttons_set_the_purpose_and_search(st):
+    """Live 2026-10-18: a search with no purpose asks buy or rent with buttons but opens no
+    question row, and every tap only asked again."""
+    first = turn(st, "DHA Phase 6 mein ghar chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar")]}),
+        ("search_properties", {}))
+    questions = [pl for pl in first if pl["type"] == "interactive"]
+    assert [button_ids(q) for q in questions] == [["clarify:purpose:sale", "clarify:purpose:rent"]]
+    assert st.pending() == []
+    reply = tap(st, "clarify:purpose:sale")
+    assert st.state()[1]["purpose"]["value"] == "sale"
+    assert set(latest_shown(st)) == {"DH6-101", "DH6-102", "DH6-103", "DH6-104"}
+    assert "Ji, DHA Phase 6 mein ghar, khareedne ke liye" in sent_text(reply)
+
+
 def test_a_stale_clarify_tap_changes_nothing(st):
     scenario_2(st)
     version = st.state()[0]
-    tap(st, "clarify:location:0")
+    reply = tap(st, "clarify:location:0")
     assert st.state()[0] == version
+    assert sent_text(reply) == TEMPLATES["echo_stale"]
 
 
 # --- references + photos (3a) ------------------------------------------------------------

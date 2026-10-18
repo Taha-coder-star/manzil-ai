@@ -1634,7 +1634,8 @@ class RequirementService:
         """A clarification button (Task 10.1, render CLARIFY_*): choice is the index of a
         stored location candidate, "sale" / "rent", or None ("another place": the question
         closes, the location stays as it was). Same lock order and patch row as apply
-        (call "tap"). Returns the notices, or None when the question is no longer open or
+        (call "tap"). A purpose choice needs no open question (the search gate asks it
+        without one). Returns the notices, or None when the question is no longer open or
         the choice is not one of its options (the tap changes nothing)."""
         with tenant_transaction(conn, turn.agency_id):
             _set_timeout(conn)
@@ -1646,11 +1647,18 @@ class RequirementService:
                 return None
             version, slots = self._lock_state(conn, turn)
             pending = self._pending(conn, turn)
-            if pending is None or pending.slot != slot or pending.expires_at <= ctx.now:
+            # The search gate asks buy or rent with these buttons when no purpose is stored,
+            # and opens no question row (live 2026-10-18: every tap asked again). The tap is
+            # the customer's own choice, so it needs no open question; a question about
+            # another slot stays as it is (_purpose closes only a purpose question).
+            purpose_tap = slot == "purpose" and choice in ("sale", "rent")
+            if not purpose_tap and (pending is None or pending.slot != slot
+                                    or pending.expires_at <= ctx.now):
                 return None
-            ctx.pending = pending
+            ctx.pending = pending if not purpose_tap or (
+                pending is not None and pending.slot == "purpose") else None
             patch = Patch(ctx, slots)
-            if slot == "purpose" and choice in ("sale", "rent"):
+            if purpose_tap:
                 patch._purpose({"slot": "purpose", "op": "set", "raw_span": choice},
                                Evidence("text"))
             elif slot == "location" and choice is None:

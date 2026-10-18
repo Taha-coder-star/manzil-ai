@@ -496,5 +496,7 @@ class CustomerBinding:
         slot, raw = (loc, choice) if loc else (purpose, value)
         answer = None if raw == "none" else (int(raw) if raw.isdigit() else raw)
         notices = service.choose(self.conn, self.turn, slot, answer)
-        out = [self._result("clarify", {"status": "ok"}, notice=tuple(notices or ()))]
+        if notices is None:   # an older question, or no such option: nothing changed
+            return [self._result("clarify", {"status": "stale"}, notice="echo_stale")]
+        out = [self._result("clarify", {"status": "ok"}, notice=tuple(notices))]
         return out + [self.search_properties({}, None)]
