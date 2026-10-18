@@ -134,6 +134,15 @@ The same `clean()` builds alias keys and span keys, so both sides meet in one fo
    affected: only identical neighbouring tokens collapse, and "dha city" is matched
    whole (exact alias, or the longest area name in the span) before "dha".
 
+9. Sentence particles (customer test 2026-10-18; `resolve()` only, alias keys keep every
+   token): a leading `in` / `at` and trailing `mein me mai main men mien mn may par pe per ke
+   ki ka wala wali wale side area ilaqa ilaqe ilaqay` (and the Urdu `میں`) are dropped
+   before the gulshan and number rules (`clean_tokens(text, strip=True)`,
+   `strip_particles`), so "DHA Phase 6 mein", "Clifton side" and "Clifon mein" resolve (or are
+   asked) like the bare place. A span of nothing but particles is left as written.
+   `tests/test_location.py` checks that no seeded name, display name or alias starts or ends
+   with one.
+
 ## Resolution order
 
 1. Nothing left after cleaning -> UNKNOWN (`empty`).

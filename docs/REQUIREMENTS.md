@@ -231,6 +231,38 @@ neither, and the rent was stated. The period then came from the stored purpose
   2026-10-12; `normalise.parse_budget`, docs/NORMALISATION.md). "kharidna" (with an i) is now
   read as a purchase like "khareedna".
 
+## Customer test fixes (2026-10-18; no migration)
+
+Live manual test on `manzil-ai:fresh-46c44d8`; findings F-1 ... F-11 in the Demo Manual Test
+Cases doc. Behaviour added here:
+
+- **"bhi" adds a place.** `additive_place(span, texts)` reads the customer's words (bhi / bhee /
+  also / too within two words of the place, or after "also"); `_location` turns a model `set`
+  into an `add` then. The patch log keeps the model's op. "aur" is not additive.
+- **A replaced property type ends "cheaper".** `Patch.types_replaced` (a `set` that puts other
+  types in place of the stored ones; "flat bhi" is an `add` and keeps everything).
+  `_end_cheaper` drops `excluded_property_ids` and, when this patch did not state a budget,
+  restores the budget the customer had before "Kuch sasta" (`budget.value["restore"]`; a
+  second "cheaper" keeps the first one's; none stored = no budget). The restore rides inside
+  the value because `requirement_state.slots` has a CHECK on its keys (migration 006): a
+  new slot would need a migration.
+- **A replacement that swaps the size unit drops the size and asks** (owner decision):
+  `size_basis` is `sq_yd` for house / plot / portion and `sq_ft` for flat, shop, office ...;
+  house -> flat (or flat -> house) drops `size` (beds kept) and asks `size_ask`, like the
+  house -> office rule. house -> plot keeps the size.
+- **The search gate's buy / rent buttons need no open question.** `RequirementService.choose`
+  sets the purpose from `clarify:purpose:sale|rent` even when no `pending_clarification` row
+  exists; a tap that changes nothing answers with the stale text and does not search.
+- **A place that was not found holds the search.** `CustomerBinding.place_unresolved` is set by
+  an update whose location op is `unknown` / `out_of_coverage` with none applied in the same
+  call; `search_properties` then returns `answer_first` instead of searching the old place.
+- **A reply that only acknowledges is answered.** `TurnEngine._only_acknowledged` (every
+  notice is `requirements_saved` / `purpose_inferred` / `location_chosen`) and no open
+  question (`CustomerBinding.question_open`): at a plain STOP the saved requirements get the
+  normal search in code (`_code_search`, outcome detail `stop_search`), which shows the
+  listings or asks the first missing slot. A reply that already asks, declines or re-asks is
+  complete as it is. The iteration-limit path is unchanged (`iteration_limit_search`).
+
 ## Voice
 
 Voice-only slots are `confirmed = false`; weak signals (`stt_meta` has `fallback_reason`,

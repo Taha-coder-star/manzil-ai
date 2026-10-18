@@ -107,20 +107,20 @@ S2 RU  Ji, DHA Phase 6 mein 500 gaz, 8 crore tak — ye options hain:
 
        *3 options:*
 
-       *#1 DH6-102* · Ghar · sale
+       *#1 DH6-102* · Ghar · bikau
        📍 DHA Phase 6 · *PKR 8 crore*
 
-       *#2 DH6-101* · Ghar · sale
+       *#2 DH6-101* · Ghar · bikau
        📍 DHA Phase 6 · *PKR 7.8 crore*
 
-       *#3 DH7-101* · Ghar · sale
+       *#3 DH7-101* · Ghar · bikau
        📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb
 
        👉 Number likh kar jawab dein, ya card par tap karein.
-       card: *#3 DH7-101* · Ghar · sale / DHA Phase 7 · 500 sq yd · 4 bed / 5 bath /
+       card: *#3 DH7-101* · Ghar · bikau / DHA Phase 7 · 500 sq yd · 4 bed / 5 bath /
              *PKR 7.5 crore* · Tayyar · Phase 7 — qareeb      [Aur photos] [Visit / Detail]
 
-Single *DH6-101* · Ghar · sale / 📍 DHA Phase 6 / 📐 500 sq yd · 4 bed / 5 bath /
+Single *DH6-101* · Ghar · bikau / 📍 DHA Phase 6 / 📐 500 sq yd · 4 bed / 5 bath /
        💰 *PKR 7.8 crore* · Tayyar     [Aur photos] [Visit / Detail] [Milti-julti]
 
 S3b RU DHA Phase 6 mein is se kam price ka 500 gaz ghar abhi available nahi. Yahan price
@@ -129,13 +129,13 @@ S3b EN No cheaper 500 sq yd houses for sale in DHA Phase 6 are available right n
        there start from 9.5 crore.    [Nearby area] [Raise budget] [Talk to agent]
 
 S3c RU Ji, DHA Phase 6 / DHA Phase 8 mein 500 gaz, pehle se kam price par — ye options hain:
-       *#2 DH8-101* · Ghar · sale / 📍 DHA Phase 8 · *PKR 7.4 crore* · budget se thoda upar
+       *#2 DH8-101* · Ghar · bikau / 📍 DHA Phase 8 · *PKR 7.4 crore* · budget se thoda upar
 
-Unknown (R-05)  Ye maloomat mere paas nahi -- agent confirm kar denge.   [Agent se baat]
-                I don't have that information -- the agent will confirm it. [Talk to agent]
-Legal           Documents aur legal baatein hamesha agent hi confirm karte hain -- main aap ko
+Unknown (R-05)  Ye maloomat mere paas nahi — agent confirm kar denge.   [Agent se baat]
+                I don't have that information — the agent will confirm it. [Talk to agent]
+Legal           Documents aur legal baatein hamesha agent hi confirm karte hain — main aap ko
                 agent se mila sakta hoon.                                  [Agent se baat]
-Negotiation     Price ki baat agent hi karte hain -- main aap ko agent se mila sakta hoon.
+Negotiation     Price ki baat agent hi karte hain — main aap ko agent se mila sakta hoon.
 Clarification   Aap ka matlab kaunsi jagah hai? / Kya aap {place} keh rahe hain? [Haan]
                 [Nahi, aur jagah] / Aap property khareedna chahte hain ya kiraye par lena chahte
                 hain? [Khareedna] [Kiraye par] / Aap kis area mein property dekh rahe hain? /
@@ -202,6 +202,27 @@ should switch it to `check_payloads` once #37 (which changes its call) has merge
 `facing`, `is_corner`, `furnishing` and `possession_status` (defaults; `load_listings` selects
 them).
 
+## 5b. Customer test wording (owner-approved 2026-10-18)
+
+- **Details replies** use the em dash (`details.TEXT`), like every other template.
+- **No-match without a budget** says what was searched and asks it, with [Nearby area] and
+  [Agent se baat] only (no budget to raise): "Clifton Block 6 mein khareedne ke liye abhi koi
+  flat / penthouse available nahi. Aap ka budget kitna hai? Main us hisaab se doosri options dekh
+  sakta hoon." English: "No apartments / penthouses for sale in Clifton Block 6 are available
+  right now. What is your budget? I can look for other options with it." (English mirror: for
+  owner approval.) A no-match with a budget is unchanged.
+- **Roman Urdu cards** say "Ghar · bikau" (`cards.WORDS`), not the English "sale".
+- **A place is said once**: the acknowledgement that names the filters ("note kar liya: Clifton
+  Block 6, flat.") is not followed by "Theek hai, Clifton Block 6.".
+- **A listing code asked for by itself** ("DH6-103 dikhao") is answered in code
+  (`customer_intent.listing_lookup`, `CustomerBinding.show_listing`): the card of an ACTIVE
+  listing, else "DH6-105 abhi available nahi." / "DH6-105 is not available right now." for
+  sold, reserved, withdrawn and unknown codes alike; no status is ever said. A code with a
+  question goes to the model.
+- **A documents question** that does not ask for an agent, a visit or a booking
+  (`customer_intent.asks_for_agent`) gets the legal reply with [Agent se baat]; it opens no
+  handoff (the button, or asking for the agent, does).
+
 ## 6. Limits and open items
 
 - Wired by Task 10.1 (docs/CUSTOMER_TURN.md): `search_properties` renders and sends the plan,
@@ -209,7 +230,7 @@ them).
   in code; `get_property` wraps `details`. Detail answers echo "#2 · DH6-102".
 - Wording awaits owner approval. The "Nearby area" button stays English in Roman Urdu, as in Demo
   Scope 3b.
-- The Roman Urdu kind word is "Ghar · sale". Urdu-script replies are not rendered (cut list).
+- The Roman Urdu kind word is "Ghar · bikau". Urdu-script replies are not rendered (cut list).
 - The feature vocabulary covers the 007 enums only. Project terms (payment plan, approvals) go to
   the agent through the legal / unknown path.
 - The validator does not parse dates or percentages other than "100%". A date in a wrapper would
