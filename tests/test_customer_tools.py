@@ -173,3 +173,23 @@ def test_a_photo_caption_is_checked_too():
                             position_codes={2: "DH6-102"})
     assert ground_customer([entry], facts, None, "english") == [entry]
     assert ground_customer([entry], grounding.Facts(), None, "english") != [entry]
+
+
+def test_a_reply_of_photos_alone_gets_no_fallback_text():
+    # Live 2026-10-18: "Property 1 ki aur pictures" sent "Shukriya! Property dhoondne ..." first.
+    entry = customer_reply.image_entry("pid", "mid", "#1 · DH6-101")
+    shown = customer()
+    shown.facts = grounding.Facts(codes=frozenset({"DH6-101"}), positions=frozenset({1}),
+                                  position_codes={1: "DH6-101"})
+    assert render_customer(Outcome("done", "stop", payloads=(entry,)), shown) == [entry]
+    nothing = render_customer(Outcome("done", "stop"), customer())
+    assert nothing == [whatsapp.text(TEMPLATES["customer_default"])]   # no answer: still told
+
+
+def test_the_same_question_twice_in_one_reply_is_sent_once():
+    # Live 2026-10-18: "Kaunsi property ke liye visit?" arrived twice for one message.
+    question = whatsapp.list_message("Kaunsi property ke liye visit?", "Chunein",
+                                     [(None, [("handoff:visit:all", "Sab", None)])])
+    out = render_customer(Outcome("done", "tap", payloads=(question, question, CARD)),
+                          customer(asked=True))
+    assert out == [question, CARD]

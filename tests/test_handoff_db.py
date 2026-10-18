@@ -163,6 +163,16 @@ def test_agent_request_with_nothing_shown_opens_a_lead_without_listings(st):
     assert lead_rows(st) == [("L-01", "open", "agent", "broker")] and lead_codes(st) == []
 
 
+def test_the_which_property_question_is_sent_once_when_the_model_asks_twice(st):
+    """Live 2026-10-18: the visit list arrived twice for one message."""
+    scenario_2(st)
+    reply = turn(st, "Mujhe visit karni hai, kal shaam", ("request_handoff", {"reason": "visit"}),
+                 ("request_handoff", {"reason": "visit"}))
+    lists = [pl for pl in reply if pl["type"] == "interactive"]
+    assert len(lists) == 1 and button_ids(lists[0])[-1] == "handoff:visit:all"
+    assert lead_rows(st) == []
+
+
 def test_a_documents_question_offers_the_agent_and_opens_no_lead(st):
     """Live 2026-10-18: "Is ghar ke documents clear hain?" opened the handoff list."""
     scenario_2(st)

@@ -219,6 +219,7 @@ def test_scenario_3a_sends_card_2s_unsent_photos_in_order_with_the_id(ps):
     n = position_of(st, "DH6-102")
     first = turn(st, f"Property {n} ki aur pictures", ("send_property_photos", {}))
     assert images(first) == [(f"media-DH6-102-{i}", f"#{n} · DH6-102") for i in range(3)]
+    assert [pl for pl in first if pl["type"] == "text"] == []   # no "Shukriya!" fallback first
     assert len(st.query("SELECT 1 FROM media_sent")) == 3
     assert st.query("SELECT selected_via FROM focus") == [("position",)]
 

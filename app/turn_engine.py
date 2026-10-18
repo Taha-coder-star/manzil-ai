@@ -515,11 +515,16 @@ def render_customer(outcome, customer):
     if customer.echoed:  # Task 10.2: the voice echo lists the values these notes repeat
         keys = [k for k in keys if _key(k) not in customer_tools.SAID_BY_ECHO]
     payloads = ground_customer(list(outcome.payloads), customer.facts, gazetteer, language)
-    if len(keys) > 1 or customer_reply.visible(payloads):
+    unique = []
+    for payload in payloads:   # live 2026-10-18: the same question twice in one reply
+        if customer_reply.is_internal(payload) or payload not in unique:
+            unique.append(payload)
+    payloads = unique
+    if len(keys) > 1 or customer_reply.delivered(payloads):
         # "Not understood" is the fallback of an update call that produced no notice; next to
         # another call's notice or a reply it contradicts what this turn did say.
         keys = [k for k in keys if _key(k) != "requirements_unclear"]
-    if not keys and not customer_reply.visible(payloads):
+    if not keys and not customer_reply.delivered(payloads):
         keys = ["customer_default"]
     summarise = getattr(customer, "filters_text", None)
     if summarise is not None and any(_key(k) == "requirements_saved" for k in keys):

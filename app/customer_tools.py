@@ -461,10 +461,13 @@ class CustomerBinding:
                                 positions=frozenset(pairs), position_codes=pairs)
         question = words["which_visit"] if reason == "visit" else words["which"]
         payload = whatsapp.list_message(question, words["choose"], [(None, rows)])
+        # One question per turn: asked again in a later round of the same turn (live
+        # 2026-10-18: the visit list arrived twice), it is not sent again.
+        send = [] if self.asked else [payload]
         self.asked = True
         return self._result("request_handoff", {"status": "ambiguous", "options": [
             {"position": i.position, "code": i.code} for i in items]},
-            [payload], facts, [i.code for i in items])
+            send, facts, [i.code for i in items])
 
     def _handoff_tap(self, reason, target):
         if target == "all":
