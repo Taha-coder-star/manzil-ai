@@ -316,12 +316,21 @@ def test_the_answer_applies_the_question_s_own_op(gz):
     assert value(merge, "location")["nodes"] == ["clf", "dha-ph6"]
 
 
-@pytest.mark.parametrize("answer", ["Karachi", "kuch bhi", "haan", "DHA wala"])
+@pytest.mark.parametrize("answer", ["Karachi", "kuch bhi", "haan"])
 def test_an_answer_that_names_no_single_candidate_leaves_the_question_open(gz, answer):
     pending = pending_for(gz, ["dha-ph6", "btk-p6"], raw="P6")
     merge = run(gz, {}, [op("location", "set", answer)], [("text", answer)], pending=pending)
     assert "location" not in merge.slots
     assert not any(e[0] == "close" for e in merge.effects)
+
+
+def test_an_answer_with_a_sentence_particle_names_its_one_candidate(gz):
+    # "wala" is a sentence particle (live 2026-10-18), so "DHA wala" is "DHA": one candidate.
+    pending = pending_for(gz, ["dha-ph6", "btk-p6"], raw="P6")
+    merge = run(gz, {}, [op("location", "set", "DHA wala")], [("text", "DHA wala")],
+                pending=pending)
+    assert value(merge, "location")["nodes"] == ["dha-ph6"]
+    assert ("close", "p1", "resolved") in merge.effects
 
 
 def test_naming_an_area_that_still_holds_several_options_asks_again(gz):

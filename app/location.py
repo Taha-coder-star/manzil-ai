@@ -281,10 +281,33 @@ def _numbers(tokens):
     return out
 
 
-def clean_tokens(text):
-    """Span -> canonical tokens. Deterministic; the raw span is never changed."""
+# Words around a place in a sentence ("DHA Phase 6 mein", "in Clifton", "Clifton side"), never
+# part of a place name: no name, display name or alias of demo/ starts or ends with one
+# (tests/test_location.py). Live 2026-10-18: "DHA Phase 6 mein" was UNKNOWN.
+_TRAILING_PARTICLES = frozenset({
+    "mein", "me", "mai", "main", "men", "mien", "mn", "may", "par", "pe", "per", "ke", "ki",
+    "ka", "wala", "wali", "wale", "side", "area", "ilaqa", "ilaqe", "ilaqay", "میں"})
+_LEADING_PARTICLES = frozenset({"in", "at"})
+
+
+def strip_particles(tokens):
+    """The tokens without leading / trailing sentence particles; unchanged when nothing
+    but particles is there."""
+    start, end = 0, len(tokens)
+    while start < end and tokens[start] in _LEADING_PARTICLES:
+        start += 1
+    while end > start and tokens[end - 1] in _TRAILING_PARTICLES:
+        end -= 1
+    return tokens[start:end] or tokens
+
+
+def clean_tokens(text, *, strip=False):
+    """Span -> canonical tokens. Deterministic; the raw span is never changed. strip: drop
+    the sentence particles around a customer's place (resolve); alias keys keep them."""
     text = unicodedata.normalize("NFKC", text or "").translate(_LETTER_FOLD).casefold()
     tokens = _urdu_terms(_TOKEN.findall(text))
+    if strip:
+        tokens = strip_particles(tokens)
     tokens = [t if t in _DEFENCE and tokens[i + 1:i + 2] == ["city"]
               else TOKEN_CANON.get(t, t) for i, t in enumerate(tokens)]
     tokens = _numbers(_phrases(tokens))
@@ -896,7 +919,7 @@ def resolve(raw_span, active_area_id, gazetteer, *, city_code="KHI"):
     if not isinstance(raw_span, str):
         raise TypeError("raw_span must be a str")
     area = gazetteer.area_of(active_area_id) if active_area_id is not None else None
-    tokens = clean_tokens(raw_span)
+    tokens = clean_tokens(raw_span, strip=True)
     key = " ".join(tokens)
 
     def result(status, method, ids=(), area_hint=None, other_city=None, scores=None):
