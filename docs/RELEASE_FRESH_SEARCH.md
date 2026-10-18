@@ -15,12 +15,22 @@ deliberately **not** in this file: see `docs/RELEASE_FRESH_SEARCH_COST.md`.
 
 ## 0. What ships, and the corrected incident explanation
 
-**Expected production build (P)** = `91b7cef` + hotfix `608f4d6` (voice update-only loop) + the greeting line
-hand-patched into `turn_engine.py` on 2026-10-18 (`f4cc48d`'s one-line change). P is the commit
-`fdd4de3` (tag `review/prod-expected-fdd4de3`), rebuilt locally; **it is not yet verified on the server**:
-the baseline gate (section 4) is what verifies it.
+**Production as verified (2026-10-18).** The owner's read-only dump of the image shared by web and worker
+(`sha256:5a85de4c57ac2cea33118d6c76b4db9d586d3f30ac950dd17ef77c9331e14758`, identical trees, empty `docker diff`), mapped to Git
+blobs, shows it is **not** the `91b7cef` build I had assumed. It is a layered build that already holds: the PR #45 files
+(`card_regen.py`, `cards.py`, `demo_media.py`, `handoff.py`, `handoff_actions.py`, `handoff_alert.py`, `media.py`,
+`staff_cards.py`, and `render.py` at its PR #45 version `a0df4c9`), PR #47's `normalise.py` (`15dd521`) and `requirements.py`
+(`6f9c988`), the voice-loop hotfix and the greeting line in `turn_engine.py` (= `fdd4de3`), `customer_tools.py` and `search.py` at
+their `91b7cef` versions, and the Task 5.3 / 8.2 benchmark tools (`benchmark.py` `d7e8972`, `staff_bench.py` `8e11833`). It lacks
+`customer_intent.py` and `bench_live.py`. Migrations 001 and 002 are the CRLF form of the Git blobs (historical). Everything else
+(43 modules, migrations 003-017, demo data) equals the merge commit. This is recorded, state by state, in
+`docs/release/production_profile.txt`.
 
-Included on top of P (15 runtime files; `git log 91b7cef..release/fresh-search`):
+What this release actually changes on that server: `customer_tools.py`, `normalise.py`, `render.py`, `requirements.py`,
+`search.py`, `turn_engine.py` (new versions), `customer_intent.py` (new file), and the three benchmark tools (made identical to
+the tested commit). The other eight released files already equal the candidate and are re-copied byte for byte.
+
+Commits behind the 15 runtime files that differ from `91b7cef` (`git log 91b7cef..46c44d8`; the PR #45 / #47 ones are already deployed):
 
 | Commit(s) | PR | Purpose |
 |---|---|---|
@@ -42,14 +52,14 @@ the 18th): stored `purpose=rent` saved 2026-10-16 18:39; `property_types=house` 
 
 | Tree | 17th "ghar + aath crore tak" | 18th "aur budget 2 crore" |
 |---|---|---|
-| P (expected production) | purpose rent, period monthly | purpose rent, period **monthly** (matches the observed row) |
-| candidate without a session layer (= PR #47 code) | identical | identical |
+| `91b7cef` + hotfix + greeting (what I first assumed) | purpose rent, period monthly | purpose rent, period **monthly** (matches the observed row) |
+| candidate without a session layer (PR #47 code; **this is what production runs**, per the dump) | identical | identical |
 | candidate with the session layer | period null, purpose asked about | period null |
 
-So: the observed behaviour is reproduced by P's code; **PR #47 does not change it** (the rent was stated, and a
-flat -> house change is not a type switch). My earlier note that PR #47 fixed this was wrong. What fixes it is the
-session layer in `6368cdd`, which was never in production. Not observed, only inferred: the exact ops of the 17th
-22:06 patch (the query output was truncated) and the production image's hashes (gate, section 4).
+So: the observed behaviour is reproduced by both trees, and the dump shows production runs PR #47's `normalise.py` and
+`requirements.py`: **PR #47 does not change it** (the rent was stated, and a flat -> house change is not a type switch). My
+earlier note that PR #47 fixed this was wrong. What fixes it is the session layer in `6368cdd`, which is not in production.
+Not observed, only inferred: the exact ops of the 17th 22:06 patch (the query output was truncated).
 
 ## 1. Release gates (in this order; each must pass before the next)
 
@@ -95,12 +105,10 @@ them. No web or worker module imports them (`bench_live` imports `benchmark`, `s
 `bench_live` lazily inside one function), so the old versions are harmless today; replacing them makes `app/` byte-identical
 to the tested commit. The archive is therefore the same 18 files (15 changed + these 3) whatever production holds.
 
-**The production profile.** What production holds is not assumed. The owner reported (same day, image
-`sha256:5a85de4c...e14758`, shared by web and worker) that eight of the released files **already equal the candidate**:
-`card_regen.py`, `cards.py`, `demo_media.py`, `handoff.py`, `handoff_actions.py`, `handoff_alert.py`, `media.py`,
-`staff_cards.py` (the PR #45 files: that part was deployed before). For the other ten, the hashes come from one read-only
-command (section 4a), are mapped to Git blobs by `docs/release/map_production_hashes.py`, and are recorded one state per line in
-`docs/release/production_profile.txt`. `build_kit.sh` **refuses to build** unless every one of the 18 released files has a state
+**The production profile.** What production holds is not assumed. The hashes come from one read-only command (section 4a),
+are mapped to Git blobs by `docs/release/map_production_hashes.py`, and are recorded one state per line in
+`docs/release/production_profile.txt` (complete for the image above: eight released files already equal the candidate, ten are at
+older mapped versions or absent). `build_kit.sh` **refuses to build** unless every one of the 18 released files has a state
 and every state is `ABSENT`, a blob that exists in the repository history, or explicitly marked `diffed` (compared by hand).
 The profile becomes `STATES.allowed` in the kit; the gate accepts exactly those values and nothing else.
 
@@ -294,3 +302,14 @@ the `7f5cd3d` benchmark tools, and removing `card_regen.py`, `customer_intent.py
    a tampered `SHA256SUMS` made the in-container check fail and the script **rolled back by the recorded ID**; with the good
    kit it switched, 18/18 files verified inside both running containers (`compose exec -T` forwards stdin); a second switch
    stopped at its precondition; `rollback` returned both to the recorded ID.
+
+### 12a. The exact production combination (local, 2026-10-18)
+
+From the owner's dump, every file that differs from `46c44d8` was materialised from the Git blob with exactly that hash (10 files:
+`benchmark.py`, `customer_tools.py`, `normalise.py`, `render.py`, `requirements.py`, `search.py`, `staff_bench.py`, `turn_engine.py`
+and the CRLF forms of migrations 001 and 002), layered on an image of `46c44d8`, and the two
+absent files removed. Dumping that image with the section 4a command gives a tree **identical, line for line, for web and worker, to
+the pasted production tree** (170 hashes). On it: the baseline gate passes; an in-place edit, and a valid-but-unprofiled historical
+`render.py`, are each refused; the release image passes the image check (the same check refuses the production image); the Compose
+switch, the automatic rollback on a tampered manifest and the manual rollback all work, and 18/18 files verify inside both running
+containers.
