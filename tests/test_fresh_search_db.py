@@ -53,7 +53,14 @@ def age_slots(st, sender=CUSTOMER_B, days=2):
 
 
 def searches(st):
-    return st.query("SELECT count(*) FROM search_run")[0][0]
+    """Searches run since the earlier session's own message (which, as a full request, is
+    answered with its listings: customer test 2026-10-18)."""
+    return st.query("SELECT count(*) FROM search_run")[0][0] - getattr(st, "baseline", 0)
+
+
+def mark_searches(st):
+    """Searches run so far are not counted by searches() any more."""
+    st.baseline = st.query("SELECT count(*) FROM search_run")[0][0]
 
 
 def keep_id(payloads, answer):
@@ -64,6 +71,7 @@ def earlier_session(st, sender=CUSTOMER_B):
     """A rent request for a 500 gaz house in DHA Phase 6, a session ago."""
     turn(st, SESSION_ONE, update(SESSION_ONE_PATCH), sender=sender)
     age_slots(st, sender)
+    mark_searches(st)
 
 
 def asked_with_new_area(st, sender=CUSTOMER_B):
@@ -173,6 +181,7 @@ def test_a_button_of_an_older_question_cannot_answer_a_newer_one(st):
 
 def test_a_tap_with_no_question_open_changes_nothing(st):
     turn(st, SESSION_ONE, update(SESSION_ONE_PATCH))             # nothing is inherited
+    mark_searches(st)
     before = slots_of(st)
     assert sent_text(tap(st, "keep:yes:deadbeef", sender=CUSTOMER_B)) == TEMPLATES["echo_stale"]
     assert sent_text(tap(st, "keep:no:deadbeef", sender=CUSTOMER_B)) == TEMPLATES["echo_stale"]
@@ -478,7 +487,7 @@ def test_another_tenants_button_cannot_confirm_or_alter_this_conversation(st):
         assert sent_text(tap(st2, keep_id(mine, "no"), sender=CUSTOMER_B)) == TEMPLATES[
             "echo_stale"]
         assert slots_of(st) == a_before and slots_of(st2) == b_before
-        assert searches(st) == 0 and st2.query("SELECT count(*) FROM search_run")[0][0] == 0
+        assert searches(st) == 0 and searches(st2) == 0
         tap(st2, keep_id(theirs, "yes"), sender=CUSTOMER_B)     # its own button works
         assert "kept_at" in slots_of(st2)["purpose"] and "kept_at" not in slots_of(st)["purpose"]
     finally:

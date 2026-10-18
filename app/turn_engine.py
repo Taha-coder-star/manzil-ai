@@ -608,6 +608,10 @@ def _function_response(call, result):
     return {"functionResponse": response}
 
 
+# The 7.3 notices that only acknowledge what was saved (a reply of nothing else asks nothing).
+ACKNOWLEDGEMENTS = frozenset({"requirements_saved", "purpose_inferred", "location_chosen"})
+
+
 class TurnEngine:
     def __init__(self, provider, primary_model, failover_model, *,
                  provider_name=PROVIDER_NAME, clock=time.monotonic,
@@ -792,7 +796,15 @@ class TurnEngine:
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
-                return Outcome("done", "stop", tuple(notices), tuple(tools), calls,
+                detail = "stop"
+                if (self._search_due(context, tools) and self._only_acknowledged(notices)
+                        and not context.binding.question_open()):
+                    # Live 2026-10-18: "Ghar chahiye" saved the requirement and the reply
+                    # was only "note kar liya"; the customer was never asked for the rest.
+                    # A reply that already asks, declines or re-asks is complete as it is.
+                    self._code_search(context, tools, notices, payloads, trusted)
+                    detail = "stop_search"
+                return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                                tuple(payloads), frozenset(trusted))
             if response.kind != "tool_calls":
                 return Outcome("failed", response.detail, (), tuple(tools), calls)
@@ -812,18 +824,28 @@ class TurnEngine:
             ]
         detail = "iteration_limit"
         if self._search_due(context, tools):
-            # Every round went to update_requirements (production turn 4b1d4b0f, 2026-10-16):
-            # the saved requirements get the normal search in code, with all its gates (an
-            # open question, the voice echo, no-match), and no further provider call.
-            result = ai_tools.execute(llm.ToolCall("search_properties", {}, None), context)
-            tools.append(result.name if result.ok else f"{result.name}!{result.error}")
-            notices.extend(_notices(result))
-            trusted |= result.trusted_codes
-            if result.ok:
-                payloads.extend(result.payloads)
+            # Every round went to update_requirements (production turn 4b1d4b0f, 2026-10-16).
+            self._code_search(context, tools, notices, payloads, trusted)
             detail = "iteration_limit_search"
         return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
+
+    @staticmethod
+    def _code_search(context, tools, notices, payloads, trusted):
+        """The saved requirements get the normal search in code, with all its gates (an open
+        question, the voice echo, the missing slot, no-match), and no further provider call."""
+        result = ai_tools.execute(llm.ToolCall("search_properties", {}, None), context)
+        tools.append(result.name if result.ok else f"{result.name}!{result.error}")
+        notices.extend(_notices(result))
+        trusted.update(result.trusted_codes)
+        if result.ok:
+            payloads.extend(result.payloads)
+
+    @staticmethod
+    def _only_acknowledged(notices):
+        """Every notice so far is an acknowledgement (ACKNOWLEDGEMENTS): the reply asks
+        nothing and shows nothing yet."""
+        return bool(notices) and all(_key(n) in ACKNOWLEDGEMENTS for n in notices)
 
     @staticmethod
     def _search_due(context, tools):

@@ -348,6 +348,69 @@ def test_a_retried_tap_turn_sends_its_stored_plan_only(st):
     assert plan == [whatsapp.text(TEMPLATES["budget_ask_sale"])]
 
 
+# --- a reply is never only "noted"; a place that was not found holds the search ----------
+# Live 2026-10-18 (customer manual test, F-10 / F-5).
+
+def purpose_buttons(payloads):
+    return [button_ids(pl) for pl in payloads if pl["type"] == "interactive"]
+
+
+def test_a_message_that_only_saves_a_requirement_is_asked_for_the_rest(st, caplog):
+    """"Ghar chahiye" got only "note kar liya: ghar." and the customer was never asked."""
+    caplog.set_level("INFO")
+    reply = turn(st, "Ghar chahiye", ("update_requirements", {"patch": [
+        p("property_types", "set", "ghar")]}))
+    assert sent_text(reply).startswith("Theek hai, note kar liya: ghar.")
+    assert purpose_buttons(reply) == [["clarify:purpose:sale", "clarify:purpose:rent"]]
+    assert any("done/stop_search" in r.getMessage() for r in caplog.records)
+
+
+def test_a_complete_request_that_was_only_saved_is_answered_with_its_listings(st):
+    reply = turn(st, SCENARIO_2, ("update_requirements", {"patch": SCENARIO_2_PATCH}))
+    assert set(latest_shown(st)) == {"DH6-101", "DH6-102", "DH7-101"}
+    assert "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak" in sent_text(reply)
+
+
+def test_a_reply_that_already_asks_is_not_searched_again(st, caplog):
+    caplog.set_level("INFO")
+    reply = turn(st, "30 lakh ka ghar DHA Phase 6 mein", ("update_requirements", {"patch": [
+        p("budget", "set", "30 lakh"), p("property_types", "set", "ghar"),
+        p("location", "set", "DHA Phase 6")]}))
+    assert TEMPLATES["purpose_ask"] in sent_text(reply)
+    assert any("done/stop," in r.getMessage() for r in caplog.records)
+
+
+def test_a_place_that_is_out_of_coverage_holds_the_search(st):
+    scenario_2(st)
+    runs = st.query("SELECT count(*) FROM search_run")[0][0]
+    reply = turn(st, "Lahore mein ghar chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "Lahore")]}), ("search_properties", {}))
+    assert sent_text(reply) == TEMPLATES["location_out_of_coverage"].format(
+        city="Karachi", other="Lahore")
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == runs
+    assert st.state()[1]["location"]["value"]["nodes"] == [st.ids["dha-ph6"]]   # unchanged
+
+
+def test_a_place_that_was_not_found_never_searches_the_old_one(st):
+    scenario_2(st)
+    runs = st.query("SELECT count(*) FROM search_run")[0][0]
+    reply = turn(st, "Block 6 mein flat chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "Block 6 mein"), p("property_types", "set", "flat")]}),
+        ("search_properties", {}))
+    said = sent_text(reply)
+    assert "DHA Defence mein ye jagah mujhe nahi mili" in said
+    assert "is se kam price" not in said
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == runs
+
+
+def test_a_found_place_next_to_a_missing_one_still_searches(st):
+    reply = turn(st, "Clifton aur Lahore mein flat", ("update_requirements", {"patch": [
+        p("location", "set", "Clifton aur Lahore"), p("property_types", "set", "flat")]}),
+        ("search_properties", {}))
+    assert "Lahore" in sent_text(reply)
+    assert purpose_buttons(reply) == [["clarify:purpose:sale", "clarify:purpose:rent"]]
+
+
 # --- grounding (D4) ---------------------------------------------------------------------
 
 def test_a_card_stating_an_unsupported_price_is_replaced_by_agent_confirm(st):

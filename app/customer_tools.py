@@ -124,6 +124,7 @@ class CustomerBinding:
         self.echoed = False     # the voice echo question is in the reply (Task 10.2)
         self.results = False    # listings or the honest no-match are in the reply
         self.handoff = None     # Task 11.1: the SYSTEM entry of a handoff in this turn
+        self.place_unresolved = False   # this turn's place was not found: no search yet
         self.facts = grounding.Facts()
         self._language = language
 
@@ -143,6 +144,15 @@ class CustomerBinding:
         result = self.requirements.update(patch)
         if "purpose_inferred" in _keys(result.notice):
             self.purpose_told = True
+        # Live 2026-10-18: "Block 6 main flat chahiye" (place not found) was answered with
+        # a search of the OLD stored place. A place that was not found is asked about; it
+        # holds the search unless the same message also named a place that was found.
+        places = [op["status"] for op in (result.response or {}).get("ops", ())
+                  if op.get("slot") == "location"]
+        if "applied" in places:
+            self.place_unresolved = False
+        elif "unknown" in places or "out_of_coverage" in places:
+            self.place_unresolved = True
         return result
 
     # -- search_properties --
@@ -162,6 +172,9 @@ class CustomerBinding:
                 state[1] if state else None)
 
     def search_properties(self, args, context, nearby=False):
+        if self.place_unresolved:   # the update's own notice already asks for the place
+            return self._result("search_properties",
+                                {"status": "answer_first", "needs_answer": ["location"]})
         turn, gz = self.turn, self.gazetteer
         slots, pending, version = self._state()
         if pending is None:
@@ -231,6 +244,12 @@ class CustomerBinding:
         return self._result("search_properties",
                             {"status": "answer_first", "needs_answer": ["inherited_filters"]},
                             plan.payloads, plan.facts)
+
+    def question_open(self):
+        """A 7.3 question is waiting for the customer (an open clarification, or an
+        unanswered type / size / budget question): this turn's reply asks it again."""
+        _, pending, _ = self._state()
+        return pending is not None or bool(self.requirements.open_asks())
 
     def filters_text(self):
         """The filters the search would use now (the acknowledgement shows them): stored
