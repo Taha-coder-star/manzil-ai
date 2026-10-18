@@ -342,6 +342,16 @@ def test_scenario_3c_phase_8_added_after_cheaper(st):
     assert "budget se thoda upar" in sent_text(payloads)
 
 
+def test_bhi_adds_the_place_even_when_the_model_says_set(st):
+    """Live 2026-10-18: the header said "DHA Phase 8" only; Phase 6 had been replaced."""
+    cheaper(st)
+    payloads = search_turn(st, "Phase 8 mai bhi dekhoa", [p("location", "set", "Phase 8")],
+                           CUSTOMER_B)
+    assert st.state()[1]["location"]["value"]["nodes"] == [st.ids["dha-ph6"], st.ids["dha-ph8"]]
+    assert "DHA Phase 6 / DHA Phase 8" in sent_text(payloads)
+    assert latest_shown(st) == ["DH8-102", "DH8-101"]
+
+
 def test_a_retried_tap_turn_sends_its_stored_plan_only(st):
     cheaper(st)
     tap(st, "nomatch:budget")

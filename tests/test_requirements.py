@@ -17,6 +17,7 @@ from app.requirements import (
     Pending,
     Shown,
     Source,
+    additive_place,
     expire,
     merge_patch,
     verify_ops,
@@ -146,6 +147,32 @@ def test_set_replaces_and_add_extends_the_union(gz):
     replaced = run(gz, state, [op("location", "set", "Phase 8")],
                    [("text", "Phase 8 mein dikhao")])
     assert value(replaced, "location")["nodes"] == ["dha-ph8"]
+
+
+def test_a_set_of_a_place_the_customer_said_bhi_about_adds_it(gz):
+    # Live 2026-10-18: "Phase 8 mai bhi dekhoa" replaced Phase 6; the model chose "set".
+    state = {"location": loc("dha-ph6", mode="EXACT")}
+    merge = run(gz, state, [op("location", "set", "Phase 8")],
+                [("text", "Phase 8 mai bhi dekhoa")])
+    assert value(merge, "location")["nodes"] == ["dha-ph6", "dha-ph8"]
+    assert merge.entries[0]["op"] == "set"          # what the model said stays in the log
+
+
+@pytest.mark.parametrize(("span", "text", "expected"), [
+    ("Phase 8", "Phase 8 mein bhi dekho", True),
+    ("Phase 8", "Phase 8 mai bhi dekhoa", True),
+    ("Phase 8", "Phase 8 bhi dekho", True),
+    ("Phase 8 mein", "Phase 8 mein bhi dekho", True),
+    ("Clifton", "also Clifton", True),
+    ("Clifton", "Clifton too please", True),
+    ("Phase 8", "Phase 8 dikhao", False),
+    ("Phase 8", "aur Phase 8 dikhao", False),
+    ("Phase 8", "Phase 8 ka ghar mujhe bhi chahiye", False),   # that "bhi" is not about the place
+    ("Phase 8", "Phase 6 mein bhi dekho", False),
+    ("", "bhi", False),
+])
+def test_additive_place_reads_the_customers_words(span, text, expected):
+    assert additive_place(span, [text]) is expected
 
 
 def test_adding_a_node_already_there_keeps_one_copy(gz):

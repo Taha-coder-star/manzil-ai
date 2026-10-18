@@ -150,6 +150,23 @@ def split_places(span):
     return parts if len(parts) > 1 else []
 
 
+_ADDITIVE = r"(?:bhi|bhee|also|too)"
+
+
+def additive_place(span, texts):
+    """The customer's own words add this place ("Phase 8 mein bhi dekho", "also Clifton"):
+    the span is followed within two words by bhi / also / too, or follows "also". Read from
+    the message, so the model's choice of set over add cannot replace the stored place
+    (live 2026-10-18). "aur" is not one: it also means "and" and "more"."""
+    words = re.findall(r"[^\W_]+", span or "")
+    if not words:
+        return False
+    place = r"\s+".join(map(re.escape, words))
+    after = re.compile(place + r"(?:\W+\w+){0,2}\W+" + _ADDITIVE + r"\b", re.IGNORECASE)
+    before = re.compile(r"\balso\W+" + place + r"\b", re.IGNORECASE)
+    return any(after.search(text) or before.search(text) for text in texts)
+
+
 def parse_vocab(slot, span):
     """Values a span names in a controlled vocabulary: a list of enum values for
     construction / possession, {intent, tags} for investment; None when nothing matches."""
@@ -728,6 +745,8 @@ class Patch:
             return self._reject(op, "unsupported_op")
         if kind == "set" and self.extends_location:
             kind = "add"   # several places named in one patch are a union, never a replacement
+        if kind == "set" and additive_place(span, [s.text for s in ctx.sources]):
+            kind = "add"   # "Phase 8 mein bhi dekho" adds, whatever op the model chose
         if kind in ("set", "add") and affirmation_key(span) in AFFIRMATIONS:
             chosen = self.affirmed_candidate()
             if chosen is not None:
