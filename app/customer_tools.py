@@ -398,6 +398,17 @@ class CustomerBinding:
         return self._result("get_property", {"status": "ok"}, [payload],
                             self._listing_facts(item), [item.code])
 
+    def show_listing(self, code):
+        """A listing code the customer asked to see: the card of an ACTIVE listing, one fixed
+        line for any other code (sold, reserved, withdrawn and unknown alike: the status is
+        never said). Live 2026-10-18."""
+        ref = references.resolve(self.conn, self.turn.agency_id, self.turn.conversation_id,
+                                 text=code)
+        if ref.status == references.FOUND:
+            return self.details_card(ref.item)
+        return self._result("get_property", {"status": "not_found"},
+                            notice=_notice("listing_unavailable", code=code))
+
     # -- request_handoff (Task 11.1) --
 
     def request_handoff(self, args, context, items=None, reason=None):

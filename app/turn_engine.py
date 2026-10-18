@@ -211,6 +211,8 @@ TEMPLATES = {
                    "dekhna chahenge? Area ka naam likh kar bhejein."),
     "listing_unknown": ("Main samajh nahi saka aap kaunsi property keh rahe hain. List mein "
                         "se us ka number bhejein (jaise #2)."),
+    # Owner-approved 2026-10-18: one line for a sold, reserved, withdrawn or unknown code.
+    "listing_unavailable": "{code} abhi available nahi.",
     "no_more_photos": "{ref}: is property ki mazeed photos abhi available nahi hain.",
     # Task 11.1 (wording pending owner approval)
     "handoff_no_agent": ("Maazrat, abhi koi consultant available nahi hai; aapki request kisi "
@@ -285,6 +287,7 @@ TEMPLATES_EN = {
                    "consider? Please type the area name."),
     "listing_unknown": ("I couldn't tell which property you mean. Please send its number "
                         "from the list (for example #2)."),
+    "listing_unavailable": "{code} is not available right now.",
     "no_more_photos": "{ref}: no more photos of this property are available right now.",
     "visit_unavailable": "Booking a visit is not ready yet; no visit was booked.",
     "handoff_no_agent": ("Sorry, no consultant is available right now; your request was "
@@ -684,7 +687,9 @@ class TurnEngine:
         gets a greeting (not the "Shukriya!" fallback); a plain Haan / Nahi to the open
         keep-or-new-search question answers it; a fresh-search command is applied first.
         A message that also states a request ("salam, DHA mein flat chahiye", "nahi,
-        kharidna hai") goes on to the model, which reads the explicit values."""
+        kharidna hai") goes on to the model, which reads the explicit values. A listing code
+        asked for by itself ("DH6-103 dikhao") is looked up in code (live 2026-10-18: the model
+        answered it with an old search): its card when it is ACTIVE, else one fixed line."""
         language = detect_language(text)
         greeting = customer_intent.greeting_kind(text)
         if greeting is not None:
@@ -692,6 +697,13 @@ class TurnEngine:
             return [whatsapp.text(_template(key, language))]
         if self.requirements is None:
             return None
+        code = customer_intent.listing_lookup(text)
+        if code is not None:
+            binding = self.requirements.binding(conn, turn, message_texts(turn))
+            customer = self._customer_binding(conn, turn, binding, language)
+            if customer is None:
+                return None
+            return self._render_results(customer, [customer.show_listing(code)])
         command = customer_intent.fresh_command(text)
         answer = customer_intent.confirmation(text) if command is None else None
         if command is None and answer is None:

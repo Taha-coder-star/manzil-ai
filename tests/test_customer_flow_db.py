@@ -363,6 +363,38 @@ def test_a_retried_tap_turn_sends_its_stored_plan_only(st):
 # --- a reply is never only "noted"; a place that was not found holds the search ----------
 # Live 2026-10-18 (customer manual test, F-10 / F-5).
 
+def typed_only(st, body, sender=CUSTOMER_B):
+    """A customer text that must not reach the model (no script entry is added)."""
+    before = len(st.client.sent)
+    st.deliver(text(body, sender=sender))
+    st.drain()
+    return [payload for _, payload in st.client.sent[before:]]
+
+
+def test_an_active_code_asked_for_by_itself_gets_its_card_without_the_model(st):
+    """Live 2026-10-18: "DH6-103 dikhao" re-sent the stored search's no-match."""
+    cheaper(st)
+    calls = len(st.requests)
+    said = sent_text(typed_only(st, "DH6-103 dikhao"))
+    assert "DH6-103" in said and "9.5 crore" in said and "available nahi" not in said
+    assert len(st.requests) == calls
+
+
+@pytest.mark.parametrize("code", ["DH6-105", "DH6-106", "DH6-999"])
+def test_a_hidden_or_unknown_code_gets_one_fixed_line_and_no_status(st, code):
+    scenario_2(st)
+    said = sent_text(typed_only(st, f"{code} dikhao"))
+    assert said == f"{code} abhi available nahi."
+    assert not {"7.2", "7.9", "sold", "reserved", "token"} & set(said.lower().replace(".", " ")
+                                                                  .split())
+
+
+def test_an_english_customer_gets_the_english_line(st):
+    scenario_2(st)
+    assert sent_text(typed_only(st, "show me DH6-105 please")) == (
+        "DH6-105 is not available right now.")
+
+
 def purpose_buttons(payloads):
     return [button_ids(pl) for pl in payloads if pl["type"] == "interactive"]
 

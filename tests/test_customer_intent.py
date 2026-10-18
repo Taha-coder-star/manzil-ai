@@ -10,6 +10,7 @@ from app.customer_intent import (
     asks_for_agent,
     fresh_command,
     greeting_kind,
+    listing_lookup,
 )
 
 
@@ -102,3 +103,21 @@ def test_asking_for_a_person_or_a_visit_is_asking_for_the_agent(text):
 ])
 def test_a_question_about_the_listing_is_not_asking_for_the_agent(text):
     assert asks_for_agent(text) is False
+
+
+@pytest.mark.parametrize("text, code", [
+    ("DH6-103 dikhao", "DH6-103"), ("dh6-103 dikhao", "DH6-103"), ("DH6-103", "DH6-103"),
+    ("show me DH6-103", "DH6-103"), ("DH6-105 dikhao", "DH6-105"),
+    ("DH6-103 ki details bhejo", "DH6-103"), ("dikhao DH6-999 please", "DH6-999"),
+])
+def test_a_listing_code_asked_for_by_itself_is_a_lookup(text, code):
+    assert listing_lookup(text) == code
+
+
+@pytest.mark.parametrize("text", [
+    "DH6-101 mein gas connection hai?", "DH6-101 ki aur photos", "DH6-101 ka price kam hoga?",
+    "DH6-101 aur DH6-102 dikhao", "mujhe DH6-101 pasand hai, visit karni hai",
+    "Ghar chahiye", "", None, "2026-123 dikhao",
+])
+def test_anything_else_with_a_code_is_left_to_the_model(text):
+    assert listing_lookup(text) is None
