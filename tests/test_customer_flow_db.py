@@ -187,11 +187,27 @@ def test_a_purpose_button_answers_the_purpose_question(st):
     assert [r[1] for r in st.pending()] == ["resolved"]
 
 
+def test_the_search_gates_purpose_buttons_set_the_purpose_and_search(st):
+    """Live 2026-10-18: a search with no purpose asks buy or rent with buttons but opens no
+    question row, and every tap only asked again."""
+    first = turn(st, "DHA Phase 6 mein ghar chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar")]}),
+        ("search_properties", {}))
+    questions = [pl for pl in first if pl["type"] == "interactive"]
+    assert [button_ids(q) for q in questions] == [["clarify:purpose:sale", "clarify:purpose:rent"]]
+    assert st.pending() == []
+    reply = tap(st, "clarify:purpose:sale")
+    assert st.state()[1]["purpose"]["value"] == "sale"
+    assert set(latest_shown(st)) == {"DH6-101", "DH6-102", "DH6-103", "DH6-104"}
+    assert "Ji, DHA Phase 6 mein ghar, khareedne ke liye" in sent_text(reply)
+
+
 def test_a_stale_clarify_tap_changes_nothing(st):
     scenario_2(st)
     version = st.state()[0]
-    tap(st, "clarify:location:0")
+    reply = tap(st, "clarify:location:0")
     assert st.state()[0] == version
+    assert sent_text(reply) == TEMPLATES["echo_stale"]
 
 
 # --- references + photos (3a) ------------------------------------------------------------
@@ -203,6 +219,7 @@ def test_scenario_3a_sends_card_2s_unsent_photos_in_order_with_the_id(ps):
     n = position_of(st, "DH6-102")
     first = turn(st, f"Property {n} ki aur pictures", ("send_property_photos", {}))
     assert images(first) == [(f"media-DH6-102-{i}", f"#{n} · DH6-102") for i in range(3)]
+    assert [pl for pl in first if pl["type"] == "text"] == []   # no "Shukriya!" fallback first
     assert len(st.query("SELECT 1 FROM media_sent")) == 3
     assert st.query("SELECT selected_via FROM focus") == [("position",)]
 
@@ -288,6 +305,8 @@ def test_a_restated_budget_after_cheaper_shows_the_listings_again(st):
 def test_scenario_3b_cheaper_is_an_honest_no_match_with_three_buttons(st):
     [reply] = cheaper(st)
     assert button_ids(reply) == ["nomatch:nearby", "nomatch:budget", "handoff:request"]
+    said = sent_text([reply])
+    assert "Yahan price 7.8 crore se shuru hoti hai." in said and "9.5 crore" not in said
     assert st.state()[1]["budget"]["value"]["max"] <= 80_000_000  # never raised
 
 
@@ -324,12 +343,131 @@ def test_scenario_3c_phase_8_added_after_cheaper(st):
     assert "budget se thoda upar" in sent_text(payloads)
 
 
+def test_bhi_adds_the_place_even_when_the_model_says_set(st):
+    """Live 2026-10-18: the header said "DHA Phase 8" only; Phase 6 had been replaced."""
+    cheaper(st)
+    payloads = search_turn(st, "Phase 8 mai bhi dekhoa", [p("location", "set", "Phase 8")],
+                           CUSTOMER_B)
+    assert st.state()[1]["location"]["value"]["nodes"] == [st.ids["dha-ph6"], st.ids["dha-ph8"]]
+    assert "DHA Phase 6 / DHA Phase 8" in sent_text(payloads)
+    assert latest_shown(st) == ["DH8-102", "DH8-101"]
+
+
 def test_a_retried_tap_turn_sends_its_stored_plan_only(st):
     cheaper(st)
     tap(st, "nomatch:budget")
     turn_id = st.query("SELECT id FROM conversation_turn ORDER BY created_at DESC LIMIT 1")[0][0]
     plan = st.query("SELECT reply_plan FROM conversation_turn WHERE id = %s", (turn_id,))[0][0]
     assert plan == [whatsapp.text(TEMPLATES["budget_ask_sale"])]
+
+
+# --- a reply is never only "noted"; a place that was not found holds the search ----------
+# Live 2026-10-18 (customer manual test, F-10 / F-5).
+
+def typed_only(st, body, sender=CUSTOMER_B):
+    """A customer text that must not reach the model (no script entry is added)."""
+    before = len(st.client.sent)
+    st.deliver(text(body, sender=sender))
+    st.drain()
+    return [payload for _, payload in st.client.sent[before:]]
+
+
+def test_an_active_code_asked_for_by_itself_gets_its_card_without_the_model(st):
+    """Live 2026-10-18: "DH6-103 dikhao" re-sent the stored search's no-match."""
+    cheaper(st)
+    calls = len(st.requests)
+    said = sent_text(typed_only(st, "DH6-103 dikhao"))
+    assert "DH6-103" in said and "9.5 crore" in said and "available nahi" not in said
+    assert len(st.requests) == calls
+
+
+@pytest.mark.parametrize("code", ["DH6-105", "DH6-106", "DH6-999"])
+def test_a_hidden_or_unknown_code_gets_one_fixed_line_and_no_status(st, code):
+    scenario_2(st)
+    said = sent_text(typed_only(st, f"{code} dikhao"))
+    assert said == f"{code} abhi available nahi."
+    assert not {"7.2", "7.9", "sold", "reserved", "token"} & set(said.lower().replace(".", " ")
+                                                                  .split())
+
+
+def test_an_english_customer_gets_the_english_line(st):
+    scenario_2(st)
+    assert sent_text(typed_only(st, "show me DH6-105 please")) == (
+        "DH6-105 is not available right now.")
+
+
+def purpose_buttons(payloads):
+    return [button_ids(pl) for pl in payloads if pl["type"] == "interactive"]
+
+
+def test_a_message_that_only_saves_a_requirement_is_asked_for_the_rest(st, caplog):
+    """"Ghar chahiye" got only "note kar liya: ghar." and the customer was never asked."""
+    caplog.set_level("INFO")
+    reply = turn(st, "Ghar chahiye", ("update_requirements", {"patch": [
+        p("property_types", "set", "ghar")]}))
+    assert sent_text(reply).startswith("Theek hai, note kar liya: ghar.")
+    assert purpose_buttons(reply) == [["clarify:purpose:sale", "clarify:purpose:rent"]]
+    assert any("done/stop_search" in r.getMessage() for r in caplog.records)
+
+
+def test_a_complete_request_that_was_only_saved_is_answered_with_its_listings(st):
+    reply = turn(st, SCENARIO_2, ("update_requirements", {"patch": SCENARIO_2_PATCH}))
+    assert set(latest_shown(st)) == {"DH6-101", "DH6-102", "DH7-101"}
+    assert "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak" in sent_text(reply)
+
+
+def test_a_reply_that_already_asks_is_not_searched_again(st, caplog):
+    caplog.set_level("INFO")
+    reply = turn(st, "30 lakh ka ghar DHA Phase 6 mein", ("update_requirements", {"patch": [
+        p("budget", "set", "30 lakh"), p("property_types", "set", "ghar"),
+        p("location", "set", "DHA Phase 6")]}))
+    assert TEMPLATES["purpose_ask"] in sent_text(reply)
+    assert any("done/stop," in r.getMessage() for r in caplog.records)
+
+
+def test_a_place_that_is_out_of_coverage_holds_the_search(st):
+    scenario_2(st)
+    runs = st.query("SELECT count(*) FROM search_run")[0][0]
+    reply = turn(st, "Lahore mein ghar chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "Lahore")]}), ("search_properties", {}))
+    assert sent_text(reply) == TEMPLATES["location_out_of_coverage"].format(
+        city="Karachi", other="Lahore")
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == runs
+    assert st.state()[1]["location"]["value"]["nodes"] == [st.ids["dha-ph6"]]   # unchanged
+
+
+def test_a_place_that_was_not_found_never_searches_the_old_one(st):
+    scenario_2(st)
+    runs = st.query("SELECT count(*) FROM search_run")[0][0]
+    reply = turn(st, "Block 6 mein flat chahiye", ("update_requirements", {"patch": [
+        p("location", "set", "Block 6 mein"), p("property_types", "set", "flat")]}),
+        ("search_properties", {}))
+    said = sent_text(reply)
+    assert "DHA Defence mein ye jagah mujhe nahi mili" in said
+    assert "is se kam price" not in said and "500 gaz" not in said
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == runs
+
+
+def test_a_new_type_after_cheaper_has_neither_the_old_cap_nor_the_gaz_size(st):
+    """Live 2026-10-18: "flat chahiye" after "Kuch sasta" searched "is se kam price ka
+    500 gaz flat"."""
+    cheaper(st)
+    reply = turn(st, "flat chahiye", ("update_requirements", {"patch": [
+        p("property_types", "set", "flat")]}), ("search_properties", {}))
+    said = sent_text(reply)
+    assert "is se kam price" not in said and "500 gaz" not in said
+    assert TEMPLATES["size_ask"] in said          # the size is asked; the search waits for it
+    slots = st.state()[1]
+    assert slots["budget"]["value"]["max"] == 80_000_000
+    assert "excluded_property_ids" not in slots and "size" not in slots
+
+
+def test_a_found_place_next_to_a_missing_one_still_searches(st):
+    reply = turn(st, "Clifton aur Lahore mein flat", ("update_requirements", {"patch": [
+        p("location", "set", "Clifton aur Lahore"), p("property_types", "set", "flat")]}),
+        ("search_properties", {}))
+    assert "Lahore" in sent_text(reply)
+    assert purpose_buttons(reply) == [["clarify:purpose:sale", "clarify:purpose:rent"]]
 
 
 # --- grounding (D4) ---------------------------------------------------------------------
@@ -340,4 +478,4 @@ def test_a_card_stating_an_unsupported_price_is_replaced_by_agent_confirm(st):
     shown = {"type": "manzil_shown", "search_run_id": "x", "items": []}
     out = turn_engine.ground_customer([card, shown], facts, st.cache.get(), "roman_urdu")
     assert [pl["interactive"]["body"]["text"] for pl in out] == [
-        "Ye maloomat mere paas nahi -- agent confirm kar denge."]  # and SHOWN dropped
+        "Ye maloomat mere paas nahi — agent confirm kar denge."]  # and SHOWN dropped

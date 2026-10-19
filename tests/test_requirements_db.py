@@ -22,6 +22,7 @@ from app import (
     ai_tools,
     config,
     gazetteer,
+    grounding,
     requirements,
     seed,
     turn_engine,
@@ -166,6 +167,14 @@ def st(app_role_db):
     conn.close()
 
 
+def bodies(st, start=0):
+    """Every sent message's visible text (cards, buttons and questions included)."""
+    return ["\n".join(grounding.payload_texts(payload)) for _, payload in st.client.sent[start:]]
+
+
+OPTIONS_6 = "Ji, DHA Phase 6 mein {what} — ye options hain:"
+
+
 def noted(summary):
     """The acknowledgement that names the filters in use (render_customer)."""
     return TEMPLATES["requirements_noted"].format(summary=summary)
@@ -187,7 +196,9 @@ def test_update_requirements_stores_a_versioned_patch_through_the_real_worker(st
         [p("purpose", "set", "buy"), p("property_types", "set", "ghar"),
          p("location", "set", "DHA Phase 6"), p("size", "set", "500 gaz"),
          p("budget", "set", "8 crore tak")])
-    assert reply == [noted("DHA Phase 6, 500 gaz ghar, khareedne ke liye, 8 crore tak")]
+    # A full request is answered with its listings (customer test 2026-10-18).
+    assert len(reply) == 1 and reply[0].startswith(
+        OPTIONS_6.format(what="500 gaz ghar, khareedne ke liye, 8 crore tak"))
     version, slots = st.state()
     assert version == 1
     assert slots["location"]["value"]["nodes"] == fix(st, "dha-ph6")
@@ -316,8 +327,7 @@ def test_an_ambiguous_place_asks_and_the_answer_is_checked_against_the_stored_ca
 
     reply = st.say("Bahria", [p("location", "set", "Bahria")])
     assert st.nodes() == fix(st, "btk-p6")
-    assert reply == [noted("Bahria Precinct 6") + "\n\n" +
-                     TEMPLATES["location_chosen"].format(area="Bahria Precinct 6")]
+    assert reply == [noted("Bahria Precinct 6")]   # the summary names the place: said once
     assert [row[1] for row in st.pending()] == ["resolved"]
     assert st.state()[1]["location"]["method"] == "clarified"
 
@@ -405,6 +415,11 @@ def test_cheaper_uses_the_last_search_excludes_it_and_never_invents_an_amount(st
     st.say("buy ghar DHA Phase 6, 8 crore tak",
            [p("purpose", "set", "buy"), p("property_types", "set", "ghar"),
             p("location", "set", "DHA Phase 6"), p("budget", "set", "8 crore tak")])
+    # The first message was answered with its listings; this test is about a relative
+    # budget with NO prior search, so forget them.
+    with psycopg.connect(st.admin_url, autocommit=True) as admin:
+        admin.execute("DELETE FROM shown_item")
+        admin.execute("DELETE FROM search_run")
     reply = st.say("Kuch sasta dikhao", [p("budget", "relative", "Kuch sasta")])
     assert reply == [TEMPLATES["budget_ask"]]           # no search yet: nothing invented
     assert st.state()[1]["budget"]["value"]["max"] == 80_000_000
@@ -436,7 +451,8 @@ def test_an_inferred_purpose_is_labelled_and_echoed(st):
     slots = st.state()[1]
     assert slots["purpose"]["source"] == "inferred" and slots["purpose"]["confirmed"] is False
     assert reply == [noted("khareedne ke liye, 8 crore ke aas paas") + "\n\n"
-                     + TEMPLATES["purpose_inferred"].format(purpose="khareedna")]
+                     + TEMPLATES["purpose_inferred"].format(purpose="khareedna"),
+                     "Aap kis area mein property dekh rahe hain?"]   # the next missing slot
 
 
 def test_a_purpose_question_is_answered_by_an_explicit_purpose(st):
@@ -464,7 +480,11 @@ def test_a_voice_transcript_feeds_the_same_path_but_is_unconfirmed(st):
     assert slots["location"]["source"] == "voice" and slots["location"]["confirmed"] is False
     assert "echo" not in slots["location"]
     assert slots["budget"]["value"]["max"] == 80_000_000
-    assert st.sent_texts()[0].startswith(noted("Clifton Block 5, khareedne ke liye, 8 crore tak"))
+    # The reply is the search's own (listings or the honest no-match), which states what it
+    # searched; the purpose note stays.
+    first, second = bodies(st)
+    assert first == TEMPLATES["purpose_inferred"].format(purpose="khareedna")
+    assert second.startswith("Clifton Block 5 mein is budget (8 crore tak)")
 
 
 def test_a_weak_transcript_is_marked_for_an_echo(st):
@@ -515,7 +535,8 @@ def test_a_retried_turn_never_applies_a_patch_twice(st, monkeypatch):
     # "thoda upar" compounds (max x 1.10); a replay must not apply it a second time.
     assert st.state()[1]["budget"]["value"]["max"] == 88_000_000
     assert st.state()[0] == 2 and len(st.patches()) == 2
-    assert st.sent_texts()[-1] == noted("DHA Phase 6, ghar, khareedne ke liye, 8.8 crore tak")
+    assert st.sent_texts()[-1].startswith(
+        OPTIONS_6.format(what="ghar, khareedne ke liye, 8.8 crore tak"))
 
 
 def test_a_retried_turn_counts_an_unanswered_question_once(st, monkeypatch):
@@ -654,8 +675,7 @@ def test_a_plain_haan_confirms_the_sole_fuzzy_candidate_without_a_tool_call(st):
     ask_zamzama(st)
     reply = st.say("haan")                                     # the model calls no tool
     assert st.nodes() == fix(st, "dha-ph5-zamzama")
-    assert reply == [noted("Zamzama Commercial") + "\n\n"
-                     + TEMPLATES["location_chosen"].format(area="Zamzama Commercial")]
+    assert reply == [noted("Zamzama Commercial")]
     assert [r[1] for r in st.pending()] == ["resolved"]
     ((_, ops, _), *_) = st.patches()[-1:]
     assert ops[0]["detail"] == "affirmed" and ops[0]["call"] == "end"
@@ -731,7 +751,8 @@ def test_an_impossible_budget_is_asked_then_kept_when_restated(st):
     reply = st.say("budget 5 lakh", [p("budget", "set", "5 lakh")])
     assert st.state()[1]["budget"]["echo"] == ["implausible"]
     assert st.state()[1]["budget"]["confirmed"] is False
-    assert reply == [noted("DHA Phase 6, ghar, khareedne ke liye, 5 lakh ke aas paas")]
+    assert reply == []   # the search's honest no-match (buttons) says what it searched
+    assert bodies(st)[-1].startswith("DHA Phase 6 mein is budget (5 lakh ke aas paas)")
     st.say("budget 8 crore tak", [p("budget", "set", "8 crore tak")])
     assert st.state()[1]["budget"]["value"]["max"] == 80_000_000
     assert "echo" not in st.state()[1]["budget"]
@@ -817,9 +838,7 @@ def _setup_fallback(st):
 
 def _setup_confirm(st):
     ask_zamzama(st)
-    expected = (noted("Zamzama Commercial") + "\n\n"
-                + TEMPLATES["location_chosen"].format(area="Zamzama Commercial"))
-    return "haan", expected, fix(st, "dha-ph5-zamzama")
+    return "haan", noted("Zamzama Commercial"), fix(st, "dha-ph5-zamzama")
 
 
 @pytest.mark.parametrize("setup", [_setup_cross_area, _setup_fallback, _setup_confirm],
@@ -841,7 +860,7 @@ def test_a_crash_after_the_decision_never_loses_the_notice(st, monkeypatch, setu
     assert st.query("SELECT count(*) FROM requirement_patch_log WHERE ops -> 0 ->> 'call' "
                     "= 'end'") == [(1,)]
     assert st.query("SELECT count(*) FROM outbound_message WHERE dedupe_key LIKE 'turn:%%'"
-                    )[0][0] == len(st.sent_texts())
+                    )[0][0] == len(st.client.sent)
 
 
 def test_a_send_failure_after_the_decision_resends_the_stored_notice_once(st, monkeypatch):

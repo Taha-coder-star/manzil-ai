@@ -61,6 +61,14 @@ def visible(payloads):
             if not is_internal(payload) or payload["type"] == SYSTEM]
 
 
+def delivered(payloads):
+    """What the customer actually receives: the visible payloads and the photos (IMAGE
+    entries). A reply of photos alone is an answer; the "tell me your area" fallback is not
+    added to it (live 2026-10-18: "Property 1 ki aur pictures")."""
+    return [payload for payload in payloads
+            if not is_internal(payload) or payload["type"] in (SYSTEM, IMAGE)]
+
+
 def _set_timeout(conn):
     conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
 

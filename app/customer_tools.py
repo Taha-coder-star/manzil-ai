@@ -35,6 +35,7 @@ import re
 from app import (
     ai_tools,
     cards,
+    customer_intent,
     customer_reply,
     details,
     grounding,
@@ -124,6 +125,7 @@ class CustomerBinding:
         self.echoed = False     # the voice echo question is in the reply (Task 10.2)
         self.results = False    # listings or the honest no-match are in the reply
         self.handoff = None     # Task 11.1: the SYSTEM entry of a handoff in this turn
+        self.place_unresolved = False   # this turn's place was not found: no search yet
         self.facts = grounding.Facts()
         self._language = language
 
@@ -143,6 +145,15 @@ class CustomerBinding:
         result = self.requirements.update(patch)
         if "purpose_inferred" in _keys(result.notice):
             self.purpose_told = True
+        # Live 2026-10-18: "Block 6 main flat chahiye" (place not found) was answered with
+        # a search of the OLD stored place. A place that was not found is asked about; it
+        # holds the search unless the same message also named a place that was found.
+        places = [op["status"] for op in (result.response or {}).get("ops", ())
+                  if op.get("slot") == "location"]
+        if "applied" in places:
+            self.place_unresolved = False
+        elif "unknown" in places or "out_of_coverage" in places:
+            self.place_unresolved = True
         return result
 
     # -- search_properties --
@@ -162,6 +173,9 @@ class CustomerBinding:
                 state[1] if state else None)
 
     def search_properties(self, args, context, nearby=False):
+        if self.place_unresolved:   # the update's own notice already asks for the place
+            return self._result("search_properties",
+                                {"status": "answer_first", "needs_answer": ["location"]})
         turn, gz = self.turn, self.gazetteer
         slots, pending, version = self._state()
         if pending is None:
@@ -231,6 +245,12 @@ class CustomerBinding:
         return self._result("search_properties",
                             {"status": "answer_first", "needs_answer": ["inherited_filters"]},
                             plan.payloads, plan.facts)
+
+    def question_open(self):
+        """A 7.3 question is waiting for the customer (an open clarification, or an
+        unanswered type / size / budget question): this turn's reply asks it again."""
+        _, pending, _ = self._state()
+        return pending is not None or bool(self.requirements.open_asks())
 
     def filters_text(self):
         """The filters the search would use now (the acknowledgement shows them): stored
@@ -378,10 +398,28 @@ class CustomerBinding:
         return self._result("get_property", {"status": "ok"}, [payload],
                             self._listing_facts(item), [item.code])
 
+    def show_listing(self, code):
+        """A listing code the customer asked to see: the card of an ACTIVE listing, one fixed
+        line for any other code (sold, reserved, withdrawn and unknown alike: the status is
+        never said). Live 2026-10-18."""
+        ref = references.resolve(self.conn, self.turn.agency_id, self.turn.conversation_id,
+                                 text=code)
+        if ref.status == references.FOUND:
+            return self.details_card(ref.item)
+        return self._result("get_property", {"status": "not_found"},
+                            notice=_notice("listing_unavailable", code=code))
+
     # -- request_handoff (Task 11.1) --
 
     def request_handoff(self, args, context, items=None, reason=None):
         reason = reason or args.get("reason") or "agent"
+        if (items is None and details.LEGAL in details.field_for(self.text)
+                and not customer_intent.asks_for_agent(self.text)):
+            # Live 2026-10-18: "Is ghar ke documents clear hain?" opened the handoff list (one
+            # tap = a lead nobody asked for). A documents question gets the agent offer; the
+            # [Agent se baat] button (or the customer asking for one) opens the handoff.
+            return self._result("request_handoff", {"status": "offered", "reason": "legal"},
+                                details.answer_detail(None, [details.LEGAL], self.language))
         if items is None:
             # Only the customer's words name a listing here (R-31): no model position, no
             # focus. Several shown and nothing named -> ask.
@@ -423,10 +461,13 @@ class CustomerBinding:
                                 positions=frozenset(pairs), position_codes=pairs)
         question = words["which_visit"] if reason == "visit" else words["which"]
         payload = whatsapp.list_message(question, words["choose"], [(None, rows)])
+        # One question per turn: asked again in a later round of the same turn (live
+        # 2026-10-18: the visit list arrived twice), it is not sent again.
+        send = [] if self.asked else [payload]
         self.asked = True
         return self._result("request_handoff", {"status": "ambiguous", "options": [
             {"position": i.position, "code": i.code} for i in items]},
-            [payload], facts, [i.code for i in items])
+            send, facts, [i.code for i in items])
 
     def _handoff_tap(self, reason, target):
         if target == "all":
@@ -496,5 +537,7 @@ class CustomerBinding:
         slot, raw = (loc, choice) if loc else (purpose, value)
         answer = None if raw == "none" else (int(raw) if raw.isdigit() else raw)
         notices = service.choose(self.conn, self.turn, slot, answer)
-        out = [self._result("clarify", {"status": "ok"}, notice=tuple(notices or ()))]
+        if notices is None:   # an older question, or no such option: nothing changed
+            return [self._result("clarify", {"status": "stale"}, notice="echo_stale")]
+        out = [self._result("clarify", {"status": "ok"}, notice=tuple(notices))]
         return out + [self.search_properties({}, None)]

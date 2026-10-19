@@ -211,6 +211,8 @@ TEMPLATES = {
                    "dekhna chahenge? Area ka naam likh kar bhejein."),
     "listing_unknown": ("Main samajh nahi saka aap kaunsi property keh rahe hain. List mein "
                         "se us ka number bhejein (jaise #2)."),
+    # Owner-approved 2026-10-18: one line for a sold, reserved, withdrawn or unknown code.
+    "listing_unavailable": "{code} abhi available nahi.",
     "no_more_photos": "{ref}: is property ki mazeed photos abhi available nahi hain.",
     # Task 11.1 (wording pending owner approval)
     "handoff_no_agent": ("Maazrat, abhi koi consultant available nahi hai; aapki request kisi "
@@ -285,6 +287,7 @@ TEMPLATES_EN = {
                    "consider? Please type the area name."),
     "listing_unknown": ("I couldn't tell which property you mean. Please send its number "
                         "from the list (for example #2)."),
+    "listing_unavailable": "{code} is not available right now.",
     "no_more_photos": "{ref}: no more photos of this property are available right now.",
     "visit_unavailable": "Booking a visit is not ready yet; no visit was booked.",
     "handoff_no_agent": ("Sorry, no consultant is available right now; your request was "
@@ -512,11 +515,16 @@ def render_customer(outcome, customer):
     if customer.echoed:  # Task 10.2: the voice echo lists the values these notes repeat
         keys = [k for k in keys if _key(k) not in customer_tools.SAID_BY_ECHO]
     payloads = ground_customer(list(outcome.payloads), customer.facts, gazetteer, language)
-    if len(keys) > 1 or customer_reply.visible(payloads):
+    unique = []
+    for payload in payloads:   # live 2026-10-18: the same question twice in one reply
+        if customer_reply.is_internal(payload) or payload not in unique:
+            unique.append(payload)
+    payloads = unique
+    if len(keys) > 1 or customer_reply.delivered(payloads):
         # "Not understood" is the fallback of an update call that produced no notice; next to
         # another call's notice or a reply it contradicts what this turn did say.
         keys = [k for k in keys if _key(k) != "requirements_unclear"]
-    if not keys and not customer_reply.visible(payloads):
+    if not keys and not customer_reply.delivered(payloads):
         keys = ["customer_default"]
     summarise = getattr(customer, "filters_text", None)
     if summarise is not None and any(_key(k) == "requirements_saved" for k in keys):
@@ -524,6 +532,9 @@ def render_customer(outcome, customer):
         if summary:
             keys = [ai_tools.Notice("requirements_noted", (("summary", summary),))
                     if _key(k) == "requirements_saved" else k for k in keys]
+            # The summary already names the place: "Theek hai, Clifton Block 6." after
+            # "note kar liya: Clifton Block 6, flat." said it twice (live 2026-10-18).
+            keys = [k for k in keys if _key(k) != "location_chosen"]
     if not keys:
         return payloads
     note = whatsapp.text("\n\n".join(_template(k, language) for k in keys))
@@ -608,6 +619,10 @@ def _function_response(call, result):
     return {"functionResponse": response}
 
 
+# The 7.3 notices that only acknowledge what was saved (a reply of nothing else asks nothing).
+ACKNOWLEDGEMENTS = frozenset({"requirements_saved", "purpose_inferred", "location_chosen"})
+
+
 class TurnEngine:
     def __init__(self, provider, primary_model, failover_model, *,
                  provider_name=PROVIDER_NAME, clock=time.monotonic,
@@ -680,7 +695,9 @@ class TurnEngine:
         gets a greeting (not the "Shukriya!" fallback); a plain Haan / Nahi to the open
         keep-or-new-search question answers it; a fresh-search command is applied first.
         A message that also states a request ("salam, DHA mein flat chahiye", "nahi,
-        kharidna hai") goes on to the model, which reads the explicit values."""
+        kharidna hai") goes on to the model, which reads the explicit values. A listing code
+        asked for by itself ("DH6-103 dikhao") is looked up in code (live 2026-10-18: the model
+        answered it with an old search): its card when it is ACTIVE, else one fixed line."""
         language = detect_language(text)
         greeting = customer_intent.greeting_kind(text)
         if greeting is not None:
@@ -688,6 +705,13 @@ class TurnEngine:
             return [whatsapp.text(_template(key, language))]
         if self.requirements is None:
             return None
+        code = customer_intent.listing_lookup(text)
+        if code is not None:
+            binding = self.requirements.binding(conn, turn, message_texts(turn))
+            customer = self._customer_binding(conn, turn, binding, language)
+            if customer is None:
+                return None
+            return self._render_results(customer, [customer.show_listing(code)])
         command = customer_intent.fresh_command(text)
         answer = customer_intent.confirmation(text) if command is None else None
         if command is None and answer is None:
@@ -792,7 +816,15 @@ class TurnEngine:
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
-                return Outcome("done", "stop", tuple(notices), tuple(tools), calls,
+                detail = "stop"
+                if (self._search_due(context, tools) and self._only_acknowledged(notices)
+                        and not context.binding.question_open()):
+                    # Live 2026-10-18: "Ghar chahiye" saved the requirement and the reply
+                    # was only "note kar liya"; the customer was never asked for the rest.
+                    # A reply that already asks, declines or re-asks is complete as it is.
+                    self._code_search(context, tools, notices, payloads, trusted)
+                    detail = "stop_search"
+                return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                                tuple(payloads), frozenset(trusted))
             if response.kind != "tool_calls":
                 return Outcome("failed", response.detail, (), tuple(tools), calls)
@@ -812,18 +844,28 @@ class TurnEngine:
             ]
         detail = "iteration_limit"
         if self._search_due(context, tools):
-            # Every round went to update_requirements (production turn 4b1d4b0f, 2026-10-16):
-            # the saved requirements get the normal search in code, with all its gates (an
-            # open question, the voice echo, no-match), and no further provider call.
-            result = ai_tools.execute(llm.ToolCall("search_properties", {}, None), context)
-            tools.append(result.name if result.ok else f"{result.name}!{result.error}")
-            notices.extend(_notices(result))
-            trusted |= result.trusted_codes
-            if result.ok:
-                payloads.extend(result.payloads)
+            # Every round went to update_requirements (production turn 4b1d4b0f, 2026-10-16).
+            self._code_search(context, tools, notices, payloads, trusted)
             detail = "iteration_limit_search"
         return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
+
+    @staticmethod
+    def _code_search(context, tools, notices, payloads, trusted):
+        """The saved requirements get the normal search in code, with all its gates (an open
+        question, the voice echo, the missing slot, no-match), and no further provider call."""
+        result = ai_tools.execute(llm.ToolCall("search_properties", {}, None), context)
+        tools.append(result.name if result.ok else f"{result.name}!{result.error}")
+        notices.extend(_notices(result))
+        trusted.update(result.trusted_codes)
+        if result.ok:
+            payloads.extend(result.payloads)
+
+    @staticmethod
+    def _only_acknowledged(notices):
+        """Every notice so far is an acknowledgement (ACKNOWLEDGEMENTS): the reply asks
+        nothing and shows nothing yet."""
+        return bool(notices) and all(_key(n) in ACKNOWLEDGEMENTS for n in notices)
 
     @staticmethod
     def _search_due(context, tools):

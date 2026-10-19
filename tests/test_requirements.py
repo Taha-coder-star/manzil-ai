@@ -17,6 +17,7 @@ from app.requirements import (
     Pending,
     Shown,
     Source,
+    additive_place,
     expire,
     merge_patch,
     verify_ops,
@@ -146,6 +147,32 @@ def test_set_replaces_and_add_extends_the_union(gz):
     replaced = run(gz, state, [op("location", "set", "Phase 8")],
                    [("text", "Phase 8 mein dikhao")])
     assert value(replaced, "location")["nodes"] == ["dha-ph8"]
+
+
+def test_a_set_of_a_place_the_customer_said_bhi_about_adds_it(gz):
+    # Live 2026-10-18: "Phase 8 mai bhi dekhoa" replaced Phase 6; the model chose "set".
+    state = {"location": loc("dha-ph6", mode="EXACT")}
+    merge = run(gz, state, [op("location", "set", "Phase 8")],
+                [("text", "Phase 8 mai bhi dekhoa")])
+    assert value(merge, "location")["nodes"] == ["dha-ph6", "dha-ph8"]
+    assert merge.entries[0]["op"] == "set"          # what the model said stays in the log
+
+
+@pytest.mark.parametrize(("span", "text", "expected"), [
+    ("Phase 8", "Phase 8 mein bhi dekho", True),
+    ("Phase 8", "Phase 8 mai bhi dekhoa", True),
+    ("Phase 8", "Phase 8 bhi dekho", True),
+    ("Phase 8 mein", "Phase 8 mein bhi dekho", True),
+    ("Clifton", "also Clifton", True),
+    ("Clifton", "Clifton too please", True),
+    ("Phase 8", "Phase 8 dikhao", False),
+    ("Phase 8", "aur Phase 8 dikhao", False),
+    ("Phase 8", "Phase 8 ka ghar mujhe bhi chahiye", False),   # that "bhi" is not about the place
+    ("Phase 8", "Phase 6 mein bhi dekho", False),
+    ("", "bhi", False),
+])
+def test_additive_place_reads_the_customers_words(span, text, expected):
+    assert additive_place(span, [text]) is expected
 
 
 def test_adding_a_node_already_there_keeps_one_copy(gz):
@@ -316,12 +343,21 @@ def test_the_answer_applies_the_question_s_own_op(gz):
     assert value(merge, "location")["nodes"] == ["clf", "dha-ph6"]
 
 
-@pytest.mark.parametrize("answer", ["Karachi", "kuch bhi", "haan", "DHA wala"])
+@pytest.mark.parametrize("answer", ["Karachi", "kuch bhi", "haan"])
 def test_an_answer_that_names_no_single_candidate_leaves_the_question_open(gz, answer):
     pending = pending_for(gz, ["dha-ph6", "btk-p6"], raw="P6")
     merge = run(gz, {}, [op("location", "set", answer)], [("text", answer)], pending=pending)
     assert "location" not in merge.slots
     assert not any(e[0] == "close" for e in merge.effects)
+
+
+def test_an_answer_with_a_sentence_particle_names_its_one_candidate(gz):
+    # "wala" is a sentence particle (live 2026-10-18), so "DHA wala" is "DHA": one candidate.
+    pending = pending_for(gz, ["dha-ph6", "btk-p6"], raw="P6")
+    merge = run(gz, {}, [op("location", "set", "DHA wala")], [("text", "DHA wala")],
+                pending=pending)
+    assert value(merge, "location")["nodes"] == ["dha-ph6"]
+    assert ("close", "p1", "resolved") in merge.effects
 
 
 def test_naming_an_area_that_still_holds_several_options_asks_again(gz):
@@ -562,13 +598,87 @@ def test_a_switch_that_states_a_new_size_keeps_it_and_asks_nothing(gz):
     assert not [e for e in merge.entries if e["status"] == "ask"]
 
 
-def test_a_switch_within_homes_or_a_first_search_keeps_or_asks_no_size(gz):
-    flat = run(gz, HOUSE_SEARCH, [op("property_types", "set", "flat")], [("text", "flat bhi")])
-    assert value(flat, "size")["value"] == 500 and value(flat, "beds_min") == 4
+def test_a_house_replaced_by_a_flat_drops_the_gaz_size_and_asks_for_it(gz):
+    # Live 2026-10-18: "flat chahiye" after "500 gaz ghar" searched "500 gaz flat" (owner
+    # decision: drop the size and ask, as for an office; beds are kept).
+    merge = run(gz, HOUSE_SEARCH, [op("property_types", "set", "flat")],
+                [("text", "flat chahiye")])
+    assert value(merge, "property_types") == ["apartment"]
+    assert "size" not in merge.slots and value(merge, "beds_min") == 4
+    [ask] = [e for e in merge.entries if e["status"] == "ask"]
+    assert (ask["slot"], ask["detail"]) == ("size", "type_switch")
+    assert "size_ask" in {n.key for n in merge.notices}
+
+
+def test_a_flat_replaced_by_a_house_drops_the_sq_ft_size_too(gz):
+    state = {"purpose": slot_entry("sale"), "property_types": slot_entry(["apartment"]),
+             "size": slot_entry({"value": 1200, "unit": "sq_ft", "sqft": 1200})}
+    merge = run(gz, state, [op("property_types", "set", "ghar")], [("text", "ghar chahiye")])
+    assert "size" not in merge.slots
+    assert [e["detail"] for e in merge.entries if e["status"] == "ask"] == ["type_switch"]
+
+
+def test_adding_a_flat_replacing_by_the_same_unit_or_a_first_search_asks_no_size(gz):
+    added = run(gz, HOUSE_SEARCH, [op("property_types", "add", "flat")], [("text", "flat bhi")])
+    assert value(added, "size")["value"] == 500 and value(added, "beds_min") == 4
+    assert value(added, "property_types") == ["house", "apartment"]
+    plot = run(gz, HOUSE_SEARCH, [op("property_types", "set", "plot")], [("text", "plot chahiye")])
+    assert value(plot, "size")["value"] == 500   # gaz for both: the size carries over
     first = run(gz, {}, [op("property_types", "set", "office"),
                          op("budget", "set", "around 5 lakh per month")],
                 [("text", OFFICE_TEXT)])
     assert not [e for e in first.entries if e["status"] == "ask"]   # Demo Scope scenario 1
+
+
+SHOWN_3 = Shown(("a", "b", "c"), (75_000_000, 78_000_000, 80_000_000), (500, 500, 500))
+
+
+def cheaper_state(gz):
+    return run(gz, HOUSE_SEARCH, [op("budget", "relative", "Kuch sasta")],
+               [("text", "Kuch sasta dikhao")], shown=SHOWN_3)
+
+
+def test_cheaper_remembers_the_budget_it_replaced(gz):
+    cheap = cheaper_state(gz)
+    assert value(cheap, "budget")["relative"] == "cheaper"
+    assert value(cheap, "budget")["restore"]["value"]["max"] == 80_000_000
+    again = run(gz, cheap.slots, [op("budget", "relative", "kuch sasta")], [("text", "kuch sasta")],
+                shown=Shown(("d",), (60_000_000,), (500,)))
+    assert value(again, "budget")["restore"]["value"]["max"] == 80_000_000   # the first one's
+
+
+def test_replacing_the_type_after_cheaper_restores_the_budget_and_clears_the_exclusions(gz):
+    # Live 2026-10-18: "flat chahiye" after "Kuch sasta" searched "is se kam price ka ... flat".
+    flat = run(gz, cheaper_state(gz).slots, [op("property_types", "set", "flat")],
+               [("text", "flat chahiye")])
+    assert value(flat, "budget")["max"] == 80_000_000 and "relative" not in value(flat, "budget")
+    assert "excluded_property_ids" not in flat.slots
+    assert [e["detail"] for e in flat.entries if e["slot"] == "budget"] == ["cheaper_ended"]
+
+
+def test_a_budget_stated_with_the_new_type_stays(gz):
+    flat = run(gz, cheaper_state(gz).slots, [op("property_types", "set", "flat"),
+                                             op("budget", "set", "2 crore tak")],
+               [("text", "flat chahiye 2 crore tak")])
+    assert value(flat, "budget")["max"] == 20_000_000 and "excluded_property_ids" not in flat.slots
+    assert "cheaper_ended" not in [e.get("detail") for e in flat.entries]
+
+
+def test_cheaper_with_no_earlier_budget_is_dropped_when_the_type_is_replaced(gz):
+    state = {"purpose": slot_entry("sale"), "property_types": slot_entry(["house"]),
+             "location": loc("dha-ph6")}
+    cheap = run(gz, state, [op("budget", "relative", "Kuch sasta")], [("text", "Kuch sasta")],
+                shown=SHOWN_3)
+    assert "restore" not in value(cheap, "budget")
+    flat = run(gz, cheap.slots, [op("property_types", "set", "flat")], [("text", "flat chahiye")])
+    assert "budget" not in flat.slots and "excluded_property_ids" not in flat.slots
+
+
+def test_adding_a_type_or_a_place_after_cheaper_keeps_the_cap(gz):
+    cheap = cheaper_state(gz)
+    more = run(gz, cheap.slots, [op("property_types", "add", "flat")], [("text", "flat bhi")])
+    assert value(more, "budget")["relative"] == "cheaper"
+    assert more.slots["excluded_property_ids"]["value"] == ["a", "b", "c"]
 
 
 def test_the_same_purpose_again_does_not_touch_the_budget(gz):

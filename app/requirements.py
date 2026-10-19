@@ -150,6 +150,23 @@ def split_places(span):
     return parts if len(parts) > 1 else []
 
 
+_ADDITIVE = r"(?:bhi|bhee|also|too)"
+
+
+def additive_place(span, texts):
+    """The customer's own words add this place ("Phase 8 mein bhi dekho", "also Clifton"):
+    the span is followed within two words by bhi / also / too, or follows "also". Read from
+    the message, so the model's choice of set over add cannot replace the stored place
+    (live 2026-10-18). "aur" is not one: it also means "and" and "more"."""
+    words = re.findall(r"[^\W_]+", span or "")
+    if not words:
+        return False
+    place = r"\s+".join(map(re.escape, words))
+    after = re.compile(place + r"(?:\W+\w+){0,2}\W+" + _ADDITIVE + r"\b", re.IGNORECASE)
+    before = re.compile(r"\balso\W+" + place + r"\b", re.IGNORECASE)
+    return any(after.search(text) or before.search(text) for text in texts)
+
+
 def parse_vocab(slot, span):
     """Values a span names in a controlled vocabulary: a list of enum values for
     construction / possession, {intent, tags} for investment; None when nothing matches."""
@@ -345,6 +362,14 @@ def parse_types(span):
     return found
 
 
+def size_basis(types):
+    """The unit every one of these types is sized in: "sq_yd" (house / plot / portion),
+    "sq_ft" (flat, shop, office ...), or None when they mix or a type has none."""
+    bases = {"sq_yd" if t in normalise.SQYD_TYPES else "sq_ft" if t in normalise.SQFT_TYPES
+             else None for t in types}
+    return bases.pop() if len(bases) == 1 else None
+
+
 def parse_category(span):
     text = (span or "").casefold()
     return next((value for word, value in _CATEGORY_WORDS if word in text), None)
@@ -468,6 +493,8 @@ class Patch:
         self.purpose_given = False
         self.opened = False
         self.type_switch = None         # the types op of a residential <-> commercial switch
+        self.unit_switch = None         # the types op that swaps gaz / yard types for sq ft ones
+        self.types_replaced = False     # "set" put other property types in place of the stored
 
     # -- bookkeeping --
 
@@ -650,22 +677,46 @@ class Patch:
         new = {normalise.category_of(t) for t in types}
         if current and None not in old | new and old.isdisjoint(new):
             self.type_switch = op   # house -> office: see _switch_sizes
+        elif (kind == "set" and current and size_basis(current) and size_basis(types)
+                and size_basis(current) != size_basis(types)):
+            self.unit_switch = op   # house -> flat (owner decision 2026-10-18)
+        self.types_replaced = kind == "set" and bool(current) and set(types) != set(current)
         self._set(op, "property_types", make_entry(types, op["raw_span"], ev, self.ctx))
         self._derive_category(ev)
 
-    def _switch_sizes(self, op):
+    def _switch_sizes(self, op, slots=("size", "beds_min", "baths_min")):
         """A switch between residential and commercial types (owner decision 2026-10-16):
         a size or room count stated for the old kind does not carry over (a "500 gaz" house
         search must not look for 500 sq yd offices). Unless this patch stated them again,
         they are dropped and the size is asked, so the search waits for the answer
-        (open_asks); a first search without any size is not asked (Demo Scope scenario 1)."""
-        stale = [slot for slot in ("size", "beds_min", "baths_min")
+        (open_asks); a first search without any size is not asked (Demo Scope scenario 1).
+        A replacement that only swaps the unit (house -> flat, 500 gaz -> sq ft; owner
+        decision 2026-10-18, live "flat chahiye" after "500 gaz ghar") drops the size alone."""
+        stale = [slot for slot in slots
                  if slot in self.slots and self.slots[slot] == self.before.get(slot)]
         for slot in stale:
             self._drop(dict(op, slot=slot, op="clear"), slot)
         if "size" in stale:
             self._record(dict(op, slot="size", op="clear"), "ask", "type_switch",
                          notices=[_notice("size_ask")])
+
+    def _end_cheaper(self):
+        """A replaced property type ends "cheaper" (live 2026-10-18: "flat chahiye" after
+        "Kuch sasta" searched "is se kam price ka 500 gaz flat"): the cap and the exclusions
+        came from the listings of the old type. The budget the customer had before "cheaper"
+        comes back (value["restore"]); without one there is none. A budget stated in this
+        same patch stays."""
+        self.slots.pop("excluded_property_ids", None)
+        budget = self.slots.get("budget")
+        if (budget is None or budget != self.before.get("budget")
+                or budget["value"].get("relative") != "cheaper"):
+            return
+        restored = budget["value"].get("restore")
+        self.slots.pop("budget")
+        if restored is not None:
+            self.slots["budget"] = restored
+        self._record({"slot": "budget", "op": "clear", "raw_span": "(type change)"}, "applied",
+                     "cheaper_ended", slot="budget", before=budget, after=restored)
 
     def _derive_category(self, ev):
         categories = {normalise.category_of(t) for t in self._value("property_types") or []}
@@ -694,6 +745,8 @@ class Patch:
             return self._reject(op, "unsupported_op")
         if kind == "set" and self.extends_location:
             kind = "add"   # several places named in one patch are a union, never a replacement
+        if kind == "set" and additive_place(span, [s.text for s in ctx.sources]):
+            kind = "add"   # "Phase 8 mein bhi dekho" adds, whatever op the model chose
         if kind in ("set", "add") and affirmation_key(span) in AFFIRMATIONS:
             chosen = self.affirmed_candidate()
             if chosen is not None:
@@ -966,6 +1019,15 @@ class Patch:
             value = {"min": None, "max": min(cheaper, top) if top else cheaper, "mode": "max",
                      "period": period, "relative": "cheaper", "no_budget_relaxation": True,
                      "cheapest_shown": min(shown.prices)}
+            # The budget before "cheaper" (a second "cheaper" keeps the first one's): it comes
+            # back when the property type is replaced (_end_cheaper). The slot keys are fixed
+            # by a CHECK (migration 006), so it rides inside the value.
+            if current is not None:
+                restore = (current["value"].get("restore")
+                           if current["value"].get("relative") == "cheaper"
+                           else copy.deepcopy(current))
+                if restore is not None:
+                    value["restore"] = restore
             self._exclude(shown)
             extra = {"excluded": len(shown.ids)}
         else:   # premium: min = highest shown x 1.03, never above an existing max
@@ -1087,6 +1149,10 @@ class Patch:
     def _finalise(self):
         if self.type_switch is not None:
             self._switch_sizes(self.type_switch)
+        elif self.unit_switch is not None:
+            self._switch_sizes(self.unit_switch, ("size",))
+        if self.types_replaced:
+            self._end_cheaper()
         self._resolve_purpose()
         if self.moved_budget and "budget" not in self.slots:
             key = "budget_ask_rent" if self.moved_budget == "rent" else "budget_ask_sale"
@@ -1634,7 +1700,8 @@ class RequirementService:
         """A clarification button (Task 10.1, render CLARIFY_*): choice is the index of a
         stored location candidate, "sale" / "rent", or None ("another place": the question
         closes, the location stays as it was). Same lock order and patch row as apply
-        (call "tap"). Returns the notices, or None when the question is no longer open or
+        (call "tap"). A purpose choice needs no open question (the search gate asks it
+        without one). Returns the notices, or None when the question is no longer open or
         the choice is not one of its options (the tap changes nothing)."""
         with tenant_transaction(conn, turn.agency_id):
             _set_timeout(conn)
@@ -1646,11 +1713,18 @@ class RequirementService:
                 return None
             version, slots = self._lock_state(conn, turn)
             pending = self._pending(conn, turn)
-            if pending is None or pending.slot != slot or pending.expires_at <= ctx.now:
+            # The search gate asks buy or rent with these buttons when no purpose is stored,
+            # and opens no question row (live 2026-10-18: every tap asked again). The tap is
+            # the customer's own choice, so it needs no open question; a question about
+            # another slot stays as it is (_purpose closes only a purpose question).
+            purpose_tap = slot == "purpose" and choice in ("sale", "rent")
+            if not purpose_tap and (pending is None or pending.slot != slot
+                                    or pending.expires_at <= ctx.now):
                 return None
-            ctx.pending = pending
+            ctx.pending = pending if not purpose_tap or (
+                pending is not None and pending.slot == "purpose") else None
             patch = Patch(ctx, slots)
-            if slot == "purpose" and choice in ("sale", "rent"):
+            if purpose_tap:
                 patch._purpose({"slot": "purpose", "op": "set", "raw_span": choice},
                                Evidence("text"))
             elif slot == "location" and choice is None:

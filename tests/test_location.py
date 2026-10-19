@@ -791,3 +791,33 @@ def test_display_names_are_fuzzy_only_not_aliases():
     assert ("north nazimabad block h", "nnz-bh", None) in G.fuzzy_keys()
     assert G.exact("north nazimabad block h") == frozenset()
     assert len(G.aliases) == 87
+
+
+# --- sentence particles around a place (live 2026-10-18) ---
+
+@pytest.mark.parametrize(("span", "expected"), [
+    ("DHA Phase 6 mein", "dha-ph6"), ("Clifton mein", "clf"), ("PECHS mai", "pec"),
+    ("Bahria mein", "btk"), ("in Clifton", "clf"), ("Clifton side", "clf"),
+    ("DHA 6 wala", "dha-ph6"), ("Gulshan mein", "gli"), ("Karachi mein", "khi"),
+])
+def test_a_place_followed_by_a_sentence_particle_resolves_like_the_bare_place(span, expected):
+    check(run(span), R, [expected])
+
+
+def test_a_misspelt_place_with_a_particle_is_asked_not_dropped():
+    check(run("Clifon mein"), A, ["clf"])
+    check(run("Lahore mein"), O, [])
+
+
+def test_particles_alone_are_not_stripped_to_nothing():
+    assert loc.strip_particles(["mein"]) == ["mein"]
+    assert loc.strip_particles(["in", "clifton", "side", "mein"]) == ["clifton"]
+
+
+def test_no_seeded_place_name_or_alias_starts_or_ends_with_a_particle():
+    names = [row["name"] for row in DATA["locations.csv"]]
+    names += [row["display_name"] for row in DATA["locations.csv"]]
+    names += [row["alias"] for row in DATA["location_aliases.csv"]]
+    for name in names:
+        words = loc.clean_tokens(name)
+        assert loc.strip_particles(words) == words, name

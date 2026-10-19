@@ -94,7 +94,7 @@ def test_scenario_2_roman_urdu_with_the_labelled_neighbour(st):
     rendered = texts(plan)
     assert rendered.startswith(
         "Ji, DHA Phase 6 mein 500 gaz ghar, khareedne ke liye, 8 crore tak — ye options hain:")
-    assert ("*#3 DH7-101* · Ghar · sale (photos jald)\n📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb"
+    assert ("*#3 DH7-101* · Ghar · bikau (photos jald)\n📍 DHA Phase 7 · *PKR 7.5 crore* · Phase 7 — qareeb"
             in rendered)
     assert rendered.count("qareeb") == 2  # the summary line and DH7-101's own card
     assert_cards_match_db(st, plan)
@@ -108,12 +108,12 @@ def test_scenario_3b_and_3c(st):
     assert no_match.kind == render.NO_MATCH_KIND
     assert texts(no_match).startswith(
         "DHA Phase 6 mein is se kam price ka 500 gaz ghar, khareedne ke liye abhi available nahi. "
-        "Yahan price 9.5 crore se shuru hoti hai.")
+        "Yahan price 7.8 crore se shuru hoti hai.")
 
     st.say("Phase 8 mein bhi dekho", [p("location", "add", "Phase 8")], sender=CUSTOMER_B)
     _, phase_8, _ = answer(st, CUSTOMER_B, "Phase 8 mein bhi dekho")
     assert [code for _, _, code in phase_8.shown] == ["DH8-102", "DH8-101"]
-    assert ("*#2 DH8-101* · Ghar · sale (photos jald)\n📍 DHA Phase 8 · *PKR 7.4 crore* · budget se thoda "
+    assert ("*#2 DH8-101* · Ghar · bikau (photos jald)\n📍 DHA Phase 8 · *PKR 7.4 crore* · budget se thoda "
             "upar") in texts(phase_8)
     assert_cards_match_db(st, phase_8)
 
@@ -175,7 +175,7 @@ def test_load_known_reads_public_facts_and_answers_from_them(st):
     gas = details.answer_detail(known, details.field_for("gas connection hai?"),
                                 render.ROMAN_URDU)
     assert gas[0]["interactive"]["body"]["text"] == (
-        "Ye maloomat mere paas nahi -- agent confirm kar denge.")
+        "Ye maloomat mere paas nahi — agent confirm kar denge.")
 
 
 @pytest.mark.parametrize("code", sorted(HIDDEN))

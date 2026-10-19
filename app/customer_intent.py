@@ -4,10 +4,13 @@ A greeting alone ("salam", "hi") and a fresh-search command ("nayi search", "pur
 requirements hata do") need no extraction: they are matched here, deterministically, on the
 customer's own words. A message that also states a request ("salam, DHA mein flat chahiye")
 is NOT a greeting alone and still goes to the model; only its command part, if any, is acted
-on first. Pure functions, no database, no logging of message text.
+on first. A listing code asked for by itself ("DH6-103 dikhao") is looked up in code. Pure
+functions, no database, no logging of message text.
 """
 
 import re
+
+from app.grounding import LISTING_CODE
 
 NEW_SEARCH, CLEAR_OLD = "new_search", "clear_old"
 SALAM, HELLO = "salam", "hello"
@@ -123,3 +126,38 @@ def confirmation(text):
     if any(t in _NO_CORE for t in tokens):
         return NO
     return YES if any(t in _YES_CORE for t in tokens) else None
+
+
+# The customer asks for a person or a visit in their own words (the handoff triggers of R6 D4:
+# "agent se baat", visit, booking). A question about documents alone is not one.
+_AGENT_ASK = re.compile(
+    r"\b(?:agent|broker|consultant|dealer|insaan|insan|human|banda|bande|call|phone|rabta|"
+    r"contact|visit|appointment|meeting|milna|milwa\w*|book\w*)\b|\bkisi\s+se\s+baat\b",
+    re.IGNORECASE)
+
+
+def asks_for_agent(text):
+    """True when the text asks to talk to an agent, to visit or to book (live 2026-10-18:
+    "Is ghar ke documents clear hain?" opened a handoff; it only needs the agent's answer)."""
+    return bool(_AGENT_ASK.search(text or ""))
+
+
+# Words around a listing code that only say "show it" ("DH6-103 dikhao", "show me DH6-103").
+_SHOW_WORDS = frozenset({
+    "dikhao", "dikhayein", "dikhaein", "dikha", "dikhado", "dikhaiye", "dekho", "dekhao",
+    "dekhna", "dekhni", "show", "me", "send", "bhejo", "bhejein", "bhej", "details", "detail",
+    "info", "information", "about", "bare", "baare", "batao", "bataein", "bataiye", "property",
+    "listing", "wali", "wala", "ye", "yeh", "this", "the", "kya", "is", "check"})
+
+
+def listing_lookup(text):
+    """The one listing code a message asks to see and nothing else ("DH6-103 dikhao",
+    "show me dh6-103"), else None. "DH6-101 mein gas connection hai?" and "DH6-101 ki aur
+    photos" carry a question the model reads, so they are not lookups. Live 2026-10-18:
+    "DH6-103 dikhao" was answered with an old search."""
+    upper = (text or "").upper()
+    codes = list(dict.fromkeys(LISTING_CODE.findall(upper)))
+    if len(codes) != 1 or not any(c.isalpha() for c in codes[0].split("-")[0]):
+        return None
+    rest = _tokens(LISTING_CODE.sub(" ", upper))
+    return codes[0] if all(t in _SHOW_WORDS | _FILLER for t in rest) else None

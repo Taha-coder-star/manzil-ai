@@ -8,7 +8,7 @@ WhatsApp is the FakeClient. All data and numbers are fictional."""
 
 import psycopg
 
-from app import handoff, references
+from app import cards, details, handoff, references
 from app.db import tenant_transaction
 from app.turn_engine import TEMPLATES
 from tests.test_customer_flow_db import button_ids, position_of, scenario_2, tap, turn
@@ -161,6 +161,33 @@ def test_agent_request_with_nothing_shown_opens_a_lead_without_listings(st):
     body = cta(reply)[0]
     assert "Property:" not in body and "L-01" in body
     assert lead_rows(st) == [("L-01", "open", "agent", "broker")] and lead_codes(st) == []
+
+
+def test_the_which_property_question_is_sent_once_when_the_model_asks_twice(st):
+    """Live 2026-10-18: the visit list arrived twice for one message."""
+    scenario_2(st)
+    reply = turn(st, "Mujhe visit karni hai, kal shaam", ("request_handoff", {"reason": "visit"}),
+                 ("request_handoff", {"reason": "visit"}))
+    lists = [pl for pl in reply if pl["type"] == "interactive"]
+    assert len(lists) == 1 and button_ids(lists[0])[-1] == "handoff:visit:all"
+    assert lead_rows(st) == []
+
+
+def test_a_documents_question_offers_the_agent_and_opens_no_lead(st):
+    """Live 2026-10-18: "Is ghar ke documents clear hain?" opened the handoff list."""
+    scenario_2(st)
+    reply = turn(st, "Is ghar ke documents clear hain?", ("request_handoff", {"reason": "legal"}))
+    [offer] = reply
+    assert offer["interactive"]["body"]["text"] == details.TEXT[cards.ROMAN_URDU]["legal"]
+    assert button_ids(offer) == ["handoff:request"]
+    assert lead_rows(st) == [] and control(st) == ("ai_active", "ai")
+
+
+def test_asking_for_documents_and_an_agent_still_opens_the_handoff(st):
+    scenario_2(st)
+    [question] = turn(st, "documents ke liye agent se baat karni hai",
+                      ("request_handoff", {"reason": "legal"}))
+    assert button_ids(question)[-1] == "handoff:legal:all"
 
 
 def test_the_agent_button_resolves_like_the_model(st):

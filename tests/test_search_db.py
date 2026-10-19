@@ -100,7 +100,8 @@ def test_scenario_3b_cheaper_is_an_honest_no_match(st):
     assert result.status == search.NO_MATCH and result.hits == []
     assert result.relaxations == []
     assert result.excluded_reasons["already_shown"] == 3  # DH6-101 / 102 + neighbour DH7-101
-    assert result.lowest_price_pkr == 95_000_000          # R17 edge 8: "shuru 9.5 crore se"
+    # R17 edge 8: the lowest ACTIVE price in the requested scope, the shown ones too
+    assert result.lowest_price_pkr == 78_000_000          # DH6-101 (live 2026-10-18: not 9.5 cr)
 
 
 def test_scenario_3c_phase_8_added_with_the_cheaper_budget_kept(st):
@@ -184,9 +185,10 @@ def test_only_shown_searches_feed_the_cheaper_rule(st):
 
 def test_shown_items_demote_on_refinement(st):
     first = scenario_2(st)
-    shown(st, CUSTOMER_B, first)
+    # The turn's own reply (a full request) already showed the three listings (customer
+    # test 2026-10-18), so nothing is recorded again here.
     rows = st.query("SELECT position, property_id::text FROM shown_item ORDER BY position")
-    assert [r[1] for r in rows] == [h.row.id for h in first.hits]
+    assert sorted(r[1] for r in rows) == sorted(h.row.id for h in first.hits)
     again = find(st, CUSTOMER_B)
     assert all(h.shown for h in again.hits)  # all three still rank top 3: not demoted
     assert again.codes == first.codes

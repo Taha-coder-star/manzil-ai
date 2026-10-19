@@ -381,3 +381,13 @@ Follow-up (failed-turn lifecycle, 2026-10-12):
 | A turn whose attempts all crashed (the reaper dead-letters the job; no exception handler runs) stayed open, and every later message resumed it; with a deterministic crash each later message's job died too and its message was stranded | `conversation_turn.attempts` (migration 014), counted before work at each resume; an open turn with 3 attempts is closed as `failed` at assembly and the waiting messages get their own turn. Regression tests through crash, `reap_expired` and resume; with the cap disabled the same tests fail (the later message resumes the abandoned turn) |
 | A newer message's job that failed its last attempt while resuming an older turn died with its own message unassembled (stranded) | The job answers its own messages after the older turn is failed, then raises the failure; a `UsageWriteError` records them as a failed turn without a provider call. Regression tests for both |
 | A pending trigger job of a failed turn would later report success | Dead-lettered with `turn_failed` when its turn is failed |
+
+## 12. Customer test fixes (2026-10-18)
+
+- A customer turn whose every tool call was `update_requirements` and whose notices are only
+  acknowledgements, with no open question, gets the normal search in code at a plain STOP
+  (`detail` `stop_search`), as it already did at the iteration limit (`iteration_limit_search`).
+  See docs/REQUIREMENTS.md "Customer test fixes".
+- `render_customer` sends an identical customer-visible payload once, and counts photos as a
+  delivered reply (`customer_reply.delivered`), so "Shukriya! ..." no longer precedes photos.
+- A message that is only a listing code is answered before the model (`_customer_shortcut`).

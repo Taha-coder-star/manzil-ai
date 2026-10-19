@@ -65,6 +65,12 @@ never hides what the customer last saw (tested).
 Order inside scenario 2 follows R17 ("under budget and close to max is best": 8.0 cr before
 7.8 cr); Demo Scope judges set membership, not order.
 
+## Lowest price on a no-match (customer test 2026-10-18)
+
+`lowest_price_pkr` is the lowest price of every ACTIVE listing in the requested scope that
+passed the hard filters, the cheaper-excluded and already-shown ones too (R17 edge 8). Live: after
+"Kuch sasta" the line said 9.5 crore while DH6-101 at 7.8 crore was shown.
+
 ## Decisions and limits
 
 - Echo flags do not block the search: an unconfirmed slot (inferred purpose, voice,
