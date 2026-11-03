@@ -79,6 +79,43 @@ fix the cause and rerun. Concurrent runs are serialised by the locks and do not 
   the other listings the insert time (`demo/freshness_policy.json`).
 - **No audit events.** The seed does not write `property_event` rows.
 
+## Resetting between test runs
+
+`python -m app.demo_reset` puts the demo agency back to the dataset. It needs only
+`DATABASE_URL` (the runtime login) and refuses any agency but the demo one. A dry run is the
+default; `--apply` writes, in one transaction. It lists each listing by code, and phone numbers
+are never printed.
+
+```
+python -m app.demo_reset --agency-id <demo-agency-uuid>            # dry run: read the plan
+python -m app.demo_reset --agency-id <demo-agency-uuid> --apply    # write
+python -m app.seed --agency-id <demo-agency-uuid>                  # check: all +0, no conflicts
+```
+
+Exit codes: 0 = plan clean / applied; 2 = conflicts (nothing written); 1 = error.
+
+**Read the dry run first: every listing outside the dataset is retired, whoever added it.** Take
+an RDS snapshot before the first `--apply`, and run it while nobody is messaging the demo number.
+
+| What | Reset does | Why |
+|---|---|---|
+| Listing outside the dataset | Code becomes `TEST-<n>`, status WITHDRAWN, old code kept in `internal_notes` | The runtime cannot delete listings; the next `DH6` code is DH6-109 again |
+| Seeded listing that changed | Dataset values back, `last_confirmed_at` = `created_at` minus the policy's days, version + 1 | An old Undo or draft stops with "later change" |
+| Staff photo on a seeded listing | Row deleted (a cover it became is cleared); the S3 objects stay | Loaded demo photos have no `source_inbound_media_id` and are kept |
+| Customer conversation | `customer_wa_id` becomes `retired-<id>`, closed; open lead and handoff closed | The phone's next message starts a new conversation with no shown or sent history |
+| Staff and broker conversations | Kept | A new one would have a closed WhatsApp window (template path) |
+| Open listing drafts, staff sessions | Cancelled, deleted | No half-finished work carries over |
+
+Limits:
+- No `property_event` is written, because "updated" is undoable and `#undo` would put the test
+  value back. A listing's version can therefore move without an event; the older events stay.
+- Lead numbers keep rising (`L-` codes do not restart).
+- A customer's carousel fallback flag and language preference go with the old conversation.
+- A pending or running job is a conflict: wait a moment and rerun. A handoff timer job is not,
+  because it does nothing once its handoff is closed.
+- A retired listing keeps its photos, and a reset never inserts: a missing seeded listing is a
+  conflict, so run `app.seed` first.
+
 ## Supplying demo/ to the loader
 
 - The image now copies `demo/` (`Dockerfile`: `COPY demo ./demo`), and CI runs
@@ -97,4 +134,4 @@ disposable `manzil_schema_test` database): fresh agency, existing agent reuse, r
 run on an empty database, edited listing, conflicts found on recheck, forced insert failures
 in each phase, gazetteer committed then tenant failure and recovery, wrong agency, staff
 role / phone conflicts, cross-tenant isolation, three concurrent runs, login and same-database
-checks, and secret-free output.
+checks, and secret-free output. `tests/test_demo_reset.py` covers the reset the same way.
