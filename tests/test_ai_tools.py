@@ -114,3 +114,19 @@ def test_span_check():
     assert ai_tools.span_in_turn("Phase 6", "dha phase  6 mein")
     assert not ai_tools.span_in_turn("   ", "anything")
     assert not ai_tools.span_in_turn("phase 7", "dha phase 6")
+
+
+@pytest.mark.parametrize("empty", [None, "", "  "])
+def test_draft_empty_optional_fields_are_missing_without_mutating_model_args(empty):
+    args = {"drafts": [{"size": "500 gaz", "price": empty, "bedrooms": empty}]}
+    result = execute(call("draft_listing", args), SEGMENT)
+    assert result.ok
+    assert args["drafts"][0]["price"] == empty
+
+
+@pytest.mark.parametrize("bad", [{"price": 8}, {"bedrooms": 4}, {"price": False},
+                                  {"property_id": None}, {"photos": []}])
+def test_draft_empty_normalisation_does_not_accept_computed_values_or_unknown_keys(bad):
+    result = execute(call("draft_listing", {"drafts": [dict(size="500 gaz", **bad)]}), SEGMENT)
+    assert not result.ok and result.error == "invalid_arguments"
+    assert "Incomplete drafts are allowed" in result.response["hint"]

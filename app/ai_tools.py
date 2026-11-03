@@ -305,6 +305,21 @@ def span_in_turn(span, turn_text):
     return bool(span) and span in _squash(turn_text)
 
 
+def _draft_args(args):
+    """Treat empty optional span fields as absent, without changing stated values.
+
+    Unknown keys and non-string values remain for strict validation to reject.
+    Never mutate the provider response used by the next model iteration.
+    """
+    if not isinstance(args, dict) or not isinstance(args.get("drafts"), list):
+        return args
+    optional = {*staff_drafts.DRAFT_FIELDS, "text"}
+    return dict(args, drafts=[
+        {k: v for k, v in draft.items() if not (
+            k in optional and (v is None or isinstance(v, str) and not v.strip()))}
+        if isinstance(draft, dict) else draft for draft in args["drafts"]])
+
+
 def execute(call, context):
     """Run one model tool call for this route, or refuse it. Never raises for model
     input: unknown tools, other routes' tools and bad arguments become error results."""
@@ -313,9 +328,16 @@ def execute(call, context):
         return _error(name, "unknown_tool")
     if name in NEVER_LLM_TOOLS or name not in REGISTRY.get(context.route, ()):
         return _error(name, "tool_not_allowed")
-    if not validate_args(name, call.args):
-        return _error(name, "invalid_arguments")
-    return _STUBS[name](call.args or {}, context)
+    args = _draft_args(call.args) if name == "draft_listing" else call.args
+    if not validate_args(name, args):
+        result = _error(name, "invalid_arguments")
+        if name == "draft_listing":
+            result.response["hint"] = (
+                "Use an object with drafts: an array of draft objects. Fields must be "
+                "exact text spans using the declared field names. Omit missing fields; "
+                "do not invent values, IDs, counts or photos. Incomplete drafts are allowed.")
+        return result
+    return _STUBS[name](args or {}, context)
 
 
 def _update_requirements(args, context):

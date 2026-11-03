@@ -103,6 +103,22 @@ def test_an_overlong_segment_message_is_refused_never_clipped(staffed):
     assert ai.requests == [] and draft_rows(ai) == []  # no model call, no draft
 
 
+@pytest.mark.parametrize("empty", [None, "", "  "])
+def test_incomplete_draft_with_empty_model_fields_gets_missing_card_without_save(staffed, empty):
+    ai = staffed
+    ai.script += [tools_answer(tool("draft_listing", {"drafts": [
+        {"purpose": "sale", "property_type": "ghar", "location": "Phase 7",
+         "size": "500 gaz", "price": empty, "bedrooms": empty}]})), answer()]
+    sent = segment_replies(ai, text("Phase 7 ghar 500 gaz sale", sender=AGENT))
+    assert "Missing:* Price, Bedrooms." in sent[-1]
+    row = draft_rows(ai)[0]
+    assert {"price_pkr", "bedrooms"}.isdisjoint(row[3]["fields"])
+    assert ai.query("SELECT count(*) FROM property") == [(0,)]
+    payload = ai.client.sent[-1][1]
+    buttons = payload["interactive"]["action"]["buttons"]
+    assert [b["reply"]["title"] for b in buttons] == ["Edit", "Cancel"]
+
+
 def test_without_the_gazetteer_the_staff_tools_stay_stubs(ai):
     ai.script += [tools_answer(tool("draft_listing", TWO, "d1")), answer()]
     sent = segment_replies(ai, text(PASTE, sender=AGENT))
