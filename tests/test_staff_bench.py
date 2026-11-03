@@ -65,7 +65,7 @@ def test_the_fixture_score_and_what_misses(result):
     assert s["by_kind"] == {"draft": {"exact": 11, "of": 11}, "update": {"exact": 5, "of": 6},
                             "disambiguate": {"exact": 3, "of": 3}}
     assert s["workflow"] == {"passed": 33, "of": 33}
-    assert s["fields"]["of"] == 94 and s["fields"]["correct"] == 92
+    assert s["fields"]["of"] == 94 and s["fields"]["correct"] == 93
     # ST-15: "Sports City" is only similar to "Bahria Sports City"; the resolver does not
     # accept it, so the backend asks instead of guessing, and the gold target is not reached.
     assert s["failed_items"] == [{"id": "ST-15", "reason": "location_unclear"}]

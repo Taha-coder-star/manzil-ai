@@ -52,9 +52,9 @@ def add_test_listing(db, code="DH6-109"):
     source = listing(db, "DH6-101")
     return one(db, """
         INSERT INTO property (agency_id, listing_code, status, purpose, property_type, category,
-                              location_id, price_pkr, area_value, area_unit, bedrooms)
+                              location_id, price_pkr, area_value, area_unit, bedrooms, is_demo)
         SELECT agency_id, %s, 'active', purpose, property_type, category, location_id,
-               price_pkr, area_value, area_unit, bedrooms FROM property WHERE id = %s
+               price_pkr, area_value, area_unit, bedrooms, TRUE FROM property WHERE id = %s
         RETURNING id
         """, code, source[0])[0]
 
@@ -330,6 +330,34 @@ def test_the_owner_login_is_refused(db):
     admin_url, _, agency = db
     with pytest.raises(seed.SeedError, match="restricted runtime login"):
         demo_reset.run(agency, admin_url, apply=True)
+
+
+@pytest.mark.parametrize("apply", [False, True])
+@pytest.mark.parametrize("inventory", ["seeded", "extra", "project"])
+def test_non_demo_inventory_refuses_the_whole_reset(db, apply, inventory):
+    extra = add_test_listing(db)
+    edit_like_staff(db, "DH6-102", price_pkr=78_000_000)
+    customer = conversation(db, CUSTOMER)
+    if inventory == "project":
+        one(db, "UPDATE project SET is_demo = FALSE")
+    else:
+        target = listing(db, "DH6-101")[0] if inventory == "seeded" else extra
+        one(db, "UPDATE property SET is_demo = FALSE WHERE id = %s", target)
+    with pytest.raises(seed.SeedError, match="non-demo .* inventory present"):
+        reset(db, apply=apply)
+    assert listing(db, "DH6-109")[1] == "active"
+    assert listing(db, "DH6-102")[2] == 78_000_000
+    assert one(db, "SELECT customer_wa_id FROM conversation WHERE id = %s", customer)[0] == CUSTOMER
+
+
+def test_inactive_staff_are_reset_as_customers(db):
+    staff_id, number = one(db, "SELECT id, whatsapp_number FROM staff WHERE role = 'broker'")
+    old = conversation(db, number)
+    one(db, "UPDATE staff SET is_active = FALSE WHERE id = %s", staff_id)
+    assert reset(db).conversations == 1
+    assert one(db, "SELECT customer_wa_id, control_state FROM conversation WHERE id = %s",
+               old) == (f"retired-{old}", "closed")
+    assert conversation(db, number) != old
 
 
 def test_output_holds_no_phone_or_url(db, capsys):

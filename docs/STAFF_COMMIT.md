@@ -137,3 +137,12 @@ Notices (`staff_cards.NOTICES`, also in `turn_engine.TEMPLATES`):
 7. **Rate limits:** no limit or ADMIN confirmation for bulk SOLD (R-13: production, not demo).
 8. **Wording:** approval of sections 5 and 8.2 section 8; Q1 (ST-01 duplicate line on the 4a card) is still open.
 9. **Edit window:** for 10 minutes after an Edit tap, the next plain text is the correction unless it reads as a new listing description (type word + amount or size, the 7.4 rule). A description then opens its own segment, so a correction such as "house 500 gaz" must be sent as a reply to the card. A text that states no field gets `staff_edit_unclear`, and the Edit stays open.
+
+## Day 1 scope correction (2026-11-03)
+
+Owner decision: description-based find_listings targets ACTIVE listings only, matching
+Demo Scope scenario 4c. RESERVED/ON_HOLD remain accessible by explicit listing code,
+subject to existing update checks. This does not change duplicate warnings or photo-attach
+targets. The old statement that all live statuses are description candidates is superseded.
+No wording or migration changes. S-04 incomplete-draft behavior remains pending worker/live
+verification; the pure card test passes, and existing worker tests cover Edit and forged Save.

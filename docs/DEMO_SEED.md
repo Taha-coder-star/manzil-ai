@@ -135,3 +135,12 @@ run on an empty database, edited listing, conflicts found on recheck, forced ins
 in each phase, gazetteer committed then tenant failure and recovery, wrong agency, staff
 role / phone conflicts, cross-tenant isolation, three concurrent runs, login and same-database
 checks, and secret-free output. `tests/test_demo_reset.py` covers the reset the same way.
+
+## Day 1 reset review (2026-11-03)
+
+The owner approved a migration-free demo exception: reset writes no property_event; keep
+a dated dry-run/apply report and released commit instead. This is not a privacy deletion
+workflow. Before changing anything (including dry run), non-demo property/project inventory
+now refuses the operation. Former/inactive staff numbers reset as customers, consistent
+with runtime routing; only active staff conversations retain their WhatsApp windows.
+See DAY1_STABILISATION.md for snapshot, quiet-window and verification gates.

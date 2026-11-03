@@ -61,7 +61,7 @@ def test_st16_dha_6_houses_are_several_and_never_chosen_for_the_staff():
     assert result["status"] == "several"
     assert set(gold["candidates"]) <= set(codes(result)) <= set(
         gold["candidates"] + gold["allowed"])
-    assert codes(result) == ["DH6-101", "DH6-102", "DH6-103", "DH6-104", "DH6-106"]  # active first
+    assert codes(result) == ["DH6-101", "DH6-102", "DH6-103", "DH6-104"]
 
 
 def test_st17_bahria_250_gaz_houses_match_the_nominal_size():
@@ -89,9 +89,16 @@ def test_sold_and_rented_listings_are_not_candidates_by_description():
 
 def test_every_criterion_narrows_the_candidates():
     assert codes(find(location="DHA 6", property_type="ghar", purpose="sale",
-                      price="7.8 crore", bedrooms="4 bed")) == ["DH6-101", "DH6-106"]
+                      price="7.8 crore", bedrooms="4 bed")) == ["DH6-101"]
     assert find(location="DHA 6", property_type="ghar", price="1 crore")["status"] == "none"
     assert codes(find(location="DHA 6", purpose="rent")) == ["DH6-107", "DH6-108"]
+
+
+@pytest.mark.parametrize("status", ["reserved", "on_hold", "sold", "rented", "withdrawn", "archived"])
+def test_non_active_targets_need_an_explicit_code(status):
+    row = dict(ROWS[0], status=status)
+    assert sn.find_candidates({}, [row], GAZETTEER)["candidates"] == []
+    assert sn.find_candidates({"code": row["code"]}, [row], GAZETTEER)["candidates"] == [row]
 
 
 def test_more_than_ten_candidates_ask_for_a_narrower_description():

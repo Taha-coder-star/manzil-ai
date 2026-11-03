@@ -604,8 +604,8 @@ def _criterion_sqft(size):
 def find_candidates(criteria, rows, gazetteer, *, marla_sqft=225, city_code="KHI"):
     """Listings a staff description refers to. `criteria` are verified spans (code, location,
     property_type, purpose, size, price, bedrooms); rows are the agency's listings. A listing
-    code is a direct target in any status; otherwise the live listings that match every
-    criterion, active first, at most FIND_LIMIT. {"status": none | single | several |
+    code is a direct target in any status; otherwise the ACTIVE listings that match every
+    criterion, at most FIND_LIMIT. {"status": none | single | several |
     too_many | direct, "candidates": [row]} or {"error": ...}. Never picks one of several."""
     if "code" in criteria:
         match = staff_drafts.CODE.fullmatch(criteria["code"].strip())
@@ -646,7 +646,7 @@ def find_candidates(criteria, rows, gazetteer, *, marla_sqft=225, city_code="KHI
     wanted = _criterion_sqft(size) if size else None
     matches = []
     for row in rows:
-        if row["status"] not in LIVE_STATUSES:
+        if row["status"] != "active":
             continue
         if node is not None and not (row["location_id"] is not None
                                      and gazetteer.is_within(row["location_id"], node)):
