@@ -154,6 +154,26 @@ def parse_source(span):
     return None
 
 
+def _source_from_text(scan):
+    """Recover an omitted source only from unambiguous standalone source clauses.
+
+    Unknown surrounding words (including negation/questions) or differing source
+    claims prevent fallback. Each draft's verified scan is its only input.
+    """
+    found = []
+    for text in scan:
+        for clause in re.split(r"[,;\n]+", text):
+            if parse_source(clause) is None:
+                continue
+            raw = clause.strip()
+            matches = [(raw, value) for pattern, value in _SOURCES
+                       if re.fullmatch(pattern, raw, re.IGNORECASE)]
+            if not matches:
+                return None
+            found.append(matches[0])
+    return found[0] if found and len({value for _, value in found}) == 1 else None
+
+
 def sanitise_description(text):
     """(clean text, removed units). Units that address the assistant or the customer,
     promise a price or terms, or hold a phone number, link, e-mail or code fence are
@@ -465,6 +485,10 @@ def normalise_draft(bound, gazetteer, *, marla_sqft=225, city_code="KHI", peers=
             fields["construction_status"] = {"value": named[0], "raw": spans["construction"]}
     if parse_source(spans.get("source")):
         fields["source_type"] = {"value": parse_source(spans["source"]), "raw": spans["source"]}
+    elif source := _source_from_text(scan):
+        fields["source_type"] = {"value": source[1], "raw": source[0],
+                                 "provenance": "source_text"}
+        warnings.append("re_extracted")
     if requirements.parse_count(spans.get("parking", "")) is not None:
         fields["parking_spaces"] = {"value": requirements.parse_count(spans["parking"]),
                                     "raw": spans["parking"]}

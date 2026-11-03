@@ -69,6 +69,37 @@ def test_a_digits_only_room_span_cannot_remove_a_different_room_fact():
     assert sd.description_details("4 baths", fields) == "4 baths"
 
 
+def test_owner_direct_survives_an_omitted_or_rejected_model_source_span():
+    text, spans = ST["ST-01"]
+    for source in ({}, {"source": "developer"}):
+        without = {k: v for k, v in spans.items() if k != "source"}
+        draft = build(text, without | source | {"description": text})
+        assert draft.fields["source_type"] == {
+            "value": "owner_direct", "raw": "owner direct", "provenance": "source_text"}
+        assert "description" not in draft.fields
+
+
+@pytest.mark.parametrize("detail", [
+    "not owner direct", "owner direct?", "owner direct nahi", "owner direct or agent",
+    "owner direct, developer", "owner direct, not owner direct", "owner direct, sub agent",
+])
+def test_source_fallback_does_not_guess_negated_questioned_or_ambiguous_claims(detail):
+    draft = build(f"ghar DHA Phase 6, 500 gaz, 8 crore, {detail}",
+                  {"property_type": "ghar", "price": "8 crore", "size": "500 gaz"})
+    assert "source_type" not in draft.fields
+
+
+def test_source_fallback_is_scoped_to_each_verified_draft_text():
+    one, two = "New house 500 gaz 8 crore, owner direct", "Shop 350 sq ft 2 lakh rent, agent"
+    staff = staff_drafts.context([one + "\n" + two], {1}, True)
+    result = sd.normalise_drafts({"drafts": [
+        {"text": one, "property_type": "house"},
+        {"text": two, "property_type": "Shop"},
+    ]}, staff, GAZETTEER)
+    assert [d.fields["source_type"]["value"] for d in result["drafts"]] == [
+        "owner_direct", "agent_listing"]
+
+
 # --- the 11 benchmark draft inputs (hand-written spans) --------------------------------
 
 ST = {

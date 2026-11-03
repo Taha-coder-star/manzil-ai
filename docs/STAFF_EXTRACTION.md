@@ -320,6 +320,14 @@ button stored.
 
 ## 6. Photos
 
+Day 1 source omission correction (2026-11-04, local fix pending review/deployment):
+when the model omits or supplies no usable source span, the backend may recover a
+standalone source clause from that draft's verified scan. Only exact existing source
+vocabulary is accepted; negation, questions, unknown surrounding words or conflicting
+source claims prevent fallback. The field records source_text provenance and the
+existing re_extracted warning. Scope stays per draft, including multi-draft text.
+The Note filter then recognizes the recovered source as a structured fact.
+
 - The segment already links its photos (`staff_segment_item.is_photo` -> `inbound_media`) and each
   draft carries `staff_segment_id`, so the relationship is never lost.
 - **One draft in the segment**: `payload.photos` = all segment photos in order; the card shows the
