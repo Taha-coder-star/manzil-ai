@@ -146,3 +146,13 @@ subject to existing update checks. This does not change duplicate warnings or ph
 targets. The old statement that all live statuses are description candidates is superseded.
 No wording or migration changes. S-04 incomplete-draft behavior remains pending worker/live
 verification; the pure card test passes, and existing worker tests cover Edit and forged Save.
+
+## Day 1 repeated Note fix (2026-11-03; local, not yet deployed)
+
+Only whole comma/semicolon/newline-separated description clauses repeating parsed facts
+are removed. Extra details, negations, different values, unrecognised text, and clauses
+containing both facts and unknown detail are retained. Numeric thousands commas stay intact.
+Exact location aliases can be removed; fuzzy/structural place text is kept conservatively.
+Filtering applies on extraction, Edit correction, and Save (including drafts from an old image).
+No facts are inferred from the Note or changed; instruction sanitisation remains separate.
+The existing SOLD DH6-109 is retained as live regression evidence until the patch is deployed.

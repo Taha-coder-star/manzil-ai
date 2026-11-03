@@ -337,6 +337,62 @@ def _unusual(price, peers):
         * max(peers)))
 
 
+def _description_spans(fields):
+    """Only the parsed fact within a raw field, never a model's whole broad span."""
+    for key, field in fields.items():
+        raw, value = field.get("raw"), field.get("value")
+        if not isinstance(raw, str):
+            continue
+        if key == "property_type":
+            yield from (w for w in re.findall(r"[^\W\d_]+", raw)
+                        if requirements.parse_types(w) == [value])
+        elif key == "location" and field.get("method") == "exact":
+            yield raw  # exact gazetteer alias; fuzzy/structural spans may contain detail
+        elif key == "price_pkr":
+            yield from (span for amount, span in _amounts(raw) if amount == value)
+        elif key == "size" and field.get("sqft") is not None:
+            yield from (a["raw"] for a in _areas(raw, field.get("marla_sqft") or 225)
+                        if a["sqft"] == Decimal(str(field.get("sqft"))))
+        elif key in ("bedrooms", "bathrooms"):
+            yield from (span for span, count in find_rooms(raw)["bed" if key == "bedrooms" else "bath"]
+                        if count == value)
+        elif key == "source_type":
+            for pattern, source in _SOURCES:
+                if source == value:
+                    yield from (m.group() for m in re.finditer(pattern, raw, re.IGNORECASE))
+        elif key == "purpose":
+            span = normalise.purpose_words(raw).get(value)
+            if span:
+                yield span
+
+
+def description_details(text, fields):
+    """Remove whole clauses that repeat verified facts, preserving unknown detail.
+
+    Never strip a fact from within a clause that also contains unknown words or
+    a negation: doing so could change its meaning. Numeric thousands separators
+    are not clause boundaries. This is separate from instruction sanitisation.
+    """
+    raw = sorted({re.sub(r"\s+", " ", span).strip().casefold()
+                  for span in _description_spans(fields) if span.strip()},
+                 key=len, reverse=True)
+    fillers = {"new", "naya", "nayi", "demand", "asking", "price", "qeemat", "for"}
+    chunks = re.split(r"(?<!\d),|,(?!\d)|[;\n]+", text)
+    kept = []
+    for chunk in chunks:
+        remaining = re.sub(r"\s+", " ", chunk).strip().casefold()
+        matched = False
+        for fact in raw:
+            remaining, count = re.subn(r"(?<!\w)" + re.escape(fact) + r"(?!\w)",
+                                       " ", remaining)
+            matched |= bool(count)
+        words = set(re.findall(r"\w+", remaining))
+        if (matched and words <= fillers) or words in ({"available"}, {"active"}):
+            continue
+        kept.append(chunk.strip())
+    return text if len(kept) == len(chunks) else ", ".join(filter(None, kept))
+
+
 def normalise_draft(bound, gazetteer, *, marla_sqft=225, city_code="KHI", peers=None):
     """A BoundDraft -> Draft. Only verified spans give values (a rejected span gives
     none); the draft's own text is scanned independently for conflicting values (R-12).
@@ -414,6 +470,7 @@ def normalise_draft(bound, gazetteer, *, marla_sqft=225, city_code="KHI", peers=
                                     "raw": spans["parking"]}
     if "description" in spans:
         clean, removed = sanitise_description(spans["description"])
+        clean = description_details(clean, fields)
         if removed:
             warnings.append("description_sanitised")
         if clean:
@@ -877,6 +934,12 @@ def apply_correction(payload, text, gazetteer, *, marla_sqft=225, city_code="KHI
         fields["price_pkr"]["period"] = normalise.period_for(fields["purpose"]["value"])
     if (found.get("description") or {}).get("removed"):
         warnings.append("description_sanitised")
+    if "description" in fields:
+        detail = description_details(fields["description"]["value"], fields)
+        if detail:
+            fields["description"] = dict(fields["description"], value=detail)
+        else:
+            fields.pop("description")
     draft = Draft(payload.get("ordinal") or 1, payload.get("source_message"), fields,
                   missing_fields(fields, conflicts), tuple(conflicts),
                   tuple(dict.fromkeys(warnings)), tuple(payload.get("rejected", ())))

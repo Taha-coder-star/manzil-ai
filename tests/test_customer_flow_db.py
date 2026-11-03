@@ -396,6 +396,17 @@ def test_an_english_customer_gets_the_english_line(st):
         "DH6-105 is not available right now.")
 
 
+@pytest.mark.parametrize("status", ["sold", "reserved", "withdrawn"])
+def test_previously_shown_listing_that_became_hidden_gets_unavailable(st, status):
+    scenario_2(st)
+    assert "DH6-101" in latest_shown(st)
+    st.query("UPDATE property SET status=%s WHERE listing_code='DH6-101' RETURNING id", (status,))
+    calls = len(st.requests)
+    assert sent_text(typed_only(st, "DH6-101")) == "DH6-101 abhi available nahi."
+    assert len(st.requests) == calls
+    assert sent_text(tap(st, "listing:DH6-101")) == "DH6-101 abhi available nahi."
+
+
 def purpose_buttons(payloads):
     return [button_ids(pl) for pl in payloads if pl["type"] == "interactive"]
 
