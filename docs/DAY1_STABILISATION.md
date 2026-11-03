@@ -171,3 +171,17 @@ after seven days. The start commands above are the restart procedure.
 - Ruff app/tests/deploy/new builder passed; baseline script bash syntax and git diff --check passed.
 - Docker was started by owner, but sandbox user cannot access its named pipe. Owner asked to run DB checks in their terminal; results pending.
 - CI/review/deployment/live checks have not run in this session.
+
+### Owner-run database check: passed
+
+119 passed in 116.64s (0:01:56), no skips/failures, on disposable postgres:18 at
+127.0.0.1:55432 with REQUIRE_DATABASE_TESTS=1. Owner-reported command:
+
+```powershell
+cmd /d /c ".venv\Scripts\python.exe -m pytest -q tests/test_demo_reset.py tests/test_staff_commit_db.py tests/test_staff_turn_db.py tests/test_staff_update_db.py tests/test_staff_find.py"
+```
+
+This supersedes the pending DB/worker verification above. It covers incomplete-draft
+worker behavior but does not close S-04 live. The prior interrupted attempt occurred before
+the container existed. No extra local retest is needed without a code change or new failure.
+Next gates: push, draft PR, CI, Taha review, merge, production baseline, deployment, live checks.
