@@ -1,0 +1,29 @@
+# Verified production combination for the fresh-search release (one state per line):
+#   <path> <sha256 | ABSENT>   # provenance
+# A state must be a blob that exists in the repository history, or carry the word "diffed" (the
+# file was compared by hand / against a reconstruction). build_kit.sh refuses to build while any of
+# the 18 released files has no state, so an unverified combination cannot ship.
+#
+# STATUS: COMPLETE for image sha256:5a85de4c57ac2cea33118d6c76b4db9d586d3f30ac950dd17ef77c9331e14758
+# (web and worker, identical trees, empty `docker diff`), from the owner's read-only dump of
+# 2026-10-18 mapped with docs/release/map_production_hashes.py. Production already runs the PR #45
+# files, PR #47's normalise/requirements and the hotfix; it lacks customer_intent.py and
+# bench_live.py and carries the Task 5.3 / 8.2 benchmark tools. A different server needs a new dump.
+app/bench_live.py ABSENT  # not on the server
+app/benchmark.py 0b6c65b199e94816a4e36d75681216b8acdc85c909e226d16feace2c75d6c30a  # d7e8972 feat: R16 benchmark set with gold labels and validator (Task
+app/card_regen.py 5496d9c326682ce5956cda6109604802a1b36c9d0294b597376d1f6d2991eb4b  # equals 46c44d8 (already final)
+app/cards.py b6495f8465241957fc49533d32b1090e5ffb4a053b7480b56ff4a564b5880891  # equals 46c44d8 (already final)
+app/customer_intent.py ABSENT  # not on the server
+app/customer_tools.py 825068526a66f27fa7e7bb2919d063e04b2b72d533ba0d115e027c381bbb3e28  # a1a749a feat: customer handoff request, property confirmation and le
+app/demo_media.py bc02dbf4066e8a2caf70b83f0a0872168cc4be1464aad23d4bc1fd97d79f020c  # equals 46c44d8 (already final)
+app/handoff.py 63300631f930c142f86c281f4f6fe5ed9707aeb6b2099a4d8644c69871bba3b3  # equals 46c44d8 (already final)
+app/handoff_actions.py 246bd9347402b5a23f01aa07a47c5cde1780ddd096a76c7014bfa2057ce1b491  # equals 46c44d8 (already final)
+app/handoff_alert.py 38346e8e55a61cf131c3b20044fab8a5aaa3dec1f60a52d3dd8423e48224bd6c  # equals 46c44d8 (already final)
+app/media.py 854bd0f06f1290dd557f369c34bca0c0cca6c15f24d52e8590896dbfb6ff301d  # equals 46c44d8 (already final)
+app/normalise.py 2c27313ed7c61579bc5d890981b585442f93b43e7236e06e76711363c69dc050  # 15dd521 fix: read Scribe's Devanagari words and re-infer a stale pur
+app/render.py 369b90efc5e962a7a58c675359e976c224cbe9f5ed149319f8f69e79d7bd5b5b  # a0df4c9 feat: readable WhatsApp layout and uncropped card images
+app/requirements.py e9af2a67c6d0b395507070c07303e40454201a69680b697034b716448313fd81  # 6f9c988 fix: a stated budget ends the "cheaper" exclusion
+app/search.py 9aad2a3f91cf1cabd382aa09e2b9f60f421e0320dd8f43e97e3a7293131db748  # 2b40122 feat: references, photos, details, customer taps and groundi
+app/staff_bench.py 1bd84df4de3acca4cc5c437e161842d5dfa0c932ad1586e89893e54eb2d50b66  # 8e11833 feat: finish staff extraction (Task 8.2): advance, portion a
+app/staff_cards.py 81dd49daa4e25081c6994fe1c1de7906909a934aa0bd538a8c9e3f7385e39acc  # equals 46c44d8 (already final)
+app/turn_engine.py 7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00  # 608f4d6 (hotfix) + f4cc48d (greeting line) = fdd4de3, the local tag review/prod-expected-fdd4de3; diffed: identical to that reconstruction

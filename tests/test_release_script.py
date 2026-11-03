@@ -162,51 +162,66 @@ def test_bad_usage_stops(tmp_path):
 # --- the baseline gate -------------------------------------------------------------------------
 
 BASELINE = SCRIPT.with_name("fresh_search_baseline.sh")
-WEB, WORKER_ID = "sha256:" + "d" * 64, "sha256:" + "d" * 64
+IMAGE_CHECK = SCRIPT.with_name("fresh_search_image_check.sh")
+WEB = "sha256:" + "d" * 64
 KNOWN_TE = "7ab72a7b0916b33cb0f049dd95dc6718833ac3f2f7c12e274f5d7764f54e1d00"
+KNOWN_BENCH = "0b6c65b199e94816a4e36d75681216b8acdc85c909e226d16feace2c75d6c30a"
 
+# A stub of the docker commands the gate uses. `docker exec` without -i gives the command an empty
+# stdin, as the real one does, so a missing -i makes the stdin-fed checksum checks fail here too.
 BASELINE_DOCKER = r"""#!/usr/bin/env bash
 S=$STATE
 case "$1" in
   inspect) cat "$S/containers/$2" ;;
   diff) cat "$S/diff_$2" 2>/dev/null; exit 0 ;;
   exec)
-    c=$2; cmd=${5:-}
+    shift; interactive=""
+    while [[ ${1:-} == -* ]]; do [[ $1 == -i ]] && interactive=1; shift; done
+    cmd=${4:-}
     case "$cmd" in
-      *"sha256sum -c -"*) in=$(cat)
-          [[ $in == u* && -n ${BAD_UNCHANGED:-} ]] && exit 1
-          [[ $in == b* && -n ${BAD_BASE:-} ]] && exit 1
+      *"sha256sum -c -"*)
+          in=""; [[ -n $interactive ]] && in=$(cat)
+          [[ -n $in ]] || { echo "sha256sum: standard input: no properly formatted checksum lines found"; exit 1; }
+          [[ $in == u* && -n ${BAD_UNCHANGED:-} ]] && { echo "app/a.py: FAILED"; exit 1; }
+          [[ $in == d* && -n ${BAD_DATA:-} ]] && { echo "demo/x.csv: FAILED"; exit 1; }
           exit 0 ;;
+      *"if [ -e"*) f="$S/states/$(echo "$6" | tr '/' '_')"; if [[ -e $f ]]; then cat "$f"; else echo ABSENT; fi ;;
       *"find app"*) cat "$S/listing" ;;
-      *"sha256sum app/turn_engine.py"*) echo "${TE_HASH}  app/turn_engine.py" ;;
     esac ;;
   run) [[ -z ${BAD_IMAGE:-} ]] ;;
 esac
 """
 
 
-def baseline(tmp_path, **env):
+def baseline(tmp_path, *, script=None, **env):
     state = tmp_path / "state"
     (state / "containers").mkdir(parents=True)
+    (state / "states").mkdir()
     rel = tmp_path / "rel"
     rel.mkdir()
     (state / "containers" / "deploy-web-1").write_text(env.pop("web", WEB))
-    (state / "containers" / "deploy-worker-1").write_text(env.pop("worker", WORKER_ID))
-    (state / "listing").write_text(env.pop("listing", "app/a.py\napp/b.py"))
+    (state / "containers" / "deploy-worker-1").write_text(env.pop("worker", WEB))
+    (state / "listing").write_text(env.pop("listing", "app/a.py\napp/b.py\napp/benchmark.py"))
+    for path, value in {"app/turn_engine.py": KNOWN_TE, "app/benchmark.py": KNOWN_BENCH,
+                        **env.pop("states", {})}.items():
+        (state / "states" / path.replace("/", "_")).write_text(value)
     if "diff" in env:
         (state / "diff_deploy-web-1").write_text(env.pop("diff"))
     (rel / "SHA256SUMS.unchanged").write_text("u  app/a.py\n")
-    (rel / "SHA256SUMS.base").write_text("b  app/b.py\n")
-    (rel / "FILES.expected").write_text("app/a.py\napp/b.py\n")
-    (rel / "TURN_ENGINE.allowed").write_text(f"{'0' * 64}\n{KNOWN_TE}\n")
+    (rel / "SHA256SUMS.data").write_text("d  demo/x.csv\n")
+    (rel / "FILES.expected").write_text("app/a.py\napp/b.py\napp/bench_live.py\napp/benchmark.py\n")
+    (rel / "STATES.allowed").write_text(
+        f"app/turn_engine.py {'0' * 64}\napp/turn_engine.py {KNOWN_TE}\n"
+        f"app/benchmark.py {KNOWN_BENCH}\napp/bench_live.py ABSENT\n")
     if env.pop("no_manifest", False):
         (rel / "FILES.expected").unlink()
     (tmp_path / "docker").write_text(BASELINE_DOCKER)
     (tmp_path / "docker").chmod(0o755)
     copy = tmp_path / "baseline.sh"
-    copy.write_bytes(BASELINE.read_bytes().replace(CRLF, LF))
+    text = BASELINE.read_bytes().replace(CRLF, LF)
+    copy.write_bytes(script(text) if script else text)
     full = {**os.environ, "STATE": str(state), "REL": str(rel), "DOCKER": str(tmp_path / "docker"),
-            "TE_HASH": KNOWN_TE, **env}
+            **env}
     done = subprocess.run(["bash", str(copy)], env=full, capture_output=True, text=True,
                           timeout=60, check=False)
     return done, rel / "PRE_ID"
@@ -218,24 +233,118 @@ def test_a_matching_baseline_records_the_image_id(tmp_path):
     assert pre.read_text() == WEB
 
 
-@pytest.mark.parametrize("env, why", [
-    ({"worker": "sha256:" + "e" * 64}, "one image"),                  # web and worker differ
-    ({"diff": "C /app/app\nC /app/app/turn_engine.py\n"}, "in-place edit"),
-    ({"BAD_UNCHANGED": "1"}, "unchanged module"),
-    ({"BAD_BASE": "1"}, "replaced module"),
-    ({"listing": "app/a.py\napp/b.py\napp/extra.py"}, "extra file"),
-    ({"listing": "app/a.py"}, "missing file"),
-    ({"TE_HASH": "f" * 64}, "unknown turn_engine"),
-    ({"BAD_IMAGE": "1"}, "image itself"),
-    ({"no_manifest": True}, "missing manifest"),
+def test_forgetting_docker_exec_i_is_caught_by_the_stub(tmp_path):
+    """The reported bug: without -i the stdin-fed manifest checks read nothing."""
+    done, pre = baseline(tmp_path, script=lambda t: t.replace(b"exec -i ", b"exec "))
+    assert done.returncode == 1 and "no properly formatted" in done.stderr
+    assert not pre.exists()
+
+
+@pytest.mark.parametrize("env, expect", [
+    ({"worker": "sha256:" + "e" * 64}, "not on one image"),
+    ({"diff": "C /app/app\nC /app/app/render.py\n"}, "changes under /app"),
+    ({"BAD_UNCHANGED": "1"}, "SHA256SUMS.unchanged"),
+    ({"BAD_DATA": "1"}, "SHA256SUMS.data"),
+    ({"listing": "app/a.py\napp/b.py\napp/benchmark.py\napp/extra.py"}, "extra file app/extra.py"),
+    ({"listing": "app/a.py\napp/benchmark.py"}, "missing file app/b.py"),
+    ({"states": {"app/turn_engine.py": "f" * 64}}, "app/turn_engine.py is in state " + "f" * 64),
+    ({"states": {"app/benchmark.py": "9" * 64}}, "app/benchmark.py is in state " + "9" * 64),
+    ({"states": {"app/bench_live.py": "8" * 64}}, "app/bench_live.py is in state " + "8" * 64),
+    ({"BAD_IMAGE": "1"}, "does not match the expected build"),
+    ({"no_manifest": True}, "is missing"),
 ])
-def test_any_baseline_mismatch_stops_and_records_nothing(tmp_path, env, why):
+def test_any_baseline_mismatch_stops_and_records_nothing(tmp_path, env, expect):
     done, pre = baseline(tmp_path, **env)
-    assert done.returncode == 1 and "STOP" in done.stderr, why
-    assert not pre.exists(), why
+    assert done.returncode == 1 and "STOP" in done.stderr
+    assert expect in done.stderr, done.stderr
+    assert not pre.exists()
+
+
+def test_the_gate_reports_every_mismatch_in_one_run(tmp_path):
+    """Three different problems on the server: one run lists them all, with the hashes."""
+    done, pre = baseline(tmp_path, BAD_UNCHANGED="1", BAD_DATA="1",
+                         states={"app/benchmark.py": "9" * 64,
+                                 "app/bench_live.py": "8" * 64})
+    assert done.returncode == 1 and "8 mismatch(es)" in done.stderr   # 4 per container
+    for expect in ("SHA256SUMS.unchanged", "SHA256SUMS.data", "9" * 64, "8" * 64):
+        assert expect in done.stderr
+    assert not pre.exists()
+
+
+def test_a_benchmark_tool_absent_from_production_is_an_explained_state(tmp_path):
+    done, _ = baseline(tmp_path)          # bench_live.py is ABSENT in the stub, allowed
+    assert done.returncode == 0, done.stderr
+    done, _ = baseline(tmp_path / "again", listing="app/a.py\napp/b.py\napp/benchmark.py\napp/bench_live.py",
+                       states={"app/bench_live.py": "8" * 64})
+    assert done.returncode == 1 and "bench_live.py is in state " + "8" * 64 in done.stderr
 
 
 def test_pycache_changes_alone_are_not_an_in_place_edit(tmp_path):
     done, pre = baseline(tmp_path, diff="A /app/app/__pycache__/x.pyc\nC /tmp\n")
     assert done.returncode == 0, done.stderr
     assert pre.exists()
+
+
+# --- the image check ---------------------------------------------------------------------------
+
+IMAGE_DOCKER = r"""#!/usr/bin/env bash
+S=$STATE
+case "$1" in
+  run)
+    shift; while [[ $1 == --rm ]]; do shift; done
+    if [[ $1 == --entrypoint ]]; then
+      ep=$2; shift 2
+      [[ $ep == id ]] && { echo "${RUN_USER:-appuser}"; exit 0; }
+      [[ $ep == python ]] && { [[ -z ${BAD_IMPORT:-} ]]; exit; }
+      # sh -c <cmd>: after -v <mount> <image> -c <cmd>
+      cmd=${@: -1}
+      case "$cmd" in
+        *"sha256sum -c /rel/SHA256SUMS.unchanged"*) [[ -z ${BAD_UNCHANGED:-} ]] || { echo "app/a.py: FAILED"; exit 1; } ;;
+        *"sha256sum -c /rel/SHA256SUMS.data"*) [[ -z ${BAD_DATA:-} ]] || { echo "demo/x.csv: FAILED"; exit 1; } ;;
+        *"sha256sum -c /rel/SHA256SUMS"*) [[ -z ${BAD_RELEASE:-} ]] || { echo "app/render.py: FAILED"; exit 1; } ;;
+        *"find app"*) cat "$S/listing" ;;
+        *"sha256sum migrations"*) cat "$S/migrations" ;;
+      esac
+    fi ;;
+esac
+"""
+
+
+def image_check(tmp_path, **env):
+    state, rel = tmp_path / "state", tmp_path / "rel"
+    state.mkdir()
+    rel.mkdir()
+    (state / "listing").write_text(env.pop("listing", "app/a.py\nmigrations/001_x.sql\n"))
+    (state / "migrations").write_text(env.pop("migrations", f"{'1' * 64}  migrations/001_x.sql\n"))
+    for name in ("SHA256SUMS", "SHA256SUMS.unchanged", "SHA256SUMS.data"):
+        (rel / name).write_text("x  app/a.py\n")
+    (rel / "FILES.release").write_text("app/a.py\nmigrations/001_x.sql\n")
+    (rel / "STATES.allowed").write_text(f"migrations/001_x.sql {'1' * 64}\n")
+    (tmp_path / "docker").write_text(IMAGE_DOCKER)
+    (tmp_path / "docker").chmod(0o755)
+    copy = tmp_path / "image_check.sh"
+    copy.write_bytes(IMAGE_CHECK.read_bytes().replace(CRLF, LF))
+    full = {**os.environ, "STATE": str(state), "REL": str(rel), "DOCKER": str(tmp_path / "docker"),
+            **env}
+    return subprocess.run(["bash", str(copy), "manzil-ai:fresh-abc"], env=full, capture_output=True,
+                          text=True, timeout=60, check=False)
+
+
+def test_the_image_check_passes_on_the_exact_tree(tmp_path):
+    done = image_check(tmp_path)
+    assert done.returncode == 0, done.stderr
+
+
+@pytest.mark.parametrize("env, expect", [
+    ({"BAD_RELEASE": "1"}, "SHA256SUMS:"),
+    ({"BAD_UNCHANGED": "1"}, "SHA256SUMS.unchanged"),
+    ({"BAD_DATA": "1"}, "SHA256SUMS.data"),
+    ({"listing": "app/a.py\napp/zzz.py\nmigrations/001_x.sql\n"}, "extra file app/zzz.py"),
+    ({"listing": "app/a.py\n"}, "missing file migrations/001_x.sql"),
+    ({"migrations": f"{'2' * 64}  migrations/001_x.sql\n"}, "unexplained state " + "2" * 64),
+    ({"RUN_USER": "root"}, "does not run as appuser"),
+    ({"BAD_IMPORT": "1"}, "does not import"),
+])
+def test_the_image_check_stops_on_any_difference(tmp_path, env, expect):
+    done = image_check(tmp_path, **env)
+    assert done.returncode == 1 and expect in done.stderr, done.stderr
