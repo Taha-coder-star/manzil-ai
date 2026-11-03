@@ -438,6 +438,7 @@ def _save(ctx, conn, draft, message):
     features = {}
     if "description" in fields:
         clean, _ = sn.sanitise_description(fields["description"]["value"])  # again (R-36)
+        clean = sn.description_details(clean, fields)
         if clean:
             features["description"] = clean
     if _value(fields, "parking_spaces") is not None:

@@ -214,6 +214,27 @@ def scenario_4a(sc):
 
 # --- scenario 4a ---------------------------------------------------------------------------
 
+@pytest.mark.parametrize("extra", ["", ", corner, park facing"])
+def test_repeated_description_is_filtered_on_card_and_legacy_draft_save(sc, extra):
+    source, spans = ST["ST-01"]
+    source += extra
+    [(wamid, card)] = draft_once(sc, [dict(spans, description=source)], text(source))
+    assert source not in body(card)
+    if extra:
+        assert "Note: corner, park facing" in body(card)
+    else:
+        assert "Note:" not in body(card)
+    save = button(card, "draft:save:")
+    # Simulate a draft created by the old image: Save must recheck its description.
+    legacy = {"value": source, "raw": source, "removed": 0}
+    sc.query("UPDATE listing_draft SET payload=jsonb_set(payload, '{fields,description}', "
+             "%s::jsonb) WHERE id=%s RETURNING id", (json.dumps(legacy), save.split(":")[2]))
+    sc.send(tap(save, wamid))
+    assert sc.query("SELECT public_features->>'description' FROM property "
+                    "WHERE listing_code='DH6-109'") == [("corner, park facing" if extra else None,)]
+    assert listing(sc, "DH6-109")[1] == 80_000_000
+
+
 def test_the_live_turn_shape_bad_args_then_draft_then_an_empty_stop_still_sends_the_card(sc):
     # Seen live 2026-10-14 on gemini-3.5-flash-lite: the answer after the tool results was a
     # STOP without parts. It ends the turn; the backend card is the reply.

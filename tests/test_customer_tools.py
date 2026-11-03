@@ -8,6 +8,7 @@ import pytest
 
 from app import (
     ai_tools,
+    cards,
     customer_reply,
     customer_tools,
     grounding,
@@ -21,6 +22,16 @@ from app.turn_engine import (
     ground_customer,
     render_customer,
 )
+
+
+def test_a_previously_resolved_listing_without_a_public_row_is_unavailable(monkeypatch):
+    monkeypatch.setattr(cards, "load_listings", lambda *args: [])
+    binding = customer_tools.CustomerBinding(
+        None, SimpleNamespace(agency_id="demo", messages=()), None, None, (),
+        language="roman_urdu")
+    result = binding.details_card(references.Item(1, "id", "DH6-109"))
+    assert result.notice == ai_tools.Notice("listing_unavailable", (("code", "DH6-109"),))
+    assert result.payloads == ()  # never return a card/price from old shown history
 
 
 @pytest.mark.parametrize(("text", "position"), [

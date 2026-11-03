@@ -34,6 +34,41 @@ def values(draft):
     return out
 
 
+def test_a_description_repeating_the_listing_is_not_a_note():
+    text, spans = ST["ST-01"]
+    draft = build(text, dict(spans, description=text))
+    assert "description" not in draft.fields
+    assert draft.fields["price_pkr"]["value"] == 80_000_000
+
+
+def test_only_verified_repeated_clauses_are_removed_from_a_note():
+    text, spans = ST["ST-01"]
+    text += ", corner, park facing"
+    draft = build(text, dict(spans, description=text))
+    assert draft.fields["description"]["value"] == "corner, park facing"
+
+
+@pytest.mark.parametrize("detail", ["not owner direct", "no parking", "not DHA Phase 6",
+                                   "demand 9 crore", "8,000,000 deposit", "house needs repairs"])
+def test_description_preserves_negation_unknown_detail_and_different_facts(detail):
+    text, spans = ST["ST-01"]
+    draft = build(text, spans)
+    assert sd.description_details(detail, draft.fields) == detail
+
+
+def test_broad_model_source_span_does_not_swallow_extra_description_details():
+    text, spans = ST["ST-01"]
+    text += ", corner, park facing"
+    draft = build(text, dict(spans, source=text, description=text))
+    assert draft.fields["description"]["value"] == "corner, park facing"
+
+
+def test_a_digits_only_room_span_cannot_remove_a_different_room_fact():
+    fields = {"bedrooms": {"value": 4, "raw": "4"},
+              "bathrooms": {"value": 5, "raw": "5 bath"}}
+    assert sd.description_details("4 baths", fields) == "4 baths"
+
+
 # --- the 11 benchmark draft inputs (hand-written spans) --------------------------------
 
 ST = {

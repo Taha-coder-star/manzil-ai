@@ -306,6 +306,12 @@ def corrected(item, text):
     return sn.apply_correction(row.payload, text, GAZETTEER, listings=ROWS)
 
 
+def test_note_correction_retains_extra_detail_without_repeating_structured_facts():
+    source = ST["ST-01"][0]
+    new = corrected("ST-01", f"note: {source}, corner, park facing")
+    assert new["fields"]["description"]["value"] == "corner, park facing"
+
+
 def test_a_correction_fills_missing_fields_and_save_becomes_possible():
     new = corrected("ST-07", "price 7.5 crore, 5 bed")
     assert new["fields"]["price_pkr"]["value"] == 75_000_000

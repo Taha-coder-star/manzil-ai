@@ -393,7 +393,7 @@ class CustomerBinding:
         listings = cards.load_listings(self.conn, self.turn.agency_id, [item.code])
         if not listings:
             return self._result("get_property", {"status": "not_found"},
-                                notice="listing_unknown")
+                                notice=_notice("listing_unavailable", code=item.code))
         payload = cards.single_card(listings[0], self.language)
         return self._result("get_property", {"status": "ok"}, [payload],
                             self._listing_facts(item), [item.code])

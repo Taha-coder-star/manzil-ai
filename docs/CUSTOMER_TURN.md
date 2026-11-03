@@ -85,3 +85,11 @@ photos 3a, details, taps, 3b / 3c, nearby, one question per turn, grounding) and
 - `PHOTOS_PER_ASK` and the cover rule are project choices.
 - Urdu-script replies, voice end to end (10.2), the real handoff (11.1) and `send_location`
   are out of scope.
+
+## Day 1 previously shown, now hidden listing (2026-11-03; local fix)
+
+A code or list selection may resolve through shown history after a listing becomes hidden.
+The public-row re-fetch is authoritative: no row -> existing listing_unavailable notice,
+not listing_unknown/which-property. No prior price, hidden status or old card is returned.
+Regression: show ACTIVE listing, change to SOLD/RESERVED/WITHDRAWN, then bare code and
+listing tap; fixed unavailable line without another model call.
