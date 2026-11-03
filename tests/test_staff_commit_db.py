@@ -369,6 +369,7 @@ def test_4c_a_description_update_lists_the_houses_then_the_pick_confirms_sold(sc
     assert body(choice).startswith("Kaunsi property?")
     ids = rows(choice)
     assert "pick:DH6-109:s=sold" in ids and "pick:DH6-101:s=sold" in ids
+    assert "pick:DH6-106:s=sold" not in ids  # reserved: explicit-code updates only
     assert all(i.endswith(":s=sold") for i in ids)
     assert listing(sc, "DH6-109")[0] == "active"  # a list writes nothing
 

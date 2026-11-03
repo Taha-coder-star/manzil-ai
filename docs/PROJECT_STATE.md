@@ -1,3 +1,10 @@
+# Current resume point
+
+2026-11-03 Day 1 preparation (Codex, fix/day1-stabilisation on 26ca5cc): reset refuses non-demo property/project inventory before changes; inactive staff conversations now reset as customers. Owner approved ACTIVE-only description targeting and migration-free reset report exception. Added regressions, current-baseline app-only kit builder and Day 1 operator checklist; existing historical kit unchanged. Incomplete-draft card test passes; worker/live S-04 pending. 134 targeted tests +4 packaging tests passed, 57 DB tests skipped; lint/shell syntax/diff checks passed. Docker is running per owner, but sandbox named-pipe access denied; owner-running DB check requested. No CI/review/merge/deploy/live results. Live baseline and generated concrete release paste still pending; use docs/DAY1_STABILISATION.md. No Day 2 work.
+
+---
+Historical content below (includes an old chat transcript):
+
 
 GitHubGitHub 5.1 is done by developer 2 it is having merge conflict help me resolve it
 

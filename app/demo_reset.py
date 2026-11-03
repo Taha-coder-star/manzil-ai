@@ -168,7 +168,7 @@ def _conversations(conn, result, write):
         SELECT c.id FROM conversation c
         WHERE c.customer_wa_id NOT LIKE 'retired-%%' AND NOT EXISTS (
             SELECT 1 FROM staff s
-            WHERE regexp_replace(s.whatsapp_number, '[^0-9]', '', 'g')
+            WHERE s.is_active AND regexp_replace(s.whatsapp_number, '[^0-9]', '', 'g')
                 = regexp_replace(c.customer_wa_id, '[^0-9]', '', 'g'))
         """)
     leads = _ids(conn, "SELECT id FROM lead WHERE status = 'open' AND conversation_id = ANY(%s)",
@@ -197,6 +197,13 @@ def _reset(conn, agency_id, data, result, write):
     if agency[0] != seed.DEMO_AGENCY_NAME:
         raise seed.SeedError(
             f"agency is not the demo agency {seed.DEMO_AGENCY_NAME!r}; nothing written")
+
+    # A demo name is not a guarantee that all inventory is fictional. Refuse the
+    # entire operation, including dry runs, rather than relabel real inventory.
+    for table in ("property", "project"):
+        if conn.execute(sql.SQL("SELECT EXISTS (SELECT 1 FROM {} WHERE NOT is_demo)")
+                        .format(sql.Identifier(table))).fetchone()[0]:
+            raise seed.SeedError(f"non-demo {table} inventory present; nothing written")
 
     for job_type, count in conn.execute(
             "SELECT job_type, count(*) FROM job WHERE status IN ('pending', 'running') "
