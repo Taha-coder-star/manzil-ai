@@ -214,6 +214,16 @@ def scenario_4a(sc):
 
 # --- scenario 4a ---------------------------------------------------------------------------
 
+def test_explicit_owner_direct_omitted_by_model_appears_on_card_and_is_saved(sc):
+    source, spans = ST["ST-01"]
+    omitted = {k: v for k, v in spans.items() if k != "source"}
+    [(wamid, card)] = draft_once(sc, [omitted], text(source))
+    assert "Owner direct" in body(card)
+    sc.send(tap(button(card, "draft:save:"), wamid))
+    assert sc.query("SELECT source_type FROM property WHERE listing_code='DH6-109'") == [
+        ("owner_direct",)]
+
+
 @pytest.mark.parametrize("extra", ["", ", corner, park facing"])
 def test_repeated_description_is_filtered_on_card_and_legacy_draft_save(sc, extra):
     source, spans = ST["ST-01"]

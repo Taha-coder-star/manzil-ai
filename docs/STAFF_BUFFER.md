@@ -17,6 +17,17 @@ migration `015_staff_segment.sql`, tests `tests/test_staff_buffer.py`.
 
 ## Flow
 
+Day 1 live race correction (2026-11-04, local fix pending review/deployment): a Done
+answer is delayed two seconds to let reordered album webhook jobs run first. The Done
+message ID is retained in its answer job and media-wait retries. A late-arriving photo
+can join the unique closed description segment only if its WhatsApp timestamp is at
+least the segment's earliest item timestamp and strictly before Done, the sender and
+conversation match, and no answer turn exists. Queue conversation locks serialize the
+append with answering. Once an answer turn exists its input stays immutable. Actual
+post-Done photos, equal-second ambiguity, missing timestamps or multiple candidates
+use the existing photo flow. This exception supersedes the immediate/frozen-on-close
+description below for Done; timers and next-description closes remain unchanged.
+
 1. A staff (admin / agent) message arrives as usual: webhook -> `process_message` -> one
    coalesced turn (`app.orchestrator`). The `#demo` samples and card taps work as before.
 2. `staff_buffer.absorb` classifies each message of the turn, in WhatsApp order, and puts

@@ -271,6 +271,7 @@ def test_done_closes_the_segment_once(sb, word):
     sb.deliver(sb.text("wamid.D1", word))
     sb.drain()
     assert segments(sb)[0][:3] == ("flushed", "description", "done")
+    sb.due()  # the brief Done webhook grace has elapsed
     assert sb.channel.sent == [stub(1, 1)]
 
     sb.deliver(sb.text("wamid.D2", word))  # nothing open: ignored
@@ -279,6 +280,132 @@ def test_done_closes_the_segment_once(sb, word):
     assert sb.channel.sent == [stub(1, 1)]
     assert len(segments(sb)) == 1
     assert segment_turns(sb) == [("staff", "replied", 2)]
+
+
+def test_pre_done_album_photo_delivered_after_close_joins_one_unanswered_segment(sb, monkeypatch):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    listing = sb.text("wamid.T1", LISTING)
+    p1, p2, p3 = (sb.image(f"wamid.P{i}") for i in (1, 2, 3))
+    done = sb.text("wamid.D1", "done")
+    sb.deliver(listing, p1, p2)
+    sb.drain()
+    sb.deliver(done)
+    sb.drain()
+    assert sb.channel.sent == []
+    sb.deliver(p3)
+    sb.drain()
+    sb.deliver(p3)  # webhook replay cannot append the photo twice
+    sb.drain()
+    sb.due()
+    [(_, kind, reason, _, items)] = segments(sb)
+    assert (kind, reason) == ("description", "done")
+    assert [item[0] for item in items] == ["wamid.T1", "wamid.P1", "wamid.P2", "wamid.P3"]
+    assert sb.channel.sent == [stub(1, 3)]
+    assert segment_turns(sb) == [("staff", "replied", 4)]
+
+
+def test_late_pre_done_photo_does_not_join_a_newer_listing(sb, monkeypatch):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    listing, p1 = sb.text("wamid.T1", LISTING), sb.image("wamid.P1")
+    late, done = sb.image("wamid.LATE"), sb.text("wamid.D1", "done")
+    second, p2 = sb.text("wamid.T2", LISTING_2), sb.image("wamid.P2")
+    sb.deliver(listing, p1)
+    sb.drain()
+    sb.deliver(done)
+    sb.drain()
+    sb.deliver(second, p2)
+    sb.drain()
+    sb.deliver(late)
+    sb.drain()
+    sb.due()
+    first, second = segments(sb)
+    assert [i[0] for i in first[-1]] == ["wamid.T1", "wamid.P1", "wamid.LATE"]
+    assert [i[0] for i in second[-1]] == ["wamid.T2", "wamid.P2"]
+    assert sb.channel.sent == [stub(1, 2), stub(1, 1)]
+
+
+def test_pre_done_photo_can_join_while_answer_is_waiting_for_downloads(sb, monkeypatch):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    sb.state.worker.handlers.pop("fetch_media")
+    listing, p1 = sb.text("wamid.T1", LISTING), sb.image("wamid.P1")
+    late, done = sb.image("wamid.LATE"), sb.text("wamid.D1", "done")
+    sb.deliver(listing, p1)
+    sb.drain()
+    sb.deliver(done)
+    sb.drain()
+    sb.due()  # original answer defers for pending downloads
+    assert segment_turns(sb) == []
+    sb.deliver(late)
+    sb.drain()
+    [segment] = segments(sb)
+    assert [i[0] for i in segment[-1]] == ["wamid.T1", "wamid.P1", "wamid.LATE"]
+    sb.due()
+    sb.due()
+    assert segment_turns(sb) == [("staff", "replied", 3)]
+
+
+def test_overlapping_done_timestamp_ranges_do_not_guess_a_listing(sb, monkeypatch):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    first, late = sb.text("wamid.T1", LISTING), sb.image("wamid.LATE")
+    done1 = sb.text("wamid.D1", "done")
+    second, done2 = sb.text("wamid.T2", LISTING_2), sb.text("wamid.D2", "done")
+    second["timestamp"], done2["timestamp"] = first["timestamp"], done1["timestamp"]
+    for message in (first, done1, second, done2, late):
+        sb.deliver(message)
+        sb.drain()
+    first, second, photo = segments(sb)
+    assert first[-1] == [("wamid.T1", "description", False)]
+    assert second[-1] == [("wamid.T2", "description", False)]
+    assert photo[-1] == [("wamid.LATE", None, True)]
+
+
+@pytest.mark.parametrize("boundary", ["after", "same_second", "answered"])
+def test_photos_outside_an_unambiguous_unanswered_done_boundary_are_not_reassigned(
+        sb, monkeypatch, boundary):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    listing, p1 = sb.text("wamid.T1", LISTING), sb.image("wamid.P1")
+    late, done = sb.image("wamid.LATE"), sb.text("wamid.D1", "done")
+    if boundary == "after":
+        late["timestamp"] = str(int(done["timestamp"]) + 1)
+    elif boundary == "same_second":
+        late["timestamp"] = done["timestamp"]
+    sb.deliver(listing, p1)
+    sb.drain()
+    sb.deliver(done)
+    sb.drain()
+    if boundary == "answered":
+        sb.due()
+    sb.deliver(late)
+    sb.drain()
+    sb.due()
+    first, second = segments(sb)
+    assert [i[0] for i in first[-1]] == ["wamid.T1", "wamid.P1"]
+    assert [i[0] for i in second[-1]] == ["wamid.LATE"]
+    assert sb.channel.sent == [stub(1, 1), PHOTO_ONLY]
+
+
+@pytest.mark.parametrize("other", ["staff", "tenant"])
+def test_late_photo_cannot_cross_staff_or_tenant_boundary(sb, monkeypatch, other):
+    monkeypatch.setattr(staff_buffer, "DONE_GRACE_SECONDS", 3600)
+    listing, p1 = sb.text("wamid.T1", LISTING), sb.image("wamid.P1")
+    late = sb.image("wamid.LATE", sender=AGENT_2 if other == "staff" else AGENT)
+    done = sb.text("wamid.D1", "done")
+    sb.deliver(listing, p1)
+    sb.drain()
+    sb.deliver(done)
+    sb.drain()
+    sb.deliver(late, pnid=PNID_B if other == "tenant" else PNID_A)
+    sb.drain()
+    sb.due()
+    assert segments(sb)[0][-1] == [("wamid.T1", "description", False), ("wamid.P1", None, True)]
+    if other == "tenant":
+        assert segments(sb, agency_id=sb.other)[0][1] == "photo_only"
+    else:
+        assert segments(sb)[1][1] == "photo_only"
+
+
+def test_late_photo_without_a_provider_timestamp_cannot_be_guessed():
+    assert staff_buffer._late_photo_segment(None, None, SimpleNamespace(provider_timestamp=None)) is None
 
 
 def test_a_newer_item_makes_the_older_timer_stale(sb):

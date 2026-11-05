@@ -60,6 +60,9 @@ QUIET_SECONDS = 75
 # times, then answer and flag them (media_pending).
 MEDIA_WAIT_SECONDS = 15
 MEDIA_WAITS = 2
+# Album webhooks can arrive after Done despite an earlier WhatsApp timestamp.
+# Give those process_message jobs a brief chance to run before the answer is frozen.
+DONE_GRACE_SECONDS = 2
 
 DESCRIPTION, NOTE, DONE, COMMAND, IGNORE = (
     "description", "note", "done", "command", "ignore")
@@ -184,9 +187,9 @@ def _add_item(conn, turn, segment, message_id, text_role, is_photo):
     segment.has_photo = segment.has_photo or is_photo
 
 
-def _close(conn, segment_id, reason, conversation_key):
-    """Freeze the segment's items (status 'flushed') and queue its answer. Returns
-    False when it was no longer open."""
+def _close(conn, segment_id, reason, conversation_key, *, done_message_id=None):
+    """Close the segment and queue its answer; Done allows pre-answer late photos.
+    Returns False when it was no longer open."""
     row = conn.execute(
         """
         UPDATE staff_segment s SET status = 'flushed', flushed_at = now(),
@@ -204,9 +207,12 @@ def _close(conn, segment_id, reason, conversation_key):
         return False
     if row[0] == "photo_only":
         _add_flags(conn, segment_id, [FLAG_PHOTO_ONLY])
-    enqueue_job(conn, ANSWER_JOB, f"staff-segment-answer:{segment_id}",
-                {"segment_id": str(segment_id), "waits": 0},
-                conversation_key=conversation_key)
+    payload = {"segment_id": str(segment_id), "waits": 0}
+    if done_message_id is not None:
+        payload["done_message_id"] = str(done_message_id)
+    enqueue_job(conn, ANSWER_JOB, f"staff-segment-answer:{segment_id}", payload,
+                conversation_key=conversation_key,
+                delay_seconds=DONE_GRACE_SECONDS if done_message_id is not None else 0)
     logger.info("Staff segment %s closed (%s, %s)", segment_id, reason, row[0])
     return True
 
@@ -244,6 +250,45 @@ def _schedule(conn, segment, conversation_key):
                 conversation_key=conversation_key, delay_seconds=QUIET_SECONDS)
 
 
+def _late_photo_segment(conn, turn, message):
+    """A photo sent before Done may join its unique, still-unanswered segment.
+
+    Queue conversation locks serialize this with the answer job. Once an answer
+    turn exists its input is immutable. Equal-second timestamps are ambiguous;
+    missing timestamps and photos outside the segment's sent-time bounds fall
+    through to the ordinary photo flow. Never choose by receipt time alone.
+    """
+    if message.provider_timestamp is None:
+        return None
+    rows = conn.execute(
+        """
+        SELECT s.id, s.version, TRUE,
+               (SELECT count(*) FROM staff_segment_item i WHERE i.segment_id = s.id),
+               EXISTS (SELECT 1 FROM staff_segment_item i WHERE i.segment_id = s.id AND i.is_photo)
+        FROM staff_segment s
+        WHERE s.staff_id = %s AND s.conversation_id = %s
+          AND s.status = 'flushed' AND s.kind = 'description' AND s.flush_reason = 'done'
+          AND NOT EXISTS (SELECT 1 FROM conversation_turn t WHERE t.staff_segment_id = s.id)
+          AND EXISTS (
+            SELECT 1 FROM job j JOIN message d ON d.id::text = j.payload->>'done_message_id'
+            WHERE j.job_type = %s AND j.status IN ('pending', 'running')
+              AND j.payload->>'segment_id' = s.id::text
+              AND d.conversation_id = s.conversation_id
+              AND %s < d.provider_timestamp
+              AND %s >= (SELECT min(m.provider_timestamp) FROM staff_segment_item i
+                         JOIN message m ON m.id = i.message_id WHERE i.segment_id = s.id)
+          )
+        ORDER BY s.flushed_at DESC LIMIT 2
+        """,
+        (turn.staff_id, turn.conversation_id, ANSWER_JOB,
+         message.provider_timestamp, message.provider_timestamp),
+    ).fetchall()
+    if len(rows) != 1:
+        return None
+    conn.execute("SELECT 1 FROM staff_segment WHERE id = %s FOR UPDATE", (rows[0][0],))
+    return _Segment(rows[0])
+
+
 # --- absorb (called from the staff turn) ---------------------------------------------
 
 def absorb(conn, turn):
@@ -264,13 +309,21 @@ def absorb(conn, turn):
             action, role, is_photo = classify(message, message.id in photos)
             if message.id in done or action == IGNORE:
                 continue
+            if action == "photo":
+                late = _late_photo_segment(conn, turn, message)
+                if late is not None:
+                    _add_item(conn, turn, late, message.id, role, is_photo)
+                    conn.execute("UPDATE staff_segment SET version=%s, last_item_at=now(), "
+                                 "updated_at=now() WHERE id=%s", (late.version, late.id))
+                    continue
             if action == COMMAND:
                 rest.append(message)
             elif action == DONE:
                 if segment is not None:
                     if touched:
                         _persist(conn, segment)
-                    _close(conn, segment.id, "done", turn.sender_wa_id)
+                    _close(conn, segment.id, "done", turn.sender_wa_id,
+                           done_message_id=message.id)
                     segment, touched = None, False
             elif action == NOTE and segment is None:
                 rest.append(message)
@@ -338,8 +391,9 @@ def answer(conn, job, client_factory, *, engine=None):
         ).fetchall()
         statuses = [r[0] for r in media]
         if "pending" in statuses and waits < MEDIA_WAITS:
+            payload = dict(job.payload, segment_id=segment_id, waits=waits + 1)
             enqueue_job(conn, ANSWER_JOB, f"staff-segment-answer:{segment_id}:w{waits + 1}",
-                        {"segment_id": segment_id, "waits": waits + 1},
+                        payload,
                         conversation_key=job.conversation_key,
                         delay_seconds=MEDIA_WAIT_SECONDS)
             logger.info("Staff segment %s waits for photos (%d)", segment_id, waits + 1)

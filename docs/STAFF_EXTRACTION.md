@@ -320,6 +320,23 @@ button stored.
 
 ## 6. Photos
 
+Day 1 incomplete-draft validation follow-up (2026-11-04, local): only declared optional
+draft span fields containing null or blank strings are treated as omitted at tool
+execution. Unknown field names, numeric and boolean values, malformed wrappers and span grounding
+remain checked. Provider arguments are copied, never mutated. Invalid draft calls return
+static schema guidance to the model, and the staff prompt explicitly allows incomplete
+drafts. Live S04 showed three invalid_arguments results; its exact rejected payload was
+not retained, so this hardening is not a confirmed diagnosis of a particular field/value.
+Re-run S04 live after review and deployment before closing it.
+
+Day 1 source omission correction (2026-11-04, local fix pending review/deployment):
+when the model omits or supplies no usable source span, the backend may recover a
+standalone source clause from that draft's verified scan. Only exact existing source
+vocabulary is accepted; negation, questions, unknown surrounding words or conflicting
+source claims prevent fallback. The field records source_text provenance and the
+existing re_extracted warning. Scope stays per draft, including multi-draft text.
+The Note filter then recognizes the recovered source as a structured fact.
+
 - The segment already links its photos (`staff_segment_item.is_photo` -> `inbound_media`) and each
   draft carries `staff_segment_id`, so the relationship is never lost.
 - **One draft in the segment**: `payload.photos` = all segment photos in order; the card shows the
@@ -612,6 +629,12 @@ buttons); (6) applying 016 to RDS (snapshot first) and the live Gemini run.
   to RDS; the live model run; owner answers Q1-Q5 and wording approval.
 
 ## 18. Task 9.2 (2026-10-14)
+
+Day 1 validation clarification (2026-11-05): optional null/empty/whitespace fields
+may be omitted beside other stated draft content. If a supplied nonempty draft
+contains only such blank fields, the tool returns invalid_arguments rather than
+turning it into an accepted empty draft. Numeric values and unknown keys remain
+invalid; normalization never mutates the original provider arguments.
 
 Save / Edit / Cancel / Confirm, the real code allocation, undo, the pick list and photo attach are
 built in Task 9.2: see `docs/STAFF_COMMIT.md`. The cards of section 8 now carry buttons and the cover
