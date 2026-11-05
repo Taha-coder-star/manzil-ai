@@ -309,15 +309,21 @@ def _draft_args(args):
     """Treat empty optional span fields as absent, without changing stated values.
 
     Unknown keys and non-string values remain for strict validation to reject.
+    Keep blank-only drafts invalid; omit blanks only beside other stated content.
     Never mutate the provider response used by the next model iteration.
     """
     if not isinstance(args, dict) or not isinstance(args.get("drafts"), list):
         return args
     optional = {*staff_drafts.DRAFT_FIELDS, "text"}
-    return dict(args, drafts=[
-        {k: v for k, v in draft.items() if not (
-            k in optional and (v is None or isinstance(v, str) and not v.strip()))}
-        if isinstance(draft, dict) else draft for draft in args["drafts"]])
+    drafts = []
+    for draft in args["drafts"]:
+        cleaned = {k: v for k, v in draft.items() if not (
+            k in optional and (v is None or isinstance(v, str) and not v.strip()))
+        } if isinstance(draft, dict) else draft
+        if draft and not cleaned:
+            return None  # A supplied draft containing only blank fields is invalid.
+        drafts.append(cleaned)
+    return dict(args, drafts=drafts)
 
 
 def execute(call, context):

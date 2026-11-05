@@ -630,6 +630,12 @@ buttons); (6) applying 016 to RDS (snapshot first) and the live Gemini run.
 
 ## 18. Task 9.2 (2026-10-14)
 
+Day 1 validation clarification (2026-11-05): optional null/empty/whitespace fields
+may be omitted beside other stated draft content. If a supplied nonempty draft
+contains only such blank fields, the tool returns invalid_arguments rather than
+turning it into an accepted empty draft. Numeric values and unknown keys remain
+invalid; normalization never mutates the original provider arguments.
+
 Save / Edit / Cancel / Confirm, the real code allocation, undo, the pick list and photo attach are
 built in Task 9.2: see `docs/STAFF_COMMIT.md`. The cards of section 8 now carry buttons and the cover
 image; their wording changed accordingly (still pending approval).

@@ -130,3 +130,11 @@ def test_draft_empty_normalisation_does_not_accept_computed_values_or_unknown_ke
     result = execute(call("draft_listing", {"drafts": [dict(size="500 gaz", **bad)]}), SEGMENT)
     assert not result.ok and result.error == "invalid_arguments"
     assert "Incomplete drafts are allowed" in result.response["hint"]
+
+
+@pytest.mark.parametrize("empty", [None, "", "  "])
+def test_blank_only_draft_stays_invalid_without_mutating_model_args(empty):
+    args = {"drafts": [{"price": empty, "bedrooms": empty}]}
+    result = execute(call("draft_listing", args), SEGMENT)
+    assert not result.ok and result.error == "invalid_arguments"
+    assert args == {"drafts": [{"price": empty, "bedrooms": empty}]}

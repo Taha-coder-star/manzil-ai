@@ -3,6 +3,8 @@
 python docs/release/build_day1_kit.py --base 9331869 --target <merged-commit> --out <new-dir>
 The owner must first verify production equals base (historical migration line endings allowed).
 The existing baseline/image/switch gates are retained; no deployment is performed here.
+An explicit --approved-unmerged-demo-target FULL_SHA records the owner's demo-only
+pre-review exception; the default still requires a merged target.
 """
 import argparse
 import hashlib
@@ -22,11 +24,14 @@ def digest(ref, path):
     return hashlib.sha256(git("show", f"{ref}:{path}")).hexdigest()
 
 
-def build(base, target, out):
+def build(base, target, out, *, approved_demo_target=None):
     base = git("rev-parse", "--verify", f"{base}^{{commit}}").decode().strip()
     target = git("rev-parse", "--verify", f"{target}^{{commit}}").decode().strip()
     git("merge-base", "--is-ancestor", base, target)
-    git("merge-base", "--is-ancestor", target, "origin/main")
+    if approved_demo_target is None:
+        git("merge-base", "--is-ancestor", target, "origin/main")
+    elif approved_demo_target != target:
+        raise ValueError("demo approval must name the exact full target commit")
     changed = git("diff", "--name-only", base, target, "--", "app", "migrations", "demo",
                   "requirements.txt", "Dockerfile", "deploy", ".dockerignore").decode().splitlines()
     if not changed or any(not p.startswith("app/") or not p.endswith(".py") for p in changed):
@@ -59,7 +64,8 @@ def build(base, target, out):
         write(name, "\n".join(sorted(target_files)) + "\n")
     write("STATES.allowed", "\n".join(states) + "\n")
     write("Dockerfile.release", f"FROM manzil-ai:base-{short}\nCOPY release-fresh/app/ /app/app/\n")
-    write("COMMITS.txt", f"base={base}\ntarget={target}\n")
+    approval = "review=pending\nowner_approved_demo_target=" + target + "\n" if approved_demo_target else ""
+    write("COMMITS.txt", f"base={base}\ntarget={target}\n" + approval)
     for name, body in scripts.items():
         (out / name).write_bytes(body)
     write("KIT.sha256", "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n"
@@ -72,8 +78,11 @@ def main():
     ap.add_argument("--base", required=True)
     ap.add_argument("--target", required=True)
     ap.add_argument("--out", required=True, type=Path)
+    ap.add_argument("--approved-unmerged-demo-target", metavar="FULL_SHA",
+                    help="Explicit owner-approved demo exception; exact target SHA, review remains pending")
     args = ap.parse_args()
-    print(build(args.base, args.target, args.out))
+    print(build(args.base, args.target, args.out,
+                approved_demo_target=args.approved_unmerged_demo_target))
 
 
 if __name__ == "__main__":

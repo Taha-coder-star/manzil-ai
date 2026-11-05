@@ -55,6 +55,25 @@ def test_kit_uses_committed_bytes_and_records_absent_files(repo):
         assert hashlib.sha256((out / name).read_bytes()).hexdigest() == digest
 
 
+def test_explicit_demo_exception_is_pinned_and_recorded(repo):
+    root, git, _, base, target = repo
+    git("update-ref", "refs/remotes/origin/main", base)
+    out = root / "demo-kit"
+    kit.build(base, target, out, approved_demo_target=target)
+    commits = (out / "COMMITS.txt").read_text()
+    assert f"owner_approved_demo_target={target}\n" in commits
+    assert "review=pending\n" in commits
+
+
+@pytest.mark.parametrize("approval", ["HEAD", "wrong", "short"])
+def test_demo_exception_rejects_unpinned_or_mismatched_approval(repo, approval):
+    root, _, _, base, target = repo
+    out = root / "bad-demo-kit"
+    with pytest.raises(ValueError, match="exact full target"):
+        kit.build(base, target, out, approved_demo_target=approval)
+    assert not out.exists()
+
+
 @pytest.mark.parametrize("change", ["unmerged", "migration", "deletion"])
 def test_unsafe_candidates_produce_no_output(repo, change):
     root, git, commit, base, target = repo
@@ -71,4 +90,18 @@ def test_unsafe_candidates_produce_no_output(repo, change):
     out = root / "kit"
     with pytest.raises((ValueError, subprocess.CalledProcessError)):
         kit.build(base, target, out)
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("change", ["migration", "deletion"])
+def test_demo_exception_keeps_layer_safety_guards(repo, change):
+    root, _, commit, base, _ = repo
+    if change == "migration":
+        (root / "migrations/001_schema.sql").write_bytes(b"edited migration")
+    else:
+        (root / "app/b.py").unlink()
+    target = commit()
+    out = root / "unsafe-demo-kit"
+    with pytest.raises(ValueError):
+        kit.build(base, target, out, approved_demo_target=target)
     assert not out.exists()
