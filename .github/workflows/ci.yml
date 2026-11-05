@@ -55,7 +55,7 @@ jobs:
           docker run --rm \
             -v "$GITHUB_WORKSPACE:/repo:ro" \
             zricethezav/gitleaks:v8.24.2 \
-            git /repo --redact
+            git /repo --redact --gitleaks-ignore-path /repo/.gitleaksignore
 
       - name: Build shared image
         run: docker build -t manzil-ai:ci .

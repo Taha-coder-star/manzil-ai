@@ -322,7 +322,7 @@ button stored.
 
 Day 1 incomplete-draft validation follow-up (2026-11-04, local): only declared optional
 draft span fields containing null or blank strings are treated as omitted at tool
-execution. Unknown keys, numeric/boolean values, malformed wrappers and span grounding
+execution. Unknown field names, numeric and boolean values, malformed wrappers and span grounding
 remain checked. Provider arguments are copied, never mutated. Invalid draft calls return
 static schema guidance to the model, and the staff prompt explicitly allows incomplete
 drafts. Live S04 showed three invalid_arguments results; its exact rejected payload was

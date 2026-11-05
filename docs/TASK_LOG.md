@@ -1,4 +1,11 @@
 
+# Current continuation: 2026-11-05
+
+CI run42042058400 on366c3df passed lint and the complete unit/migration/restricted-login RLS test step. Failure was Gitleaks generic-api-key on literal numeric/boolean prose after keys in ce4df35:docs/STAFF_EXTRACTION.md:325; image/container gates were skipped. Added only that full historical fingerprint to .gitleaksignore, explicitly wired its path into CI, and rephrased current prose. No history rewrite or rule/file-wide exclusion. Owner reran pinned v8.24.2 redacted scan:123commits, no leaks, exit0. Ruff/diff clean. New-head CI still required, no deployment; local full DB suite remains active separately. Keep PR55 open for Taha under the owner's pre-review demo exception.
+
+---
+Historical log below:
+
 GitHubGitHub 5.1 is done by developer 2 it is having merge conflict help me resolve it
 
 I tried accessing Taha-coder-star/manzil-ai, but the GitHub connection returned access/not-found errors, so I haven’t inspected or changed anything.

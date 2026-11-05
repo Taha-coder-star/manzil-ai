@@ -1,0 +1,2 @@
+# False positive: ordinary numeric/boolean prose after the word keys; no credential.
+ce4df358b4d7d6049ff01cca2203d2e7494cd471:docs/STAFF_EXTRACTION.md:generic-api-key:325
