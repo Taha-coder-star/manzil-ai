@@ -1169,13 +1169,10 @@ class Patch:
             return
         budget = self.slots.get("budget")
         purpose = self.slots.get("purpose")
-        if budget and not purpose and self.budget_given and not self.purpose_given:
+        if (budget and self.budget_given and not self.purpose_given
+                and (not purpose or self._stale_purpose(budget, purpose))):
             self._infer_purpose(budget)
             purpose = self.slots.get("purpose")
-        elif budget and purpose and self.budget_given and not self.purpose_given:
-            if self._stale_purpose(budget, purpose):
-                self._infer_purpose(budget)
-                purpose = self.slots.get("purpose")
         if budget and purpose and budget["value"].get("period") is None:
             budget["value"]["period"] = normalise.period_for(purpose["value"])
 
