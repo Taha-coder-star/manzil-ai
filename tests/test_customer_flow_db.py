@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import customer_tools, grounding, turn_engine, whatsapp
+from app import ai_tools, customer_tools, grounding, turn_engine, whatsapp
 from app.handlers import make_handlers
 from app.turn_engine import TEMPLATES, TEMPLATES_EN
 from app.worker import Worker
@@ -354,6 +354,75 @@ def test_scenario_3b_cheaper_is_an_honest_no_match_with_three_buttons(st):
     said = sent_text([reply])
     assert "Yahan price 7.8 crore se shuru hoti hai." in said and "9.5 crore" not in said
     assert st.state()[1]["budget"]["value"]["max"] <= 80_000_000  # never raised
+
+
+def test_cheaper_search_cannot_reuse_old_filters_when_model_skips_update(st):
+    scenario_2(st)
+    previous_version, old = st.state()
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    version, slots = st.state()
+    assert version == previous_version + 1
+    assert slots["budget"]["value"]["max"] == 72_750_000
+    assert slots["budget"]["value"]["relative"] == "cheaper"
+    assert len(slots["excluded_property_ids"]["value"]) == 3
+    assert slots["location"] == old["location"]
+    assert slots["size"] == old["size"]
+    assert len(payloads) == 1
+    assert "Yahan price 7.8 crore se shuru hoti hai." in sent_text(payloads)
+    assert button_ids(payloads[0]) == ["nomatch:nearby", "nomatch:budget", "handoff:request"]
+    assert not images(payloads)
+
+
+def test_repeated_search_calls_apply_the_cheaper_update_only_once(st):
+    scenario_2(st)
+    version = st.state()[0]
+    turn(st, "Kuch sasta dikhao", ("search_properties", {}), ("search_properties", {}))
+    assert st.state()[0] == version + 1
+
+
+def test_explicit_cheaper_update_is_not_applied_again_before_search(st):
+    scenario_2(st)
+    version = st.state()[0]
+    turn(st, "Kuch sasta dikhao",
+         ("update_requirements", {"patch": [p("budget", "relative", "Kuch sasta")]}),
+         ("search_properties", {}))
+    assert st.state()[0] == version + 1
+
+
+def test_cheaper_without_a_shown_search_asks_instead_of_using_old_budget(st):
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    assert not st.query("SELECT id FROM search_run")
+    assert not latest_shown(st)
+    assert "budget" in sent_text(payloads).lower()
+
+
+def test_a_failed_cheaper_update_never_searches_the_old_filters(st, monkeypatch):
+    scenario_2(st)
+    searches = st.query("SELECT count(*) FROM search_run")[0][0]
+    monkeypatch.setattr(st.engine.requirements, "apply", lambda *a, **kw: ai_tools.ToolResult(
+        "update_requirements", False, {"status": "error"}, error="gazetteer_unavailable"))
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == searches
+    assert "DH6-102" not in sent_text(payloads)
+
+
+def test_a_negated_cheaper_request_does_not_change_the_budget_in_code(st):
+    scenario_2(st)
+    version, slots = st.state()
+    turn(st, "sasta nahi chahiye", ("search_properties", {}))
+    assert st.state() == (version, slots)
+
+
+def test_phase8_after_repaired_cheaper_search_retains_the_cap_and_adds_the_area(st):
+    scenario_2(st)
+    turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    cap = st.state()[1]["budget"]["value"]["max"]
+    payloads = turn(st, "Phase 8 mein bhi dekho",
+                    ("update_requirements", {"patch": [p("location", "add", "Phase 8")]}),
+                    ("search_properties", {}))
+    assert st.state()[1]["budget"]["value"]["max"] == cap
+    assert set(latest_shown(st)) == {"DH8-102", "DH8-101"}
+    assert "budget se thoda upar" in sent_text(payloads)
 
 
 def test_the_budget_button_asks_for_a_new_maximum(st):

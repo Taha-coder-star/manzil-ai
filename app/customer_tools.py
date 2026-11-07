@@ -148,6 +148,7 @@ class CustomerBinding:
         self.results = False    # listings or the honest no-match are in the reply
         self.handoff = None     # Task 11.1: the SYSTEM entry of a handoff in this turn
         self.place_unresolved = False   # this turn's place was not found: no search yet
+        self.cheaper_checked = False   # a relative budget op was handled in this turn
         self.facts = grounding.Facts()
         self._language = language
 
@@ -184,6 +185,12 @@ class CustomerBinding:
                          "'around 5 lakh per month'. Never invent or silently omit a place."},
                 error="invalid_location_span", notice="requirements_unclear")
         result = self.requirements.update(patch)
+        if (any(op.get("slot") == "budget" and op.get("op") in ("set", "relative")
+                and customer_intent.cheaper_command(op.get("raw_span"))
+                for op in patch)
+                and any(op.get("slot") == "budget" and op.get("status") in ("applied", "ask")
+                        for op in (result.response or {}).get("ops", ()))):
+            self.cheaper_checked = True
         if "purpose_inferred" in _keys(result.notice):
             self.purpose_told = True
         # Live 2026-10-18: "Block 6 main flat chahiye" (place not found) was answered with
@@ -217,6 +224,18 @@ class CustomerBinding:
         if self.place_unresolved:   # the update's own notice already asks for the place
             return self._result("search_properties",
                                 {"status": "answer_first", "needs_answer": ["location"]})
+        # D2-03: the model searched the old filters for "Kuch sasta dikhao"
+        # without calling update_requirements. Run the existing normaliser/merge
+        # before search; an explicit update or a second search must not apply it twice.
+        span = customer_intent.cheaper_command(self.text)
+        if span and not self.cheaper_checked:
+            updated = self.update([{"slot": "budget", "op": "relative", "raw_span": span}])
+            if not updated.ok or not self.cheaper_checked:
+                return ai_tools.ToolResult(
+                    "search_properties", False,
+                    {"status": "error", "error": "relative_budget_not_applied"},
+                    error="relative_budget_not_applied",
+                    notice=updated.notice or "requirements_unclear")
         turn, gz = self.turn, self.gazetteer
         slots, pending, version = self._state()
         if pending is None:
