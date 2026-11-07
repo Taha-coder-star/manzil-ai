@@ -40,6 +40,7 @@ from app import (
     details,
     grounding,
     handoff,
+    location,
     references,
     render,
     requirements,
@@ -114,6 +115,27 @@ def conversation_language(conn, turn):
     return render.detect_language(row[0] if row else "")
 
 
+_LOCATION_INTENT_CLAUSE = re.compile(
+    r"^(?:office|house|flat|apartment|shop|plot|warehouse)s?\s+"
+    r"(?:on|for)\s+(?:rent|sale)\s+in\s+\S", re.IGNORECASE)
+_LOCATION_MONEY_CLAUSE = re.compile(
+    r"^(?:(?:around|about|budget|up\s+to|under|maximum|max)\s+)?"
+    r"(?:pkr\s*)?\d+(?:\.\d+)?\s*(?:lakh|lac|crore|million|thousand|k|m)"
+    r"(?:\s+(?:per|a)\s+month|\s+monthly)?$", re.IGNORECASE)
+
+
+def misbucketed_location(span, gazetteer):
+    """Recognize unresolvable intent/money clauses, never extract or guess a place.
+
+    An existing exact/ambiguous place or out-of-coverage city keeps its resolver
+    semantics. Ordinary unknown names remain unknown and ask the customer.
+    """
+    result = location.resolve(span, None, gazetteer)
+    return result.status == location.UNKNOWN and bool(
+        _LOCATION_INTENT_CLAUSE.search(span.strip())
+        or _LOCATION_MONEY_CLAUSE.fullmatch(span.strip()))
+
+
 class CustomerBinding:
     def __init__(self, conn, turn, gazetteer, requirements_binding, texts, language=None):
         self.conn, self.turn, self.gazetteer = conn, turn, gazetteer
@@ -142,6 +164,25 @@ class CustomerBinding:
     # -- update_requirements (7.3) --
 
     def update(self, patch):
+        # D2-02: substring grounding alone accepted whole requirement/budget clauses
+        # as places. Reject the entire malformed update before any state write;
+        # the model can correct its spans within the existing iteration/time limits.
+        if any(op.get("slot") == "location" and op.get("op") in ("set", "add")
+               and isinstance(op.get("raw_span"), str)
+               and ai_tools.span_in_turn(op["raw_span"], self.text)
+               and misbucketed_location(op["raw_span"], self.gazetteer)
+               for op in patch):
+            self.place_unresolved = True
+            return ai_tools.ToolResult(
+                "update_requirements", False,
+                {"status": "error", "error": "invalid_location_span",
+                 "hint": "A location span must contain only the customer's place words, "
+                         "not property type, rent/sale intent or budget. Resend all stated "
+                         "requirements with their own exact substrings. For 'office on rent "
+                         "in Karachi, around 5 lakh per month', location is 'Karachi', "
+                         "property_types is 'office', purpose is 'on rent', budget is "
+                         "'around 5 lakh per month'. Never invent or silently omit a place."},
+                error="invalid_location_span", notice="requirements_unclear")
         result = self.requirements.update(patch)
         if "purpose_inferred" in _keys(result.notice):
             self.purpose_told = True

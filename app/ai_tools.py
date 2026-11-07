@@ -41,7 +41,12 @@ _TOOLS = {
             "Record changes to the customer's property requirements. Each change names "
             "an R17 slot, an operation and raw_span: the exact words copied from the "
             "customer's current messages that state it. Never paraphrase or convert "
-            "values; never invent a span. Set uncertain to true when a voice-note "
+            "values; never invent a span. Each span belongs only to its named slot: "
+            "location is the place name, not a full property request or a budget. "
+            "For 'office on rent in Karachi, around 5 lakh per month', use location "
+            "'Karachi', property_types 'office', purpose 'on rent', and budget "
+            "'around 5 lakh per month'. Correct invalid_location_span by resending "
+            "the stated requirements with separate exact spans. Set uncertain to true when a voice-note "
             "transcript makes the value doubtful (garbled, cut off, contradictory)."
         ),
         "parameters": {

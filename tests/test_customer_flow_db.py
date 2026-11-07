@@ -128,6 +128,52 @@ def test_scenario_1_sends_no_note_the_results_line_already_says(st):
     assert TEMPLATES_EN["requirements_saved"] not in sent_text(payloads)
 
 
+def test_misbucketed_location_can_be_repaired_without_false_unknown_place_reply(st):
+    bad = [p('purpose', 'set', 'on rent'), p('property_types', 'set', 'office'),
+           p('location', 'set', 'office on rent in Karachi'),
+           p('location', 'set', 'around 5 lakh per month')]
+    payloads = turn(st, SCENARIO_1,
+                    ('update_requirements', {'patch': bad}),
+                    ('update_requirements', {'patch': SCENARIO_1_PATCH}),
+                    ('search_properties', {}), sender=CUSTOMER_A)
+    assert set(latest_shown(st, CUSTOMER_A)) == {'DH6-108', 'PEC-101', 'SHF-101'}
+    said = sent_text(payloads)
+    assert 'Here are offices for rent in Karachi' in said
+    assert "couldn't find" not in said and 'Please describe' not in said
+    ops = st.query('SELECT ops FROM requirement_patch_log WHERE conversation_id=%s',
+                   (conversation(st, CUSTOMER_A),))
+    assert all(e.get('raw_span') not in ('office on rent in Karachi', 'around 5 lakh per month')
+               for (entries,) in ops for e in entries if e.get('slot') == 'location')
+
+
+def test_misbucketed_place_holds_search_even_when_other_slots_are_updated(st):
+    payloads = turn(st, SCENARIO_1,
+                    ('update_requirements', {'patch': [p('location', 'set', 'office on rent in Karachi')]}),
+                    ('update_requirements', {'patch': [p('budget', 'set', 'around 5 lakh per month')]}),
+                    ('search_properties', {}), sender=CUSTOMER_A)
+    assert latest_shown(st, CUSTOMER_A) == []
+    assert 'matching listings' not in sent_text(payloads)
+
+
+def test_misbucketed_location_rejects_whole_patch_without_partial_requirement_writes(st):
+    turn(st, SCENARIO_1, ('update_requirements', {'patch': [
+        p('purpose', 'set', 'on rent'), p('property_types', 'set', 'office'),
+        p('budget', 'set', 'around 5 lakh per month'),
+        p('location', 'set', 'office on rent in Karachi')]}), sender=CUSTOMER_A)
+    assert st.query('SELECT count(*) FROM requirement_patch_log')[0][0] == 0
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == 0
+
+
+def test_bad_location_repair_cannot_search_previous_filters(st):
+    search_turn(st, SCENARIO_1, SCENARIO_1_PATCH, CUSTOMER_A)
+    before = st.query('SELECT count(*) FROM search_run')[0][0]
+    payloads = turn(st, SCENARIO_1,
+                    ('update_requirements', {'patch': [p('location', 'set', 'office on rent in Karachi')]}),
+                    ('search_properties', {}), sender=CUSTOMER_A)
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == before
+    assert 'DH6-108' not in sent_text(payloads)
+
+
 def test_an_inferred_purpose_note_comes_before_the_cards_and_is_said_once(st):
     payloads = search_turn(st, "DHA Phase 6 mein ghar, 8 crore tak", [
         p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar"),
