@@ -389,6 +389,10 @@ class CustomerBinding:
         values only, without those still waiting for the customer's answer."""
         slots, _, _ = self._state()
         waiting = set(self.requirements.inherited())
+        # An unresolved replacement keeps the old stored place for a later correction,
+        # but it is not accepted for this turn and must not appear in its acknowledgement.
+        if self.place_unresolved:
+            waiting.add("location")
         active = {name: entry for name, entry in slots.items() if name not in waiting}
         types = (active.get("property_types") or {}).get("value") or []
         category = (active.get("category") or {}).get("value")
