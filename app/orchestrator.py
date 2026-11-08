@@ -80,6 +80,7 @@ from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.gazetteer import GazetteerUnavailable
 from app.queue import PermanentJobError, error_code
+from app.turn_assembly import before_dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,7 @@ class Turn:
     # the segment's items), with the segment's flags (app.staff_buffer).
     staff_segment_id: UUID | None = None
     segment_flags: tuple[str, ...] = ()
+    original_message_ids: tuple[UUID, ...] = ()
 
     @property
     def ai_allowed(self):
@@ -257,7 +259,12 @@ def assemble_turn(conn, job, sender, abandoned=None):
                 (turn[0],),
             ).fetchall()
             logger.info("Resuming open turn %s (%d messages)", turn[0], len(rows))
-            return _turn(job.agency_id, conversation_id, sender, turn, rows), True
+            result = _turn(job.agency_id, conversation_id, sender, turn, rows)
+            original = conn.execute(
+                "SELECT original_message_ids FROM conversation_turn WHERE id = %s",
+                (result.id,),
+            ).fetchone()[0]
+            return dataclasses.replace(result, original_message_ids=tuple(original)), True
 
         rows = conn.execute(
             f"""
@@ -401,13 +408,15 @@ def segment_turn(conn, job, sender, conversation_id, segment_id):
 
 
 def check_schema(conn, agency_id):
-    """Raise ConfigurationError unless migration 014 (conversation_turn.attempts and
+    """Raise ConfigurationError unless migration 018 (durable turn replanning) and 014
     the 'failed' status) is applied; the turn lifecycle needs it with any AI_PROVIDER.
     Runs as the runtime login inside a tenant transaction (RLS on)."""
     try:
         with tenant_transaction(conn, agency_id):
             _set_timeout(conn)
             conn.execute("SELECT attempts FROM conversation_turn LIMIT 0")
+            conn.execute("SELECT replan_count, original_message_ids, dispatch_started "
+                         "FROM conversation_turn LIMIT 0")
             row = conn.execute(
                 """
                 SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint
@@ -421,8 +430,8 @@ def check_schema(conn, agency_id):
     except psycopg.Error:
         raise ConfigurationError("Schema check failed: database unavailable") from None
     if row is None or "'failed'" not in row[0]:
-        raise ConfigurationError("The worker requires migration 014 (turn attempts and "
-                                 "failed turns)")
+        raise ConfigurationError("The worker requires migration 014 and migration 018 "
+                                 "(turn attempts, failed turns and durable replanning)")
 
 
 def close_turn(conn, turn, status):
@@ -819,6 +828,9 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
                 payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
+            expanded = before_dispatch(conn, job, turn, payloads)
+            if expanded is not None:
+                return _answer(conn, client, job, expanded, demo, engine, speech_service, storage)
             _send(conn, client, turn, [*actions, *payloads], storage)
             return
     except whatsapp.PermanentSendError as exc:
