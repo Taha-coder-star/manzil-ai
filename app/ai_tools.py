@@ -46,7 +46,11 @@ _TOOLS = {
             "For 'office on rent in Karachi, around 5 lakh per month', use location "
             "'Karachi', property_types 'office', purpose 'on rent', and budget "
             "'around 5 lakh per month'. Correct invalid_location_span by resending "
-            "the stated requirements with separate exact spans. Set uncertain to true when a voice-note "
+            "the stated requirements with separate exact spans. Keep the complete place, "
+            "including its phase, block, precinct or sector. Never repair an unknown "
+            "subarea by dropping that qualifier or its area; ask for clarification "
+            "instead. Correct incomplete_location_span using a complete grounded place. "
+            "Set uncertain to true when a voice-note "
             "transcript makes the value doubtful (garbled, cut off, contradictory)."
         ),
         "parameters": {
