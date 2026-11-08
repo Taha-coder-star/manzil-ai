@@ -159,6 +159,35 @@ def test_devanagari_cheaper_voice_applies_missing_budget_update_once(vf, explici
     assert patches == [(1,)]
 
 
+def test_english_voice_keeps_up_to_when_budget_span_omits_prefix(vf):
+    vf.scribe.script.append(scribe_body(
+        "I want to buy a 500 square yard house in DHA Phase 6. "
+        "My budget is up to 8 crore rupees."))
+    reply = vf.say(vf.voice(), calls=search_calls([
+        p("purpose", "set", "buy"), p("property_types", "set", "house"),
+        p("size", "set", "500 square yard"), p("location", "set", "DHA Phase 6"),
+        p("budget", "set", "8 crore")]))
+    value = slots(vf.st)["budget"]["value"]
+    assert (value["mode"], value["min"], value["max"]) == ("max", None, 80_000_000)
+    assert "around 8 crore" not in sent_text(reply)
+    filters = vf.st.query("SELECT filters FROM search_run")[0][0]
+    assert filters["budget_min"] is None and filters["budget_max"] == 80_000_000
+
+
+def test_budget_prefix_does_not_cross_messages(vf):
+    vf.say(text("up to", sender=CUSTOMER_B), text("8 crore", sender=CUSTOMER_B),
+           calls=[("update_requirements", {"patch": [p("budget", "set", "8 crore")]})])
+    value = slots(vf.st)["budget"]["value"]
+    assert (value["mode"], value["min"], value["max"]) == ("around", 72_000_000, 88_000_000)
+
+
+def test_repeated_amount_with_different_prefixes_asks_instead_of_choosing(vf):
+    vf.scribe.script.append(scribe_body("up to 8 crore or around 8 crore"))
+    reply = vf.say(vf.voice(), calls=search_calls([p("budget", "set", "8 crore")]))
+    assert "budget" not in slots(vf.st) and runs(vf.st) == 0
+    assert turn_engine.TEMPLATES_EN["budget_unclear"] in sent_text(reply)
+
+
 def test_voice_unknown_phase_cannot_be_retried_as_only_the_parent_area(vf):
     st = vf.st
     vf.say(text('Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak', sender=CUSTOMER_B),
