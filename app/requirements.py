@@ -224,6 +224,23 @@ def _before(span, text):
     return tuple(text[:m.start()] for m in re.finditer(pattern, text or "", re.IGNORECASE))
 
 
+_ONLY_PLACE_BEFORE = re.compile(
+    r"(?<!\w)(?:sirf|siraf|only|صرف|सिर्फ|सिर्फ़|केवल)"
+    r"(?:\s+(?:in|mein|mai|में|میں))?\s*$", re.IGNORECASE)
+_ONLY_PLACE_AFTER = re.compile(
+    r"^\s*(?:(?:in|mein|mai|में|میں)\s+)?(?:only|hi|ही|ہی)(?!\w)", re.IGNORECASE)
+
+
+def restricted_place(ev):
+    """Only/sirf attached to this verified place, not another message or budget."""
+    for before in ev.before:
+        match = _ONLY_PLACE_BEFORE.search(before)
+        if match and not re.search(r"\b(?:not|nahi|nahin|mat)\s*$", before[:match.start()],
+                                   re.IGNORECASE):
+            return True
+    return any(_ONLY_PLACE_AFTER.search(after) for after in ev.after)
+
+
 def _after(span, text):
     """The text after each occurrence of span in text (matched as span_in_turn does: case-
     and whitespace-insensitive), in order; () when there is none."""
@@ -758,6 +775,8 @@ class Patch:
             kind = "add"   # several places named in one patch are a union, never a replacement
         if kind == "set" and additive_place(span, [s.text for s in ctx.sources]):
             kind = "add"   # "Phase 8 mein bhi dekho" adds, whatever op the model chose
+        if kind in ("set", "add") and restricted_place(ev):
+            kind = "add" if self.extends_location else "set"
         if kind in ("set", "add") and affirmation_key(span) in AFFIRMATIONS:
             chosen = self.affirmed_candidate()
             if chosen is not None:
@@ -835,6 +854,9 @@ class Patch:
             return self._remove_nodes(op, current, nodes)
         value = {"nodes": nodes, "mode": result.mode, "city": ctx.city_code,
                  "status": location.RESOLVED, "raw": op["raw_span"], "terms": [term]}
+        if restricted_place(ev) or (kind == "add" and current
+                                    and current["value"].get("no_nearby")):
+            value["no_nearby"] = True
         if kind == "add" and current:
             old = current["value"]
             merged = old["nodes"] + [n for n in nodes if n not in old["nodes"]]
@@ -886,6 +908,9 @@ class Patch:
         value = {"nodes": [node], "mode": mode, "city": ctx.city_code,
                  "status": location.RESOLVED, "raw": origin.get("raw", op["raw_span"]),
                  "terms": [term]}
+        if origin.get("no_nearby") or (kind == "add" and current
+                                       and current["value"].get("no_nearby")):
+            value["no_nearby"] = True
         confirmed = ev.source == "text"
         base = 1.0
         echo = []
@@ -908,6 +933,8 @@ class Patch:
         ctx = self.ctx
         origin = {"op": kind, "raw": op["raw_span"], "source": ev.source, "weak": ev.weak,
                   "turn": ctx.turn_id, "call": ctx.call_id, "method": result.method}
+        if restricted_place(ev):
+            origin["no_nearby"] = True
         cands = [{"location_id": str(c.location_id), "score": c.score,
                   "name": ctx.gazetteer.places[ctx.ids[str(c.location_id)]].display_name,
                   "origin": origin} for c in result.candidates]

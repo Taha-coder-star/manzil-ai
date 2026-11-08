@@ -128,6 +128,11 @@ nothing captured), slots JSONB, created_at, updated_at.
   unmapped_prefs, excluded_property_ids. Each slot must be an object with `source` in
   `text`/`voice`/`inferred`/`default`; `confidence`, when present, is a number in 0..1; `confirmed`,
   when present, is boolean. Adding a slot needs a migration.
+- `location.value.no_nearby` is an optional backend-derived boolean for an explicit
+  only/sirf area restriction. It prevents automatic neighbour expansion and survives
+  budget-only follow-ups. An explicit Nearby-area action may broaden that search;
+  its `search_run.filters` records `nearby_requested: true` alongside `no_nearby`.
+  These are JSON metadata fields, not additional slot names.
 - Optimistic concurrency contract (8.1): `UPDATE ... SET slots = ..., version = version + 1 WHERE id = :id
   AND version = :expected`; 0 rows means a concurrent writer won. The patch log's
   `UNIQUE (conversation, version)` backs this up.
