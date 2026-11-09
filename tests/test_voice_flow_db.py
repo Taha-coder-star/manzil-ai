@@ -188,6 +188,23 @@ def test_repeated_amount_with_different_prefixes_asks_instead_of_choosing(vf):
     assert turn_engine.TEMPLATES_EN["budget_unclear"] in sent_text(reply)
 
 
+def test_sirf_phase8_voice_never_automatically_adds_phase7(vf):
+    vf.scribe.script.append(scribe_body(SPOKEN))
+    vf.say(vf.voice(), calls=search_calls(SPOKEN_PATCH))
+    vf.scribe.script.append(scribe_body("Sirf Defence Phase 8 mein ghar dikhao, budget 8 crore tak"))
+    reply = vf.say(vf.voice(), calls=search_calls([
+        p("location", "add", "Defence Phase 8"), p("budget", "set", "8 crore tak")]))
+    assert set(latest_shown(vf.st)) == {"DH8-101", "DH8-102"}
+    assert "DH7-101" not in sent_text(reply)
+    assert slots(vf.st)["location"]["value"]["no_nearby"] is True
+    # A budget-only follow-up retains the area restriction.
+    vf.say(text("budget 9 crore tak", sender=CUSTOMER_B),
+           calls=search_calls([p("budget", "set", "9 crore tak")]))
+    assert set(latest_shown(vf.st)) == {"DH8-101", "DH8-102"}
+    filters = vf.st.query("SELECT filters FROM search_run ORDER BY created_at DESC LIMIT 1")[0][0]
+    assert filters["no_nearby"] is True
+
+
 def test_voice_unknown_phase_cannot_be_retried_as_only_the_parent_area(vf):
     st = vf.st
     vf.say(text('Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak', sender=CUSTOMER_B),
