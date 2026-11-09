@@ -33,6 +33,24 @@ def cards_in(payloads):
     return [pl for pl in payloads if pl["type"] in ("interactive", "image")]
 
 
+def test_unknown_replacement_does_not_acknowledge_the_previous_place(st):
+    scenario_2(st)
+    old_location = st.state()[1]["location"]
+    reply = turn(st, "Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing",
+                 update(p("location", "set", "Bahria Town Phase 8"),
+                        p("beds_min", "set", "2 bed"),
+                        p("baths_min", "set", "3 bathroom")), SEARCH)
+    said = sent_text(reply)
+    assert "Bahria" in said and "DHA Phase 6" not in said
+    assert "2+" in said and "3+" in said
+    assert runs(st) == 1 and not cards_in(reply)
+    assert st.state()[1]["location"] == old_location
+    # A complete correction can still resolve and use the new place.
+    corrected = turn(st, "DHA Phase 8 mein dikhao",
+                     update(p("location", "set", "DHA Phase 8")), SEARCH)
+    assert runs(st) == 2 and "DHA Phase 8" in sent_text(corrected)
+
+
 def test_a_fresh_conversation_waits_for_the_budget_answer(st):
     first = turn(st, f"DHA Phase 6 mein ghar khareedna hai, {TWO_AMOUNTS}",
                  update(p("purpose", "set", "khareedna"), p("location", "set", "DHA Phase 6"),
