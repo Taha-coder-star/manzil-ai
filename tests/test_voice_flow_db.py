@@ -139,6 +139,26 @@ def test_scenario_2_by_voice_gives_the_three_listings_in_roman_urdu(vf):
     assert runs(st) == 1
 
 
+@pytest.mark.parametrize("explicit_update", [False, True])
+def test_devanagari_cheaper_voice_applies_missing_budget_update_once(vf, explicit_update):
+    st = vf.st
+    vf.scribe.script.append(scribe_body(SPOKEN))
+    vf.say(vf.voice(), calls=search_calls(SPOKEN_PATCH))
+    vf.scribe.script.append(scribe_body("कुछ सस्ता दिखाओ"))
+    calls = search_calls([p("budget", "relative", "कुछ सस्ता")]) if explicit_update else []
+    reply = vf.say(vf.voice(seconds=3), calls=[*calls, ("search_properties", {}),
+                                               ("search_properties", {})])
+    budget = slots(st)["budget"]["value"]
+    assert budget["max"] == 72_750_000 and budget["relative"] == "cheaper"
+    assert "7.8 crore" in sent_text(reply)
+    assert "DH6-102" not in sent_text(reply) and "DH6-101" not in sent_text(reply)
+    assert not any(pl["type"] == "image" for pl in reply)
+    patches = st.query("SELECT count(*) FROM requirement_patch_log, "
+                       "jsonb_array_elements(ops) op WHERE op->>'slot'='budget' "
+                       "AND op->>'op'='relative' AND op->>'status'='applied'")
+    assert patches == [(1,)]
+
+
 def test_voice_unknown_phase_cannot_be_retried_as_only_the_parent_area(vf):
     st = vf.st
     vf.say(text('Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak', sender=CUSTOMER_B),
