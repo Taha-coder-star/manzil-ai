@@ -218,6 +218,19 @@ def test_tak_right_after_the_span_makes_it_a_maximum():
     assert (result.mode, result.min, result.max) == ("max", None, 80_000_000)
 
 
+@pytest.mark.parametrize("before,mode,low,high", [
+    ("My budget is up to ", "max", None, 80_000_000),
+    ("under ", "max", None, 80_000_000),
+    ("at least ", "min", 80_000_000, None),
+    ("around ", "around", 72_000_000, 88_000_000),
+    ("up to 500 sq yd, budget ", "around", 72_000_000, 88_000_000),
+    ("underwater ", "around", 72_000_000, 88_000_000),
+])
+def test_budget_operator_immediately_before_extracted_amount(before, mode, low, high):
+    result = n.parse_budget("8 crore", purpose="sale", before=before)
+    assert (result.mode, result.min, result.max) == (mode, low, high)
+
+
 def test_budget_keeps_the_stated_amount_apart_from_the_range():
     result = n.parse_budget("budget 18 crore")
     assert (result.stated_pkr, result.min, result.max) == (

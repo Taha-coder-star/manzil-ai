@@ -204,13 +204,24 @@ class Evidence:
     flags: tuple = ()    # voice only: extra echo reasons (llm_uncertain)
     after: tuple = ()    # the message text right after each occurrence of the span
     #                      (Task 10.2: an operator the model left out, "8 crore" + "tak")
+    before: tuple = ()   # same occurrences, paired with after; never another message
 
 
 def evidence(src, *, reextracted=False, uncertain=False, span=None):
     """The Evidence of a verified span's message; uncertain: the model marked the op
     uncertain (R16 7.4 b), which only counts for a heard value (it can only add an echo)."""
     flags = ("llm_uncertain",) if src.kind == "voice" and uncertain else ()
-    return Evidence(src.kind, src.weak, reextracted, flags, _after(span, src.text))
+    return Evidence(src.kind, src.weak, reextracted, flags, _after(span, src.text),
+                    _before(span, src.text))
+
+
+def _before(span, text):
+    """Same occurrence matching as _after, preserving paired source context."""
+    words = (span or "").split()
+    if not words:
+        return ()
+    pattern = r"\s+".join(map(re.escape, words))
+    return tuple(text[:m.start()] for m in re.finditer(pattern, text or "", re.IGNORECASE))
 
 
 def _after(span, text):
@@ -930,16 +941,19 @@ class Patch:
 
     def _budget(self, op, ev, reextracted=False):
         span = op["raw_span"]
-        # Read with what follows each occurrence of the span in its message: "8 crore" said
-        # twice, once with "tak", is no budget to pick an operator for (Task 10.2).
+        # Read the adjacent context of each occurrence in its own message: "8 crore"
+        # said twice with different operators is no budget to pick an operator for.
         readings = {}
-        for after in ev.after or ("",):
-            got = normalise.parse_budget(span, purpose=self._purpose_now(), after=after)
+        afters = ev.after or ("",)
+        befores = ev.before or ("",) * len(afters)
+        for before, after in zip(befores, afters, strict=True):
+            got = normalise.parse_budget(span, purpose=self._purpose_now(), after=after,
+                                         before=before)
             readings.setdefault((got.status, got.mode, got.min, got.max, got.reason), got)
         if len(readings) > 1:
             return self._record(op, "ask", "repeated_amount", notices=[_notice("budget_unclear")])
         parsed = next(iter(readings.values()))
-        span = parsed.raw   # with an operator read from right after the span (same message)
+        span = parsed.raw   # includes a recovered adjacent operator from the same message
         if parsed.status == normalise.NONE:
             if normalise.NON_LATIN.search(span):
                 # Task 10.2: a budget in words the normaliser cannot read (Devanagari) is

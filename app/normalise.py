@@ -614,6 +614,11 @@ _MAX_WORDS = re.compile(r"zyada\s+se\s+zyada|ziada\s+se\s+ziada|\bunder\b|\bbelo
                         r"|\bwithin\b|تک|سے کم", re.IGNORECASE)
 _AROUND_WORDS = re.compile(r"\baround\b|\bapprox\w*|\babout\b|lag\s*bhag|\bkareeb\b|\bqareeb\b"
                            r"|taqreeban|aas\s*paas|لگ بھگ|تقریباً|قریب", re.IGNORECASE)
+# Only an operator immediately before this span in its own source message.
+_OPERATOR_BEFORE = re.compile(
+    r"(?<!\w)(?:up\s*to|under|below|less\s+than|within|max(?:imum)?|"
+    r"at\s+least|min(?:imum)?|above|more\s+than|around|about|approx(?:imately)?)\s*$",
+    re.IGNORECASE)
 # Task 10.2: letters these normalisers do not read as words (Urdu script is read only
 # through the word lists above; Devanagari not at all). A word of them where the operator
 # stands ("8 crore तक") leaves the operator unknown: asked, never taken as "around".
@@ -689,7 +694,7 @@ def period_for(purpose):
     return {"sale": "one_time", "rent": "monthly"}.get(purpose)
 
 
-def parse_budget(span, *, purpose=None, after=""):
+def parse_budget(span, *, purpose=None, after="", before=""):
     """A budget span -> {mode, min, max, stated, period} (Data Model 4.3, R17 4.3).
 
     Modes: max (under / tak / max / up to ...), around (+/-10 %; also a bare amount
@@ -698,6 +703,10 @@ def parse_budget(span, *, purpose=None, after=""):
     min / max; search tolerances are applied by search (8.1), not here.
     """
     span, after = romanise(span or ""), romanise(after or "")
+    prefix = _OPERATOR_BEFORE.search(romanise(before or ""))
+    if prefix and not any(pattern.search(span) for pattern in
+                          (_MIN_WORDS, _MAX_WORDS, _AROUND_WORDS)):
+        span = prefix.group().strip() + " " + span
     monthly = bool(_MONTHLY.search(span))
     period = "monthly" if monthly else period_for(purpose)
     found = [m for m in _scan(span) if m.kind in ("money", "number")]
