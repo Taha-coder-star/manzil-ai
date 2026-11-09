@@ -174,6 +174,75 @@ def test_bad_location_repair_cannot_search_previous_filters(st):
     assert 'DH6-108' not in sent_text(payloads)
 
 
+def test_unknown_qualified_place_cannot_be_repaired_by_dropping_its_phase(st):
+    turn(st, 'Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak',
+         ('update_requirements', {'patch': [p('location', 'set', 'Gulshan-e-Iqbal Block 13'),
+              p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}))
+    before = st.state()[1]['location']
+    searches = st.query('SELECT count(*) FROM search_run')[0][0]
+    body = 'Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing'
+    reply = turn(st, body,
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('beds_min', 'set', '2 bed'), p('baths_min', 'set', '3 bathroom')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('search_properties', {}))
+    assert st.state()[1]['location'] == before
+    assert st.state()[1]['beds_min']['value'] == 2
+    assert st.state()[1]['baths_min']['value'] == 3
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == searches
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_parent_place_only_cannot_omit_an_adjacent_phase_before_first_resolution(st):
+    reply = turn(st, 'Bahria Town Phase 8 mein ghar chahiye',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town'),
+             p('property_types', 'set', 'ghar')]}), ('search_properties', {}))
+    assert not st.query('SELECT id FROM search_run')
+    assert not st.query('SELECT id FROM requirement_patch_log')
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_a_complete_grounded_alternative_can_repair_the_place(st):
+    reply = turn(st, 'Bahria Town Phase 8 ya Defence Phase 8 mein ghar 90 lakh tak',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Defence Phase 8')]}),
+        ('search_properties', {}))
+    assert st.state()[1]['location']['raw'] == 'Defence Phase 8'
+    assert 'DHA Phase 8' in sent_text(reply)
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_a_later_customer_turn_can_explicitly_choose_the_broader_area(st):
+    turn(st, 'Bahria Town Phase 8 mein ghar 90 lakh tak',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}))
+    turn(st, 'Bahria Town', ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}))
+    assert st.state()[1]['location']['raw'] == 'Bahria Town'
+
+
+def test_retry_history_still_blocks_an_unscoped_child_of_the_unknown_place(st, monkeypatch):
+    scenario_2(st)
+    version, state = st.state()
+    searches = st.query('SELECT count(*) FROM search_run')[0][0]
+    load = customer_tools.CustomerBinding._location_spans
+
+    def reload_from_audit(binding):
+        binding.location_spans = None
+        return load(binding)
+
+    monkeypatch.setattr(customer_tools.CustomerBinding, '_location_spans', reload_from_audit)
+    turn(st, 'Bahria Town Phase 8 mein ghar',
+         ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+         ('update_requirements', {'patch': [p('location', 'set', 'Phase 8')]}),
+         ('search_properties', {}))
+    assert st.state()[0] == version + 1  # only the original unknown attempt was recorded
+    assert st.state()[1]['location'] == state['location']
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == searches
+
+
 def test_an_inferred_purpose_note_comes_before_the_cards_and_is_said_once(st):
     payloads = search_turn(st, "DHA Phase 6 mein ghar, 8 crore tak", [
         p("location", "set", "DHA Phase 6"), p("property_types", "set", "ghar"),

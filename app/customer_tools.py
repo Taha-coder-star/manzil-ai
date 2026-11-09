@@ -136,11 +136,48 @@ def misbucketed_location(span, gazetteer):
         or _LOCATION_MONEY_CLAUSE.fullmatch(span.strip()))
 
 
+def qualified_location_tokens(span):
+    tokens = location.clean_tokens(span, strip=True)
+    return tokens if (set(tokens) & (location.LEVEL_WORDS | {'p'})
+                      and location.identifiers(tokens)) else []
+
+
+def incomplete_location_span(span, text, previous=()):
+    """Do not shorten a qualified place into its parent or an unscoped child.
+
+    Uses the resolver's canonical tokens, never invents a place or an identifier.
+    A full grounded alternative is allowed; old turns do not restrict new requests.
+    """
+    tokens = location.clean_tokens(span, strip=True)
+    if not tokens:
+        return False
+    for old in previous:
+        full = qualified_location_tokens(old)
+        if len(full) > len(tokens) and any(
+                full[i:i + len(tokens)] == tokens for i in range(len(full) - len(tokens) + 1)):
+            return True
+    source = location.clean_tokens(text)
+    for i in range(len(source) - len(tokens) + 1):
+        if source[i:i + len(tokens)] != tokens:
+            continue
+        tail = source[i + len(tokens):]
+        # Only adjacent locality words ("Bahria Town phase 8" / "DHA mein phase 8").
+        while tail[:1] and tail[0] in {'mein', 'me', 'mai', 'main', 'ke', 'ki', 'ka',
+                                      'town', 'city', 'karachi'}:
+            tail = tail[1:]
+        if (tail[:1] and tail[0] in location.LEVEL_WORDS | {'p'}
+                and location.identifiers(tail[:2])):
+            return True
+    return False
+
+
 class CustomerBinding:
     def __init__(self, conn, turn, gazetteer, requirements_binding, texts, language=None):
         self.conn, self.turn, self.gazetteer = conn, turn, gazetteer
         self.requirements = requirements_binding
-        self.text = "\n".join(text for _, text in texts if text)
+        self.texts = tuple(text for _, text in texts if text)
+        self.text = "\n".join(self.texts)
+        self.location_spans = None  # current-turn qualified attempts, including retries
         self.wamids = tuple(m.context_wamid for m in turn.messages if m.context_wamid)
         self.purpose_told = False
         self.asked = False      # a clarification with answer buttons is in the reply
@@ -164,6 +201,23 @@ class CustomerBinding:
 
     # -- update_requirements (7.3) --
 
+    def _location_spans(self):
+        if self.location_spans is None:
+            with tenant_transaction(self.conn, self.turn.agency_id):
+                self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+                rows = self.conn.execute(
+                    "SELECT ops FROM requirement_patch_log WHERE conversation_id=%s "
+                    "AND source_message_id=ANY(%s) ORDER BY version",
+                    (self.turn.conversation_id, [m.id for m in self.turn.messages])).fetchall()
+            self.location_spans = [op['raw_span'] for (ops,) in rows for op in ops
+                                   if op.get('slot') == 'location'
+                                   and op.get('op') in ('set', 'add')
+                                   and isinstance(op.get('raw_span'), str)
+                                   and qualified_location_tokens(op['raw_span'])
+                                   and any(ai_tools.span_in_turn(op['raw_span'], text)
+                                           for text in self.texts)]
+        return self.location_spans
+
     def update(self, patch):
         # D2-02: substring grounding alone accepted whole requirement/budget clauses
         # as places. Reject the entire malformed update before any state write;
@@ -184,6 +238,24 @@ class CustomerBinding:
                          "property_types is 'office', purpose is 'on rent', budget is "
                          "'around 5 lakh per month'. Never invent or silently omit a place."},
                 error="invalid_location_span", notice="requirements_unclear")
+        places = [op['raw_span'] for op in patch if op.get('slot') == 'location'
+                  and op.get('op') in ('set', 'add') and isinstance(op.get('raw_span'), str)
+                  and any(ai_tools.span_in_turn(op['raw_span'], text) for text in self.texts)]
+        if places:
+            previous = self._location_spans()
+            qualified = [span for span in places if qualified_location_tokens(span)]
+            if any(incomplete_location_span(span, text, [*previous, *qualified])
+                   for span in places for text in self.texts if ai_tools.span_in_turn(span, text)):
+                self.place_unresolved = True
+                return ai_tools.ToolResult(
+                    'update_requirements', False,
+                    {'status': 'error', 'error': 'incomplete_location_span',
+                     'hint': 'Keep the complete stated place, including its phase, block, '
+                             'precinct or sector. Do not repair an unknown subarea by '
+                             'dropping its qualifier or area. Resend a complete grounded '
+                             'place, or ask for clarification before searching.'},
+                    error='incomplete_location_span', notice='requirements_unclear')
+            previous.extend(span for span in qualified if span not in previous)
         result = self.requirements.update(patch)
         if (any(op.get("slot") == "budget" and op.get("op") in ("set", "relative")
                 and customer_intent.cheaper_command(op.get("raw_span"))

@@ -139,6 +139,27 @@ def test_scenario_2_by_voice_gives_the_three_listings_in_roman_urdu(vf):
     assert runs(st) == 1
 
 
+def test_voice_unknown_phase_cannot_be_retried_as_only_the_parent_area(vf):
+    st = vf.st
+    vf.say(text('Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak', sender=CUSTOMER_B),
+           calls=search_calls([p('location', 'set', 'Gulshan-e-Iqbal Block 13'),
+                               p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]))
+    before, searches = slots(st)['location'], runs(st)
+    heard = 'Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing'
+    vf.scribe.script.append(scribe_body(heard))
+    payloads = vf.say(vf.voice(seconds=16), calls=[
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('beds_min', 'set', '2 bed'), p('baths_min', 'set', '3 bathroom')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('search_properties', {})])
+    assert slots(st)['location'] == before
+    assert slots(st)['beds_min']['value'] == 2 and slots(st)['baths_min']['value'] == 3
+    assert runs(st) == searches
+    assert 'BTK-101' not in sent_text(payloads)
+    assert len(vf.scribe.calls) == 1 and not vf.gemini.calls
+
+
 def test_scenario_2_in_urdu_script_gives_the_same_three_listings(vf):
     """Urdu script is read (R16: the normalisers cover both scripts): same slots, same ids."""
     st = vf.st
