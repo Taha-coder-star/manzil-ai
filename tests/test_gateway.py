@@ -240,6 +240,17 @@ def test_retryable_error_requeues_then_sends_once(gw):
     assert gw.query("SELECT status, attempts FROM outbound_message") == [("sent", 2)]
 
 
+@pytest.mark.parametrize("code", ["http_429", "http_503"])
+def test_send_transport_exhausts_five_attempts_and_alerts(gw, caplog, code):
+    gw.client.outcomes = [whatsapp.RetryableSendError(code)] * 5
+    gw.deliver(messages=[text_message("wamid.IN1")])
+    gw.drain()
+    assert gw.query("SELECT attempts, max_attempts, status FROM job "
+                    "WHERE job_type = 'process_message'") == [(5, 5, "dead")]
+    assert gw.query("SELECT attempts FROM outbound_message WHERE dedupe_key LIKE 'turn:%%:0'") == [(5,)]
+    assert any(getattr(r, "event", None) == "dead_letter" for r in caplog.records)
+
+
 def test_permanent_error_dead_letters(gw):
     gw.client.outcomes = [whatsapp.PermanentSendError("http_400_meta_131047")]
     gw.deliver(messages=[text_message("wamid.IN1")])

@@ -630,12 +630,12 @@ def test_concurrent_builds_send_the_first_stored_plan(ai, monkeypatch):
     started = []
     original = TurnEngine.plan
 
-    def plan(self, conn, job, turn, notify=None):
+    def plan(self, conn, job, turn, notify=None, **kwargs):
         if not started:
             started.append(turn.id)
             other_job = SimpleNamespace(id=job.id, attempts=job.attempts + 100)
             self.respond(second, other_job, turn)
-        return original(self, conn, job, turn, notify)
+        return original(self, conn, job, turn, notify, **kwargs)
 
     monkeypatch.setattr(TurnEngine, "plan", plan)
     ai.script += [tools_answer(tool("search_properties")), answer(), answer()]
@@ -941,6 +941,7 @@ def test_the_schema_check_passes_on_a_migrated_database(ai):
      "migration 013"),
     (orchestrator.check_schema, "ALTER TABLE conversation_turn DROP COLUMN attempts",
      "migration 014"),
+    (orchestrator.check_schema, "DROP TABLE ai_recovery", "019"),
     (orchestrator.check_schema,
      ("ALTER TABLE conversation_turn DROP CONSTRAINT conversation_turn_status_check, "
       "ADD CONSTRAINT conversation_turn_status_check "

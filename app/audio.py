@@ -151,7 +151,7 @@ def stage_inbound_audio(conn, conversation_id, message_id, wa_media_id, is_voice
         ).fetchone()
     enqueue_job(
         conn, JOB_TYPE, f"audio:{row[0]}", {"inbound_audio_id": str(row[0])},
-        inbound_event_id=inbound_event_id,
+        inbound_event_id=inbound_event_id, max_attempts=5,
     )
     return row[0]
 

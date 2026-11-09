@@ -77,7 +77,7 @@ def send(conn, client, storage, turn, payloads):
     """Send a customer plan in order under turn:{id}:{seq}; stop at the first payload that
     is not 'sent' (gate, window, ambiguous), as cards.send_plan does. Returns that status,
     or 'sent'."""
-    prefix = f"turn:{turn.id}"
+    prefix = getattr(turn, "outbound_prefix", None) or f"turn:{turn.id}"
     for seq, payload in enumerate(payloads):
         key = f"{prefix}:{seq}"
         if payload["type"] == SHOWN:

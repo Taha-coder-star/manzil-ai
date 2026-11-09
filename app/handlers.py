@@ -212,6 +212,14 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         )
 
     handlers["process_message"] = process
+    from app import recovery
+
+    def recover(conn, job):
+        recovery.run(conn, job, client_factory, engine, storage)
+
+    handlers[recovery.JOB_TYPE] = recover
+    from app.queue import DEAD_ALERT_JOB, emit_dead_alert
+    handlers[DEAD_ALERT_JOB] = emit_dead_alert
     # Task 7.4: staff buffer segments (app.staff_buffer).
     handlers[staff_buffer.FLUSH_JOB] = staff_buffer.flush
 

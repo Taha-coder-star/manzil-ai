@@ -126,7 +126,7 @@ def test_workers_never_overlap_within_a_conversation(queue_db):
     assert {queue_db["row"](a, job_id)[0] for job_id in job_ids} == {"succeeded"}
 
 
-def test_failing_job_dead_letters_after_max_attempts(queue_db):
+def test_failing_job_dead_letters_after_max_attempts(queue_db, caplog):
     a = queue_db["a"]
     job_id = queue_db["enqueue"](a, "boom", CUSTOMER_X)
     calls = []
@@ -148,6 +148,10 @@ def test_failing_job_dead_letters_after_max_attempts(queue_db):
     status, attempts, code, completed_at, _, locked_by = queue_db["row"](a, job_id)
     assert (status, attempts, code, locked_by) == ("dead", 3, "RuntimeError", None)
     assert completed_at is not None
+    alerts = [r for r in caplog.records if getattr(r, "event", None) == "dead_letter"]
+    assert len(alerts) == 1
+    assert alerts[0].attempts == 3
+    assert "fictional failure" not in alerts[0].getMessage()
     # The conversation lock was released with the final status.
     other = queue_db["connect"]()
     assert queue.try_lock_conversation(other, a, CUSTOMER_X)
@@ -237,7 +241,7 @@ def test_reaper_requeues_only_when_owner_is_gone(queue_db):
     assert claim(reaper, a, "w2").id == job_id
 
 
-def test_reaper_dead_letters_exhausted_job(queue_db):
+def test_reaper_dead_letters_exhausted_job(queue_db, caplog):
     a = queue_db["a"]
     job_id = queue_db["enqueue"](a, "last-try", CUSTOMER_X)
     with tenant_transaction(queue_db["connect"](), a) as conn:
@@ -250,6 +254,9 @@ def test_reaper_dead_letters_exhausted_job(queue_db):
 
     assert queue.reap_expired(reaper, a) == 1
     assert queue_db["row"](a, job_id)[:3] == ("dead", 1, "lease_expired")
+    assert queue.reap_expired(reaper, a) == 0
+    alerts = [r for r in caplog.records if getattr(r, "event", None) == "dead_letter"]
+    assert len(alerts) == 1 and alerts[0].reason == "lease_expired"
 
 
 def test_finish_after_lost_lease_does_not_overwrite(queue_db):

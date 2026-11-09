@@ -141,6 +141,7 @@ class Turn:
     staff_segment_id: UUID | None = None
     segment_flags: tuple[str, ...] = ()
     original_message_ids: tuple[UUID, ...] = ()
+    outbound_prefix: str | None = None
 
     @property
     def ai_allowed(self):
@@ -229,7 +230,7 @@ def assemble_turn(conn, job, sender, abandoned=None):
             """,
             (conversation_id,),
         ).fetchone()
-        if turn is not None and turn[6] >= MAX_TURN_ATTEMPTS:
+        if turn is not None and turn[6] >= max(MAX_TURN_ATTEMPTS, job.max_attempts):
             # Every attempt so far ended without closing the turn (a crash runs no
             # cleanup; this count is all it leaves): give the turn up, then answer
             # the messages waiting behind it.
@@ -417,6 +418,7 @@ def check_schema(conn, agency_id):
             conn.execute("SELECT attempts FROM conversation_turn LIMIT 0")
             conn.execute("SELECT replan_count, original_message_ids, dispatch_started "
                          "FROM conversation_turn LIMIT 0")
+            conn.execute("SELECT status, reply_plan FROM ai_recovery LIMIT 0")
             row = conn.execute(
                 """
                 SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint
@@ -430,7 +432,7 @@ def check_schema(conn, agency_id):
     except psycopg.Error:
         raise ConfigurationError("Schema check failed: database unavailable") from None
     if row is None or "'failed'" not in row[0]:
-        raise ConfigurationError("The worker requires migration 014 and migration 018 "
+        raise ConfigurationError("The worker requires migration 014 and migrations 018 and 019 "
                                  "(turn attempts, failed turns and durable replanning)")
 
 
@@ -683,11 +685,15 @@ def _close_failed(conn, turn_id):
         (turn_id,),
     ).fetchone()
     if closed is not None:
-        conn.execute(
+        dead = conn.execute(
             "UPDATE job SET status = 'dead', completed_at = now(), last_error_code = %s "
-            "WHERE id = %s AND status = 'pending'",
+            "WHERE id = %s AND status = 'pending' RETURNING id, conversation_key",
             (TURN_FAILED, closed[0]),
-        )
+        ).fetchone()
+        if dead:
+            from app.queue import DEAD_ALERT_JOB, enqueue_job
+            enqueue_job(conn, DEAD_ALERT_JOB, f"dead-alert:{dead[0]}",
+                        {"job_id": str(dead[0])}, conversation_key=dead[1])
 
 
 def fail_turn(conn, turn, error):

@@ -82,6 +82,7 @@ from app import (
     details,
     grounding,
     llm,
+    recovery,
     staff_buffer,
     staff_cards,
     staff_drafts,
@@ -373,6 +374,8 @@ class Budget:
     """The turn's time: a deadline on the engine clock, extended at most once."""
     deadline: float
     extended: bool = False
+    recovery_candidate: bool = False
+    primary_failure: bool = False
 
 
 @dataclass(frozen=True)
@@ -384,6 +387,7 @@ class Outcome:
     calls: int = 0  # provider attempts
     payloads: tuple = ()  # Task 8.2: backend-built staff cards, sent before the notices
     trusted: frozenset = frozenset()  # listing codes the cards and notices may show
+    recoverable: bool = False
 
 
 def _set_timeout(conn):
@@ -659,10 +663,14 @@ class TurnEngine:
     def respond(self, conn, job, turn, notify=None):
         """notify(payload) sends the interim message (app.orchestrator); without it
         the turn gets no continuation."""
-        return cards.fixed_plan(conn, turn.agency_id, turn.id,
-                                lambda: self.plan(conn, job, turn, notify))
+        outcomes = []
+        return cards.fixed_plan(
+            conn, turn.agency_id, turn.id,
+            lambda: self.plan(conn, job, turn, notify, outcome_sink=outcomes.append),
+            on_store=lambda c: recovery.schedule(c, job, turn, outcomes),
+        )
 
-    def plan(self, conn, job, turn, notify=None):
+    def plan(self, conn, job, turn, notify=None, *, outcome_sink=None):
         """Build the turn's payloads (provider calls happen here, outside any
         transaction)."""
         start = self._clock()
@@ -693,6 +701,8 @@ class TurnEngine:
             customer or self._staff_binding(conn, turn))
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
+        if outcome_sink is not None:
+            outcome_sink(outcome)
         if binding is not None and outcome.kind == "done":
             # A clarification the customer left unanswered (re-ask once, then expire).
             extra = binding.finish()
@@ -832,7 +842,8 @@ class TurnEngine:
                 iteration -= 1  # the same iteration again, in the continuation
                 continue
             if error is not None:
-                return Outcome("failed", error, tuple(notices), tuple(tools), calls)
+                return Outcome("failed", error, tuple(notices), tuple(tools), calls,
+                               recoverable=active is None and budget.recovery_candidate)
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
@@ -932,11 +943,19 @@ class TurnEngine:
                     timeout_s=timeout, thinking_level=self.thinking_level,
                 )
             except ProviderError as exc:
+                if label == "primary":
+                    budget.primary_failure = recovery.retryable(exc.code)
+                    budget.recovery_candidate = False
+                else:
+                    budget.recovery_candidate = (budget.primary_failure
+                                                 and recovery.retryable(exc.code))
                 self._meter(conn, job, turn, iteration, key_label, model, "failed",
                             exc.code, Usage(), began)
                 if exc.failover and active is None and label == "primary":
                     error = exc.code
                     continue
+                if label == "primary":
+                    budget.recovery_candidate = False
                 return None, active, exc.code, made
             self._meter(conn, job, turn, iteration, key_label,
                         response.model_version or model, "succeeded", response.detail,
