@@ -10,6 +10,21 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from app import migrate
 
 
+@pytest.fixture
+def customer_debounce_window():
+    # Legacy flow tests exercise immediate processing; timing tests override this.
+    return 0.0, 0.0
+
+
+@pytest.fixture(autouse=True)
+def configure_customer_debounce(monkeypatch, customer_debounce_window):
+    from app import turn_assembly
+
+    quiet, cap = customer_debounce_window
+    monkeypatch.setattr(turn_assembly, "QUIET_SECONDS", quiet)
+    monkeypatch.setattr(turn_assembly, "CAP_SECONDS", cap)
+
+
 @pytest.fixture(scope="session")
 def test_database_url():
     database_url = os.getenv("TEST_DATABASE_URL")

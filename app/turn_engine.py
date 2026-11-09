@@ -403,6 +403,8 @@ def message_texts(turn):
     each, whole = ((STAFF_MESSAGE_CHARS, STAFF_TURN_CHARS) if long
                    else (TURN_MESSAGE_CHARS, TURN_CHARS))
     for message in turn.messages:
+        if getattr(turn, "original_message_ids", ()) and message.id in turn.original_message_ids:
+            continue  # already applied; relative operations must not run twice
         body = (message.text or "").strip()
         if body:
             body = _clip(body, min(each, max(whole - used, 1)))
@@ -423,6 +425,12 @@ def current_messages(turn):
             body = _PLACEHOLDERS.get(message.type, f"[{message.type} without text]")
         lines.append(f"{number}. {body}")
     block = "Current messages, oldest first:\n" + "\n".join(lines)
+    original = getattr(turn, "original_message_ids", ())
+    if original:
+        earlier = "\n".join((m.text or "") for m in turn.messages if m.id in original)
+        block = ("Earlier input already applied to the current requirement state; "
+                 "context only, do not apply again:\n" + _clip(earlier, TURN_CHARS)
+                 + "\n\n" + block)
     return block, "\n".join(texts)
 
 
@@ -938,6 +946,8 @@ class TurnEngine:
 
     def _meter(self, conn, job, turn, iteration, label, model, outcome, detail, usage, began):
         key = f"turn:{turn.id}:job:{job.id}:{job.attempts}:{iteration}:{label}"
+        if getattr(turn, "original_message_ids", ()):
+            key += ":replan:1"  # same job attempt, distinct durable planning generation
         logger.info(
             "LLM call turn %s #%d %s %s: %s/%s, %d ms, tokens in=%s cached=%s out=%s "
             "thinking=%s", turn.id, iteration, label, model, outcome, detail,

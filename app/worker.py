@@ -135,7 +135,9 @@ class Worker:
             if conn.info.transaction_status != TransactionStatus.IDLE:
                 conn.rollback()
         status = queue.finish_job(conn, job, self.locked_by, error, backoff=self.backoff)
-        if error is None:
+        if isinstance(error, queue.DeferJob):
+            logger.info("Job %s deferred", job.id)
+        elif error is None:
             logger.info("Job %s (%s) succeeded", job.id, job.job_type)
         else:
             logger.warning(

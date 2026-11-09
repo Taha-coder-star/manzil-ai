@@ -53,6 +53,13 @@ class PermanentJobError(Exception):
         self.code = code
 
 
+class DeferJob(Exception):
+    """Scheduling, not failure: release the lease without spending an attempt."""
+
+    def __init__(self, seconds):
+        self.seconds = max(0, seconds)
+
+
 @dataclass(frozen=True)
 class Job:
     id: UUID
@@ -182,7 +189,18 @@ def finish_job(conn, job, locked_by, error=None, *, backoff=backoff_seconds):
     try:
         with tenant_transaction(conn, job.agency_id):
             _set_timeout(conn)
-            if error is None:
+            if isinstance(error, DeferJob):
+                row = conn.execute(
+                    """
+                    UPDATE job SET status = 'pending', attempts = attempts - 1,
+                        available_at = now() + make_interval(secs => %s),
+                        locked_at = NULL, locked_by = NULL, lease_expires_at = NULL,
+                        last_error_code = NULL
+                    WHERE id = %s AND status = 'running' AND locked_by = %s
+                    RETURNING status
+                    """, (error.seconds, job.id, locked_by),
+                ).fetchone()
+            elif error is None:
                 row = conn.execute(
                     """
                     UPDATE job SET

@@ -285,6 +285,9 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
         except PermanentJobError:
             pass  # left pending: that job dead-letters itself when it runs
     sender = message["from"]
+    from app.turn_assembly import debounce
+
+    debounce(conn, job, sender)
 
     with closing(client_factory(phone_number_id)) as client:
         def demo(turn, command, dedupe_prefix):
