@@ -680,19 +680,20 @@ def search_conversation(conn, agency_id, conversation_id, gazetteer, nearby=Fals
 
 
 def record_shown(conn, agency_id, conversation_id, search_run_id, property_ids,
-                 card_message_ids=None):
+                 card_message_ids=None, rendered_prices=None):
     """After the results were sent (Task 10.1): shown_item rows in position order. Only
     shown listings count for "Property 2", demotion and the cheaper rule."""
     cards = list(card_message_ids or [None] * len(property_ids))
     with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
-        for position, (property_id, card) in enumerate(zip(property_ids, cards), 1):
+        prices = list(rendered_prices or [None] * len(property_ids))
+        for position, (property_id, card, price) in enumerate(zip(property_ids, cards, prices), 1):
             conn.execute(
                 """
                 INSERT INTO shown_item (agency_id, conversation_id, search_run_id, position,
-                                        property_id, card_message_id)
-                VALUES (current_agency_id(), %s, %s, %s, %s, %s)
+                                        property_id, card_message_id, rendered_price_pkr)
+                VALUES (current_agency_id(), %s, %s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
-                (conversation_id, search_run_id, position, property_id, card),
+                (conversation_id, search_run_id, position, property_id, card, price),
             )

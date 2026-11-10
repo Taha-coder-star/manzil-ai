@@ -9,6 +9,7 @@ nothing is written to `property` (Save, commit and code allocation are 9.2).
 # ruff: noqa: F811  (tests take the imported inv fixture as a parameter)
 
 import hashlib
+import subprocess
 import threading
 import uuid
 from pathlib import Path
@@ -106,11 +107,18 @@ def property_count(conn, tenant):
 
 def test_applied_migrations_are_byte_identical_and_016_follows_015():
     for name, digest in APPLIED.items():
-        assert hashlib.sha256((MIGRATIONS / name).read_bytes()).hexdigest() == digest, name
+        # Applied integrity is checked against committed bytes. Windows can check
+        # out 001/002 as CRLF; never rewrite those SQL files to satisfy this test.
+        committed = subprocess.check_output([
+            "git", "-c", f"safe.directory={MIGRATIONS.parent.as_posix()}",
+            "show", f"HEAD:migrations/{name}"], cwd=MIGRATIONS.parent)
+        assert hashlib.sha256(committed).hexdigest() == digest, name
+        assert (MIGRATIONS / name).read_bytes().replace(b"\r\n", b"\n") == committed, name
     names = sorted(p.name for p in MIGRATIONS.glob("0*.sql"))
     # 017 (Task 9.2, the staff card map) follows
-    assert names[-5:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql",
-                          "017_staff_card.sql", "018_turn_replan.sql", "019_ai_recovery.sql"]
+    assert names[-6:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql",
+                          "017_staff_card.sql", "018_turn_replan.sql", "019_ai_recovery.sql",
+                          "020_shown_price.sql"]
     assert all(b"\r" not in (MIGRATIONS / n).read_bytes() for n in names[-2:])
 
 

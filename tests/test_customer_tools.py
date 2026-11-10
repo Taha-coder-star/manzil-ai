@@ -30,8 +30,10 @@ def test_a_previously_resolved_listing_without_a_public_row_is_unavailable(monke
         None, SimpleNamespace(agency_id="demo", messages=()), None, None, (),
         language="roman_urdu")
     result = binding.details_card(references.Item(1, "id", "DH6-109"))
-    assert result.notice == ai_tools.Notice("listing_unavailable", (("code", "DH6-109"),))
-    assert result.payloads == ()  # never return a card/price from old shown history
+    assert result.payloads[0]["interactive"]["body"]["text"] == "DH6-109 abhi available nahi."
+    assert result.payloads[0]["interactive"]["action"]["buttons"][0]["reply"]["id"] == "similar:DH6-109"
+    assert len(result.payloads) == 1
+    assert "header" not in result.payloads[0]["interactive"]  # no old card/photo/price
 
 
 @pytest.mark.parametrize(("text", "position"), [

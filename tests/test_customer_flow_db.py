@@ -586,9 +586,13 @@ def test_previously_shown_listing_that_became_hidden_gets_unavailable(st, status
     assert "DH6-101" in latest_shown(st)
     st.query("UPDATE property SET status=%s WHERE listing_code='DH6-101' RETURNING id", (status,))
     calls = len(st.requests)
-    assert sent_text(typed_only(st, "DH6-101")) == "DH6-101 abhi available nahi."
+    reply = typed_only(st, "DH6-101")
+    assert reply[0]["interactive"]["body"]["text"] == "DH6-101 abhi available nahi."
+    assert button_ids(reply[0]) == ["similar:DH6-101"]
     assert len(st.requests) == calls
-    assert sent_text(tap(st, "listing:DH6-101")) == "DH6-101 abhi available nahi."
+    reply = tap(st, "listing:DH6-101")
+    assert reply[0]["interactive"]["body"]["text"] == "DH6-101 abhi available nahi."
+    assert button_ids(reply[0]) == ["similar:DH6-101"]
 
 
 def purpose_buttons(payloads):

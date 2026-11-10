@@ -357,6 +357,8 @@ def validate(text, facts, gazetteer=None):
 def payload_texts(payload):
     """Every customer-visible text of a built WhatsApp payload (bodies, headers, footers,
     button and row titles, card bodies, captions). whatsapp.summary reads only the body."""
+    if payload.get("type") == "manzil_listing":
+        return payload_texts(payload["payload"])
     kind = payload.get("type")
     if kind == "text":
         return [payload["text"]["body"]]

@@ -38,6 +38,7 @@ from app import (
     customer_intent,
     customer_reply,
     details,
+    freshness,
     grounding,
     handoff,
     location,
@@ -350,7 +351,8 @@ class CustomerBinding:
         self.results |= plan.kind in (render.RESULTS, render.NO_MATCH_KIND)
         payloads = list(plan.payloads)
         if plan.shown and result.search_run_id is not None:
-            payloads.append(customer_reply.shown_entry(result.search_run_id, plan.shown))
+            payloads.append(customer_reply.shown_entry(result.search_run_id, plan.shown,
+                {x.code: x.price_pkr for x in listings}))
         response["results"] = [{"position": position, "code": code}
                                for position, _, code in plan.shown]
         return self._result("search_properties", response, payloads, plan.facts,
@@ -470,16 +472,21 @@ class CustomerBinding:
                 return self._result("send_property_photos", {"status": "not_found"},
                                     notice="listing_unknown")
             item = ref.item
+        if not cards.load_listings(self.conn, self.turn.agency_id, [item.code]):
+            return self._unavailable(item)
         media = self._unsent_photos(item.property_id)
         response = {"status": "ok", "position": item.position, "code": item.code,
                     "photos": len(media)}
         facts = self._listing_facts(item)
         if not media:
-            return self._result("send_property_photos", response, facts=facts,
-                                codes=[item.code],
-                                notice=_notice("no_more_photos", ref=ref_text(item)))
-        entries = [customer_reply.image_entry(item.property_id, m, ref_text(item))
-                   for m in media]
+            body = (f"{ref_text(item)}: no more photos of this property are available right now."
+                    if self.language == ENGLISH else
+                    f"{ref_text(item)}: is property ki mazeed photos abhi available nahi hain.")
+            return self._result("send_property_photos", response,
+                                [freshness.guard(whatsapp.text(body), item, self.language)],
+                                facts, [item.code])
+        entries = [freshness.guard(customer_reply.image_entry(item.property_id, m, ref_text(item)),
+                                   item, self.language) for m in media]
         return self._result("send_property_photos", response, entries, facts, [item.code])
 
     def _unsent_photos(self, property_id):
@@ -516,22 +523,29 @@ class CustomerBinding:
                                     notice="listing_unknown")
             item = ref.item
         known = details.load_known(self.conn, self.turn.agency_id, item.code)
+        if known is None:
+            return self._unavailable(item)
         fields = details.field_for(self.text)
         payloads = details.answer_detail(known, fields, self.language, item.position)
         money = [v for k, v in (known.public if known else {}).items() if k.endswith("_pkr")
                  or k == "maintenance_pkr_month"]
         return self._result("get_property", {"status": "ok", "position": item.position,
                                              "code": item.code},
-                            payloads, self._listing_facts(item, money), [item.code])
+                            [freshness.guard(p, item, self.language, kind="detail", fields=fields)
+                             for p in payloads], self._listing_facts(item, money), [item.code])
+
+    def _unavailable(self, item):
+        return self._result("get_property", {"status": "not_found"},
+                            [freshness.unavailable(item.code, self.language)],
+                            grounding.Facts(codes=frozenset({item.code})), [item.code])
 
     def details_card(self, item):
         """A listing: tap (overflow list row): the listing's card from its public row."""
         listings = cards.load_listings(self.conn, self.turn.agency_id, [item.code])
         if not listings:
-            return self._result("get_property", {"status": "not_found"},
-                                notice=_notice("listing_unavailable", code=item.code))
+            return self._unavailable(item)
         payload = cards.single_card(listings[0], self.language)
-        return self._result("get_property", {"status": "ok"}, [payload],
+        return self._result("get_property", {"status": "ok"}, [freshness.guard(payload, item, self.language, kind="card")],
                             self._listing_facts(item), [item.code])
 
     def show_listing(self, code):
@@ -643,6 +657,8 @@ class CustomerBinding:
                 return [self._result("echo", {"status": "stale"}, notice="echo_stale")]
             return [self.search_properties({}, None)]
         card, code, loc, choice, purpose, value, nomatch, step, handoff, _ = match.groups()
+        if card == "similar":
+            return [self.search_properties({}, None)]
         if card:
             ref = references.resolve(self.conn, self.turn.agency_id, self.turn.conversation_id,
                                      text=code)
