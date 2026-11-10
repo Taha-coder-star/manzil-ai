@@ -1,3 +1,21 @@
+2026-11-10 PR66 FIRST CI FAILED; TEST-ONLY ST01 GOLD CORRECTION PREPARED.
+Owner pushed93a71bee8ff1876587cee8dba0cb00fa4d968210 and opened PR66 against
+release/day13-security-staleness-baseline. Job129974400813 actual LinuxCI test
+result4069PASS/1FAIL: test_staff_codes still asserted ST01 duplicate_of=[] despite
+owner-approved DH6-101/106 gold. Failure reproduced in fresh local process; fixed
+assertion now verifies approved gold, active/reserved matches, duplicate warning,
+non-blocking Save. Fresh affected run428PASS/29DB-skips; Ruff clean. No production
+code, gold, SQL, image or policy change. Earlier4070-case local aggregation missed
+this import-time GOLD assertion because the original run overlapped the gold edit;
+do not treat that earlier aggregate as exact final-source CI proof. New exact-head
+CI remains mandatory. Source fix is a normal follow-up commit on the same branch,
+not amend/force-push. Publisher now supports verified fast-forward corrections,
+updates existing PR66 and uses ancestry rather than immediate-parent checks.
+Packager likewise supports correction descendants; no deployment kit until both
+new-head CI events succeed. Failed-job log ../output/day13-tuning-ci-failure.log.
+AWS remains unchanged on c42e91b03f6e/Gemini/low/schema020; no deployment, migration,
+budget activation or paid calls. Publication/deployment authorization persists.
+
 2026-11-10 OWNER AUTHORIZED PUSH/PR AND CODE DEPLOYMENT for Day13.3/13.4 tooling.
 Isolated publication branch feature/task-13-benchmark-runtime, parent3c6df54.
 Exact publication HEAD/status is recorded in ../output/day13-tuning-local-commit.json

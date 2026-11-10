@@ -1,3 +1,14 @@
+2026-11-10 PR66 CI failure diagnosed from owner job129974400813 log:4069passed,
+one stale test_staff_codes ST01 gold assertion. Fresh local reproduction failed;
+corrected only the test to owner-approved DH6-101/106 matches, active/reserved
+statuses, duplicate warning and non-blocking Save. Fresh affected428PASS/29DBskips;
+Ruff clean. Earlier local aggregate missed import-time GOLD after concurrent gold
+edit; actual CI result takes precedence. No runtime/gold/schema/policy changes.
+Prepared follow-up commit and same-PR fast-forward publication; no amend/force.
+Publisher/packager accept verified descendants and require both new-head CI runs.
+Deployment is still blocked pending CI; AWS untouched, no paid calls or guard
+activation. Owner publication/deployment authorization persists.
+
 2026-11-10 Owner requested push/new PR and deployment of implemented Day13 tooling.
 Created isolated feature/task-13-benchmark-runtime from3c6df54; retained working
 files/stashes/unrelated local dirs. Added optional shared-ledger Compose override,
