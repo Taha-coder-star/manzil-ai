@@ -598,7 +598,11 @@ def ground_customer(payloads, facts, gazetteer, language):
     out, held = [], False
     for payload in payloads:
         check = payload
-        if payload.get("type") == customer_reply.IMAGE:
+        if payload.get("type") == "manzil_listing":
+            check = payload["payload"]
+            if check.get("type") == customer_reply.IMAGE:
+                check = whatsapp.text(check["caption"])
+        elif payload.get("type") == customer_reply.IMAGE:
             check = whatsapp.text(payload["caption"])
         elif customer_reply.is_internal(payload):
             out.append(payload)

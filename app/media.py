@@ -537,6 +537,11 @@ def _upload(conn, client, storage, agency_id, table, source_id, key):
 
 def _send_link(conn, client, storage, agency_id, conversation_id, recipient, key, caption,
                dedupe_key, ai_generated, media_source):
+    if ai_generated:
+        blocked = outbound.guard_property_media(conn, client, agency_id, conversation_id,
+                                                recipient, dedupe_key, media_source)
+        if blocked is not None:
+            return blocked
     return outbound.send_message(
         conn, client, agency_id, conversation_id, recipient,
         whatsapp.image(link=storage.presigned_url(key, LINK_SECONDS), caption=caption),
@@ -551,6 +556,11 @@ def send_image(conn, client, storage, agency_id, conversation_id, recipient, sou
 
     source: (table, id), table in SOURCE_TABLES. Returns an ImageSendResult.
     """
+    if ai_generated:
+        blocked = outbound.guard_property_media(conn, client, agency_id, conversation_id,
+                                                recipient, dedupe_key, source)
+        if blocked is not None:
+            return ImageSendResult(blocked.status, None)
     table, source_id, key, cached = _source(conn, agency_id, *source)
     media_source = (table, source_id)
     prior = outbound.prior_attempt(conn, agency_id, dedupe_key)

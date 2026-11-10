@@ -3,6 +3,9 @@ import logging
 
 
 def main():
+    from app import log_safety
+
+    log_safety.install()
     parser = argparse.ArgumentParser(description="Manzil AI runtime")
     parser.add_argument("role", choices=["web", "worker"])
     args = parser.parse_args()
