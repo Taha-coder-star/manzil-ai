@@ -29,7 +29,7 @@
       },
       "missing": [],
       "save_allowed": true,
-      "duplicate_of": [],
+      "duplicate_of": ["DH6-101", "DH6-106"],
       "expected_code": "DH6-109",
       "photos": 3
     }

@@ -462,10 +462,19 @@ def build_speech(settings, storage):
     app.config.check_stt_settings first."""
     if getattr(settings, "stt_provider", "off") != "elevenlabs":
         return None
+    from app.bench_budget import BoundedGemini, BoundedScribe, runtime_budget
+    budget = runtime_budget(settings)
+    if budget and not budget[0].policy.get("scribe"):
+        raise ValueError("runtime speech budget needs verified Scribe prices")
     fallback = model = None
     if stt_fallback(settings) == "gemini":
-        fallback, model = GeminiClient(settings.gemini_api_key), settings.llm_primary_model
-    return SpeechService(ScribeClient(settings.elevenlabs_api_key), storage,
+        model = settings.llm_primary_model
+        fallback = (BoundedGemini(settings.gemini_api_key, ledger=budget[0], phase=budget[1])
+                    if budget else GeminiClient(settings.gemini_api_key))
+    primary = ScribeClient(settings.elevenlabs_api_key)
+    if budget:
+        primary = BoundedScribe(primary, ledger=budget[0], phase=budget[1])
+    return SpeechService(primary, storage,
                          fallback=fallback, fallback_model=model,
                          thinking_level=getattr(settings, "llm_thinking_level",
                                                 DEFAULT_THINKING_LEVEL))

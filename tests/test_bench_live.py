@@ -275,15 +275,14 @@ def test_a_stored_draft_payload_scores_like_the_fixture():
     assert result["exact"] and all(c["ok"] for c in result["workflow"].values())
 
 
-def test_st01_stays_visible_and_out_of_the_workflow_rate():
+def test_st01_duplicate_mismatch_is_now_scored_as_a_failure():
     record = {"id": "ST-01", "kind": "draft", "exact": True, "failure": None, "fields": {},
               "workflow": {"duplicate_of": {"gold": [], "got": ["DH6-101", "DH6-106"],
                                             "ok": False},
                            "save_allowed": {"gold": True, "got": True, "ok": True}}}
     summary = staff_bench.summary([record])
-    assert summary["workflow"] == {"passed": 1, "of": 1}
-    [known] = summary["known_gold_disagreements"]
-    assert (known["item"], known["gold"], known["got"]) == ("ST-01", [], ["DH6-101", "DH6-106"])
+    assert summary["workflow"] == {"passed": 1, "of": 2}
+    assert summary["known_gold_disagreements"] == []
 
 
 # --- review round: scope set, photos, questions, blocked items, ST-01 ---------------------------
@@ -305,17 +304,18 @@ def test_photos_must_all_belong_to_the_target_and_never_repeat():
     assert not bench_live.score_photos(gold, [], set())["ok"]  # a text-only reply sends nothing
 
 
-def test_st01_duplicate_check_stays_unscored_even_when_it_agrees_with_the_gold():
+def test_st01_duplicate_check_is_scored_when_it_agrees_with_reviewed_gold():
     record = {"id": "ST-01", "kind": "draft", "exact": True, "failure": None,
               "fields": {"price_pkr": {"gold": 80000000, "got": 80000000, "ok": True}},
-              "workflow": {"duplicate_of": {"gold": [], "got": [], "ok": True},
+              "workflow": {"duplicate_of": {"gold": ["DH6-101", "DH6-106"],
+                                             "got": ["DH6-101", "DH6-106"], "ok": True},
                            "save_allowed": {"gold": True, "got": True, "ok": True}}}
     summary = staff_bench.summary([record])
-    assert summary["workflow"] == {"passed": 1, "of": 1}
-    assert summary["known_gold_disagreements"][0]["agrees_with_gold"] is True
+    assert summary["workflow"] == {"passed": 2, "of": 2}
+    assert summary["known_gold_disagreements"] == []
     assert summary["scored_denominators"] == {
-        "items": 1, "fields": 1, "workflow_scored": 1, "workflow_unscored": 1,
-        "unscored_checks": ["ST-01 duplicate_of"]}
+        "items": 1, "fields": 1, "workflow_scored": 2, "workflow_unscored": 0,
+        "unscored_checks": []}
     assert summary["items_exact"] == {"exact": 1, "of": 1}  # its fields still count
 
 
@@ -422,7 +422,7 @@ def test_expected_staff_checks_match_what_a_run_scores():
     for item in items("staff"):
         f, w = staff_bench.expected_checks(item["expected_outcome"])
         fields, workflow = fields + len(f), workflow + len(w)
-    assert (fields, workflow) == (fixture["fields"], fixture["workflow_scored"] + 1)
+    assert (fields, workflow) == (fixture["fields"], fixture["workflow_scored"])
 
 
 def test_an_all_unrun_staff_set_keeps_every_check_as_failed():
@@ -432,8 +432,8 @@ def test_an_all_unrun_staff_set_keeps_every_check_as_failed():
     summary = bench_live.summarise("staff", records)
     assert summary["items_exact"] == {"exact": 0, "of": 20}
     assert summary["fields"] == {"correct": 0, "of": 94}
-    assert summary["workflow"] == {"passed": 0, "of": 33}
-    assert summary["scored_denominators"]["unscored_checks"] == ["ST-01 duplicate_of"]
+    assert summary["workflow"] == {"passed": 0, "of": 34}
+    assert summary["scored_denominators"]["unscored_checks"] == []
 
 
 def test_a_mixed_staff_run_keeps_the_full_denominators():
@@ -443,9 +443,9 @@ def test_a_mixed_staff_run_keeps_the_full_denominators():
     records = [ran[k] if n < 10 else staff_not_run(k, gold[k]["expected_outcome"]["type"])
                for n, k in enumerate(sorted(gold))]
     summary = bench_live.summarise("staff", records)
-    assert summary["fields"]["of"] == 94 and summary["workflow"]["of"] == 33
+    assert summary["fields"]["of"] == 94 and summary["workflow"]["of"] == 34
     assert summary["items_exact"]["of"] == 20 and summary["stopped_by_cap"] == sorted(gold)[10:]
-    assert summary["scored_denominators"]["workflow_unscored"] == 1  # ST-01 ran, still unscored
+    assert summary["scored_denominators"]["workflow_unscored"] == 0
 
 
 def test_a_draft_that_was_never_stored_keeps_its_checks():

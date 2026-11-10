@@ -12,7 +12,7 @@ import pytest
 from app import staff_bench
 
 BENCH = Path(staff_bench.BENCH_DIR)
-GOLD_SHA256 = "7669513378d38fdf6280eda48de19889d67e66b9aa232b32e0252987927c8a40"
+GOLD_SHA256 = "e4185435ef10c5229f137f805b92f9eebf1ac9602e2e6040990e01d0904372e1"
 
 
 @pytest.fixture(scope="module")
@@ -64,20 +64,19 @@ def test_the_fixture_score_and_what_misses(result):
     assert s["items_exact"] == {"exact": 19, "of": 20}
     assert s["by_kind"] == {"draft": {"exact": 11, "of": 11}, "update": {"exact": 5, "of": 6},
                             "disambiguate": {"exact": 3, "of": 3}}
-    assert s["workflow"] == {"passed": 33, "of": 33}
+    assert s["workflow"] == {"passed": 34, "of": 34}
     assert s["fields"]["of"] == 94 and s["fields"]["correct"] == 93
     # ST-15: "Sports City" is only similar to "Bahria Sports City"; the resolver does not
     # accept it, so the backend asks instead of guessing, and the gold target is not reached.
     assert s["failed_items"] == [{"id": "ST-15", "reason": "location_unclear"}]
 
 
-def test_st01_duplicate_disagreement_is_reported_apart_not_hidden_or_tuned(result):
-    [disagreement] = result["summary"]["known_gold_disagreements"]
-    assert (disagreement["item"], disagreement["check"]) == ("ST-01", "duplicate_of")
-    assert disagreement["gold"] == [] and disagreement["got"] == ["DH6-101", "DH6-106"]
+def test_st01_duplicates_follow_owner_approved_rfc_gold_before_paid_runs(result):
+    assert result["summary"]["known_gold_disagreements"] == []
     st01 = next(i for i in result["items"] if i["id"] == "ST-01")
     assert st01["exact"] is True  # the critical fields are right; the duplicate warning is extra
-    assert st01["workflow"]["duplicate_of"]["known_disagreement"] is True
+    assert st01["workflow"]["duplicate_of"]["gold"] == ["DH6-101", "DH6-106"]
+    assert st01["workflow"]["duplicate_of"]["ok"] is True
     assert st01["workflow"]["expected_code"]["ok"] and st01["workflow"]["save_allowed"]["ok"]
 
 

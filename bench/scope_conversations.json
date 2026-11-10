@@ -135,8 +135,8 @@
      "expected_tools": [{"name": "update_requirements", "args": {"patch": [{"slot": "purpose", "op": "set", "raw_span": "Khareedni"}, {"slot": "budget", "op": "set", "raw_span": "2 crore tak"}]}}, {"name": "search_properties", "args": {}}],
      "expected_outcome": {"type": "no_match",
                           "search": {"purpose": "sale", "property_types": ["shop"], "locations": ["clf-b5", "clf-b8"], "budget_min": null, "budget_max": 20000000, "exclude": []}},
-     "gold_status": "unresolved", "source": "R17/R18 p6, section 3 item 4 exception (amount in the same message); location and type kept",
-     "note": "UNRESOLVED: Clifton neighbour expansion is an open owner decision (CLAUDE.md section 6). demo/location_neighbors.csv has DHA pairs only, so no_match today; if Clifton Blk 2/4/5 <-> 8/9 neighbours are added (R17/R18 p3, 2.1 step 7 example), CLF-102 (Block 2, 1.8 crore) becomes a relaxed result."},
+     "gold_status": "derived", "source": "R17/R18 p6, section 3 item 4 exception (amount in the same message); location and type kept",
+     "note": "Day13 owner decision 2026-11-10 before paid runs: freeze the current approved neighbour graph. No Clifton edges are added; no_match is expected. Future graph changes require reviewed gold and a new cohort. See day13_gold_decisions.json."},
 
     {"id": "SC-19", "set": "scope", "category": "follow_up", "follow_up_kind": "cheaper", "metrics": ["follow_up"], "language": "roman_urdu",
      "input": "Kuch sasta hai?",
