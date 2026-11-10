@@ -548,7 +548,7 @@ def test_transient_errors_retry_then_store(md):
 
 
 def test_exhausted_retries_mark_the_photo_failed(md):
-    md.channel.media_errors = [whatsapp.RetryableMediaError("download_http_503")] * 3
+    md.channel.media_errors = [whatsapp.RetryableMediaError("download_http_503")] * 5
     md.deliver(image_message("wamid.P1", "111"))
     md.drain()
     assert [r[:2] for r in media_rows(md)] == [("failed", "download_http_503")]

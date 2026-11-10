@@ -12,6 +12,7 @@ is retried after its lease expires.
 Raise PermanentJobError to dead-letter without retrying.
 """
 
+import dataclasses
 import logging
 import os
 import signal
@@ -22,7 +23,7 @@ import time
 import psycopg
 from psycopg.pq import TransactionStatus
 
-from app import gazetteer, orchestrator, queue, requirements, turn_engine
+from app import gazetteer, orchestrator, queue, requirements, turn_engine, whatsapp
 from app.config import ConfigurationError, load_settings
 from app.handlers import make_handlers
 from app.routing import RoutingConfigError, parse_sender_agencies
@@ -134,6 +135,14 @@ class Worker:
                 raise
             if conn.info.transaction_status != TransactionStatus.IDLE:
                 conn.rollback()
+        if isinstance(error, whatsapp.RetryableSendError) and job.max_attempts < 5:
+            # Transport failures receive five attempts without changing poison-job limits.
+            from app.db import tenant_transaction
+            with tenant_transaction(conn, job.agency_id):
+                conn.execute("UPDATE job SET max_attempts = 5 WHERE id = %s "
+                             "AND status = 'running' AND locked_by = %s",
+                             (job.id, self.locked_by))
+            job = dataclasses.replace(job, max_attempts=5)
         status = queue.finish_job(conn, job, self.locked_by, error, backoff=self.backoff)
         if isinstance(error, queue.DeferJob):
             logger.info("Job %s deferred", job.id)

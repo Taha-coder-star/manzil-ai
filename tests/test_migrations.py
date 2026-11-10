@@ -54,6 +54,7 @@ def test_apply_and_repeat(migration_database, migration_files):
         "handoff",
         "inbound_media",
         "conversation_turn",
+        "ai_recovery",
         "inbound_audio",
         "staff_segment",
         "staff_segment_item",

@@ -109,8 +109,8 @@ def test_applied_migrations_are_byte_identical_and_016_follows_015():
         assert hashlib.sha256((MIGRATIONS / name).read_bytes()).hexdigest() == digest, name
     names = sorted(p.name for p in MIGRATIONS.glob("0*.sql"))
     # 017 (Task 9.2, the staff card map) follows
-    assert names[-4:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql",
-                          "017_staff_card.sql", "018_turn_replan.sql"]
+    assert names[-5:] == ["015_staff_segment.sql", "016_listing_draft_turn_identity.sql",
+                          "017_staff_card.sql", "018_turn_replan.sql", "019_ai_recovery.sql"]
     assert all(b"\r" not in (MIGRATIONS / n).read_bytes() for n in names[-2:])
 
 

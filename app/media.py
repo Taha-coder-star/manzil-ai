@@ -301,7 +301,7 @@ def stage_inbound_media(conn, conversation_id, message_id, sender, wa_media_id,
         ).fetchone()
     enqueue_job(
         conn, JOB_TYPE, f"media:{row[0]}", {"inbound_media_id": str(row[0])},
-        inbound_event_id=inbound_event_id,
+        inbound_event_id=inbound_event_id, max_attempts=5,
     )
     return row[0]
 
