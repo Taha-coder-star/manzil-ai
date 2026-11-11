@@ -1,0 +1,130 @@
+{
+  "actor_suffix": "2614",
+  "baseline_configuration": "low",
+  "baseline_results_preserved": true,
+  "between_trials_seconds": 60,
+  "clear_command": "clear all",
+  "cohort": "day13_minimal_effort_comparison",
+  "comparison_first": [
+    "T01",
+    "T02"
+  ],
+  "config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+  "continue_remaining_cases_after_comparison_review": true,
+  "effort": "minimal",
+  "failed_or_missing": "infinity_no_replacement",
+  "formal_full_benchmark_replaced": false,
+  "full_cost_cache_gaps_waived": false,
+  "image": "sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a",
+  "original_low_window": "2026-11-11T18:51:55.834069+00:00",
+  "owner_approved": true,
+  "owner_direction": "Try the minimal-effort comparison",
+  "percentile_method": "nearest_rank",
+  "samples": [
+    {
+      "clear_first": true,
+      "id": "T01",
+      "message": "office on rent in Karachi, around 5 lakh per month",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T02",
+      "message": "DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T03",
+      "message": "Property 2 ki aur pictures",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T04",
+      "message": "Kuch sasta dikhao",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T05",
+      "message": "Phase 8 mein bhi dekho",
+      "modality": "text"
+    },
+    {
+      "clear_first": true,
+      "id": "T06",
+      "message": "Lahore mein ghar chahiye",
+      "modality": "text"
+    },
+    {
+      "clear_first": true,
+      "id": "T07",
+      "message": "p6 mein ghar chahiye",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T08",
+      "message": "DH6-105 dikhao",
+      "modality": "text"
+    },
+    {
+      "clear_first": false,
+      "id": "T09",
+      "message": "DH6-103 dikhao",
+      "modality": "text"
+    },
+    {
+      "clear_first": true,
+      "id": "T10",
+      "message": "ghar chahiye",
+      "modality": "text"
+    },
+    {
+      "clear_first": true,
+      "id": "V01",
+      "message": "DHA Phase 6 mein 500 gaz ka ghar khareedna hai, budget 8 crore tak.",
+      "modality": "voice"
+    },
+    {
+      "clear_first": false,
+      "id": "V02",
+      "message": "Kuch sasta dikhao.",
+      "modality": "voice"
+    },
+    {
+      "clear_first": false,
+      "id": "V03",
+      "message": "I want to buy a 500 square yard house in DHA Phase 6, budget up to 8 crore.",
+      "modality": "voice"
+    },
+    {
+      "clear_first": false,
+      "id": "V04",
+      "message": "Sirf Defence Phase 8 mein ghar dikhao, budget 8 crore tak.",
+      "modality": "voice"
+    },
+    {
+      "clear_first": true,
+      "id": "V05",
+      "message": "I need an office on rent in Karachi, around 5 lakh per month.",
+      "modality": "voice"
+    },
+    {
+      "clear_first": false,
+      "id": "V06",
+      "message": "Budget 6 lakh mahina tak kar do.",
+      "modality": "voice"
+    }
+  ],
+  "schema": 1,
+  "scope": "day13_small_timing_10text_6voice",
+  "targets_ms": {
+    "text_p50": 4000,
+    "text_p90": 7000,
+    "voice_p50": 7000,
+    "voice_p90": 10000
+  },
+  "timing_boundary": "earliest inbound server receipt to first substantive Meta acceptance"
+}

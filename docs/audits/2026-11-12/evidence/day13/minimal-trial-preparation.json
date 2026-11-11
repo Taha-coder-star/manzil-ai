@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "owner_approved": true,
+  "operator_sha256": "4daad3c7d81f072bb6d22e4ddd7d39c51786536bb94bbf3af623520cfac7aac7",
+  "minimal_plan_sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+  "candidate_config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+  "checks": [
+    "worker startup detection reads privately captured stderr as well as stdout",
+    "embedded restricted/global readiness script compiles and is not executed locally",
+    "one-setting switch preserves image, .env, old anchor and redacts private config",
+    "already-minimal repeat retains anchor and makes no recreation",
+    "explicit restore keeps both cohorts and .env",
+    "restored cohort cannot silently restart",
+    "partial failure restores low on the same image",
+    "posthealth failure restores low on the same image",
+    "extra_config refuses before runtime mutation",
+    "busy refuses before runtime mutation",
+    "wrong_tag refuses before runtime mutation",
+    "extra_env refuses before runtime mutation",
+    "budget refuses before runtime mutation",
+    "failed restoration leaves explicit attention receipt",
+    "bootstrap compile and compressed source checksum roundtrip",
+    "minimal diagnostic uses separate anchor/config and unchanged proven child",
+    "all three generated LF shell wrappers pass bash -n"
+  ],
+  "check_count": 17,
+  "actual_docker_compose_or_aws_execution": false,
+  "remote_switch": "pending",
+  "provider_calls": 0,
+  "operator_database_writes": 0,
+  "env_file_edit": false,
+  "application_code_changed": false,
+  "bash_syntax_checked": [
+    "day13-minimal-trial.sh",
+    "day13-minimal-restore-low.sh",
+    "day13-minimal-diagnostic.sh"
+  ]
+}

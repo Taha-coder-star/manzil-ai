@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "source": "minimal-diagnostic-owner.json",
+  "cohort": "minimal-effort",
+  "phase": "comparison_complete_low_restored",
+  "owner_accidental_input": {
+    "diagnostic_label": "T01-attempt-1",
+    "received_at": "2026-11-11T19:38:54.100695+00:00",
+    "first_accepted_ms": 2004.265,
+    "owner_direction": "that was a wrong message I sent my mistake ignore that",
+    "excluded_from_planned_comparison": true,
+    "raw_record_preserved": true,
+    "reply_semantics": "Unknown text containing DH7-101; no clear-all acknowledgement proven",
+    "protocol_deviation_recorded": true,
+    "inbound_labels": [
+      "T01",
+      "other"
+    ]
+  },
+  "T01": {
+    "diagnostic_label": "T01-attempt-2",
+    "first_substantive_accepted_ms": 11533.57,
+    "last_accepted_ms": 13081.894,
+    "receipt_to_completion_ms": 13115.623,
+    "first_delivered_ms": 14011.856,
+    "low_first_substantive_accepted_ms": 11929.345,
+    "difference_ms": -395.775,
+    "target_7000_met_on_this_turn": false,
+    "provider_calls": 3,
+    "provider_total_ms": 8468,
+    "engine_ms": 8645,
+    "improvement_established": false
+  },
+  "T02": {
+    "diagnostic_label": "T02-attempt-1",
+    "provider_calls": 3,
+    "provider_total_ms": 3981,
+    "engine_ms": 4159,
+    "provider_failures_observed": 0,
+    "first_text_accepted_ms": 6685.912,
+    "first_text_screenshot_content": "Purchase-assumption notice; not listing results",
+    "primary_substantive_accepted_ms": 7161.561,
+    "primary_latency_status": "Verified carousel contains summary and expected codes; sent and delivered",
+    "original_interactive_accepted_ms": [
+      7161.561,
+      7734.299
+    ],
+    "original_interactive_delivered_ms": [
+      11059.594,
+      10059.594
+    ],
+    "receipt_to_completion_ms": 7767.124,
+    "low_original_outcome": "failed http_503; no substantive reply",
+    "first_substantive_delivered_ms": 10059.594,
+    "summary_delivered_ms": 11059.594,
+    "first_delivered_content": "DH7-101 coverless card",
+    "target_7000_met_on_this_turn": false,
+    "ordering": "Application accepted carousel before #3; receipt timestamps show #3 delivered one second earlier",
+    "later_carousel_fallback_found": false
+  },
+  "cache": "All six minimal usage rows have null cached_input_tokens; hit rate unknown",
+  "thinking": "All six minimal usage rows have null thinking_tokens; no zero-thinking claim",
+  "cost": "No per-turn dollar estimates established by this report",
+  "percentile": null,
+  "permanent_adoption": false,
+  "day13_closed": false,
+  "next": "Owner decision on explicit acceptance-gap deferrals versus fixing gaps",
+  "send_review": "minimal-send-review-owner.json",
+  "comparison_complete": true,
+  "observed_planned_text_samples": 2,
+  "planned_text_samples": 10,
+  "remaining_text_not_run": 8,
+  "remaining_voice_not_run": 6,
+  "remaining_cases_not_dropped": true,
+  "fixed_ten_text_nearest_rank_p90_lower_bound_ms": 7161.561,
+  "lower_bound_is_not_completed_percentile": true,
+  "sample_size_insufficient_for_general_effort_causality": true,
+  "conclusion": "Minimal alone did not meet target; stop further samples in this cohort",
+  "runtime": "Low restored on same image; minimal trial ended",
+  "restore_low_observed": true,
+  "restore_receipt": "minimal-trial-restored-low-owner.json"
+}
