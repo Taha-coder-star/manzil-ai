@@ -109,7 +109,7 @@ def test_staff_dry_run_keeps_st01_visible_and_st15_failing(test_database_url, tm
                   test_database_url)
     assert code == 0
     summary = result(tmp_path)["repeats"][0]["summary"]
-    assert [k["item"] for k in summary["known_gold_disagreements"]] == ["ST-01"]
+    assert summary["known_gold_disagreements"] == []
     assert summary["failed_items"] == [{"id": "ST-15", "reason": "no_proposal_or_list"}]
     assert summary["listing_writes_without_confirmation"] == 0
     records = {r["id"]: r for r in result(tmp_path)["repeats"][0]["items"]}

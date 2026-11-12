@@ -346,6 +346,10 @@ def check_tools(item, errors):
         name = tool.get("name")
         if name not in allowed:
             errors.append(f"{item['id']}: tool {name!r} is not a {item['set']} tool")
+        if name == "request_handoff":
+            from app.ai_tools import validate_args
+            if not validate_args(name, tool.get("args")):
+                errors.append(f"{item['id']}: handoff arguments do not match the approved tool schema")
         if name == "update_requirements":
             for op in tool["args"].get("patch") or []:
                 if op.get("slot") not in SLOTS or op.get("op") not in OPS:

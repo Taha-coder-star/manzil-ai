@@ -55,7 +55,9 @@ from app.llm import ProviderError
 
 SCHEMA = 1
 TASK = "10.3"
-SETS = ("text", "scope", "staff", "controls")
+SETS = ("text", "voice", "scope", "staff", "controls")
+IDENTITY_FILES = ("customer_text.json", "scope_conversations.json", "staff.json",
+                  "staff_spans.json", "voice_controls.json", "customer_voice.json")
 # Scope set (Demo Scope section 6 photos): fictional photos per listing in the bench schema
 # (production holds media for DH6-101 and PRJ-103 only); recorded in the run identity.
 MEDIA_FIXTURE_PHOTOS = 8
@@ -240,6 +242,11 @@ class MeteredProvider:
                                             contents=contents, timeout_s=timeout_s,
                                             thinking_level=thinking_level)
         except BaseException as exc:
+            from app.bench_budget import BudgetError
+            if isinstance(exc, BudgetError) and isinstance(self.guard, LedgerGuard):
+                self.guard.stopped = exc.code
+                record.update(outcome="not_sent", detail=exc.code)
+                raise SpendCapReached(exc.code) from None
             # a failed request may still be billed: it is charged its reservation
             record.update(outcome="failed",
                           detail=exc.code if isinstance(exc, ProviderError) else "exception")
@@ -258,6 +265,35 @@ class MeteredProvider:
         if self.guard is not None:
             cost = self.guard.settle(size, model, usage)
             record["estimated_cost_usd"] = str(cost) if cost is not None else None
+
+    def summarize(self, model, *, system, text, timeout_s, thinking_level=None):
+        """L3 summaries are separate paid requests and usage rows, not free turn work."""
+        record = {**self.where, "n": len(self.attempts) + 1, "model": model,
+                  "operation": "lead_summary", "tool_calls": []}
+        self.attempts.append(record)
+        size = Decimal(0)
+        if self.guard is not None:
+            try:
+                size = self.guard.reserve()
+            except SpendCapReached:
+                record.update(outcome="not_sent", detail="cap")
+                raise
+        began = self._clock()
+        try:
+            response = self.client.summarize(model, system=system, text=text, timeout_s=timeout_s,
+                                              thinking_level=thinking_level)
+        except BaseException as exc:
+            from app.bench_budget import BudgetError
+            if isinstance(exc, BudgetError) and isinstance(self.guard, LedgerGuard):
+                self.guard.stopped = exc.code
+                record.update(outcome="not_sent", detail=exc.code)
+                raise SpendCapReached(exc.code) from None
+            record.update(outcome="failed", detail=exc.code if isinstance(exc, ProviderError) else "exception")
+            self._settle(record, began, size, model, llm.Usage())
+            raise
+        record.update(outcome="succeeded", model_version=response.model_version, usage=_usage(response.usage))
+        self._settle(record, began, size, model, response.usage)
+        return response
 
 
 def _usage(usage):
@@ -289,6 +325,9 @@ class ScriptedClient:
 
     def script(self, rounds):
         self.rounds = list(rounds)
+
+    def summarize(self, *args, **kwargs):
+        return llm.Summary("")  # fixture ceiling; no model prose or fabricated usage
 
     def generate(self, model, *, system, tools, contents, timeout_s, thinking_level=None):
         calls = self.rounds.pop(0) if self.rounds else []
@@ -374,7 +413,7 @@ def check_disposable(url):
 
 @contextlib.contextmanager
 def environment(database_url, provider, *, primary, failover, thinking_level, speech=None,
-                media=0):
+                media=0, speech_factory=None):
     """A fresh migrated schema, the restricted login, the demo agency seeded, and the real
     worker with the engine on `provider`. Dropped afterwards, whatever happens. media: that
     many fictional photos per listing, with a cached WhatsApp id (sent by id, never uploaded),
@@ -427,6 +466,8 @@ def environment(database_url, provider, *, primary, failover, thinking_level, sp
         engine = TurnEngine(provider, primary, failover, requirements=service,
                             thinking_level=thinking_level)
         client, storage = FakeWhatsApp(), MemoryStorage()
+        if speech_factory is not None:
+            speech = speech_factory(storage)
         settings = SimpleNamespace(meta_access_token="unused", meta_api_version="v25.0",
                                    s3_bucket=None, site_address="bench.invalid")
         handlers = make_handlers(settings, client_factory=lambda pnid: client, engine=engine,
@@ -520,8 +561,11 @@ class Env:
 
     def counts(self):
         tables = ("search_run", "pending_clarification", "requirement_patch_log",
-                  "listing_draft", "usage_event")
-        return {t: self.query(f"SELECT count(*) FROM {t}")[0][0] for t in tables}
+                  "listing_draft", "usage_event", "handoff", "lead")
+        result = {t: self.query(f"SELECT count(*) FROM {t}")[0][0] for t in tables}
+        result["stt_usage"] = self.query(
+            "SELECT count(*) FROM usage_event WHERE operation='stt'")[0][0]
+        return result
 
     def property_fingerprint(self):
         return self.query("SELECT count(*), COALESCE(sum(version), 0), "
@@ -570,7 +614,7 @@ def asked_question(payloads):
               for words in render.TEXT.values()
               if words.get(key) and _fragments_in(words[key], said)]
     buttons = [i for p in payloads for i in row_ids(p)
-               if i.startswith(("clarify:", "echo:"))]
+               if i.startswith(("clarify:", "echo:", "handoff:"))]
     return sorted(set(found)), buttons
 
 
@@ -720,7 +764,10 @@ def score_text_turn(item, payloads, slots, before, after, shown, location_keys, 
         e2e["product_stub"] = TEMPLATES["handoff_unavailable"] in said
         if e2e["product_stub"]:
             e2e["blocked_by"] = BLOCKED["handoff"]
-        ok = not e2e["product_stub"] and bool(asked or buttons)
+        opened = after.get("handoff", 0) > before.get("handoff", 0)
+        e2e["handoff_opened"] = opened
+        ok = not e2e["product_stub"] and (bool(asked or buttons) if gold.get("ask_property", True)
+                                         else opened and answered)
     else:
         ok = False
     return {"extraction": extraction,
@@ -731,6 +778,9 @@ def score_text_turn(item, payloads, slots, before, after, shown, location_keys, 
 
 def run_text(ctx, items):
     out, ordinal = [], 0
+    voice_mode = ctx.args.set == "voice"
+    if voice_mode:
+        items = voice_case_items(items)
     by_id = {i["id"]: i for i in items}
     for group in text_groups(items):
         if ctx.stopped():
@@ -755,7 +805,11 @@ def run_text(ctx, items):
                 if quoted:
                     record["quote"] = {"listing": quoted, "card_found": wamid is not None}
                 before, runs_before = env.counts(), set(_search_runs(env))
-                payloads, latency = env.run_turn(env.text(sender, item["input"], wamid))
+                if voice_mode and item_id.startswith("CV-"):
+                    payloads, latency = env.run_turn(env.voice(
+                        sender, (Path(ctx.args.audio_dir) / f"{item_id}.ogg").read_bytes()))
+                else:
+                    payloads, latency = env.run_turn(env.text(sender, item["input"], wamid))
                 after = env.counts()
                 slots = _slots(env, sender)
                 new_runs = [r for r in _search_runs(env) if r not in runs_before]
@@ -772,6 +826,8 @@ def run_text(ctx, items):
                 record.update(score_text_turn(item, payloads, slots, before, after, shown,
                                               env.location_keys, statuses, photos))
                 record.update(ctx.finish(env, latency, payloads, before, after))
+                if voice_mode and item_id.startswith("CV-"):
+                    record.update(voice_result(env, item, ctx))
                 if context_shown is not None:
                     # the order matters only to an item that names a position
                     same = (prior == context_shown if _position(item)
@@ -780,7 +836,26 @@ def run_text(ctx, items):
                                          "order_checked": bool(_position(item)),
                                          "as_designed": same}
                 out.append(record)
+    if voice_mode:
+        ctx.setup_records = [r for r in out if not r["id"].startswith("CV-")]
+        return [r for r in out if r["id"].startswith("CV-")]
     return out
+
+
+def voice_case_items(items):
+    """Voice CV-29 needs its documented CT-29 conversation, including its ancestors.
+    These are actual setup model turns, budgeted but excluded from voice quality rates.
+    """
+    available = {i["id"]: i for i in load_set("text")}
+    required = set()
+    def require(item):
+        after = (item.get("context") or {}).get("after")
+        if after in available and after not in required:
+            required.add(after)
+            require(available[after])
+    for item in items:
+        require(item)
+    return [i for i in available.values() if i["id"] in required] + list(items)
 
 
 def _position(item):
@@ -1017,7 +1092,8 @@ class RunContext:
     def env(self, speech=None, media=0):
         return environment(self.args.database_url, self.provider, primary=self.args.primary,
                            failover=self.args.failover, thinking_level=self.args.thinking_level,
-                           speech=speech, media=media)
+                           speech=speech, media=media,
+                           speech_factory=getattr(self, "speech_factory", None))
 
     def stopped(self):
         guard = self.provider.guard
@@ -1030,6 +1106,8 @@ class RunContext:
     def begin(self, item, *, group, turn):
         self.provider.where = {"item": item["id"], "turn": turn}
         self._first = len(self.provider.attempts)
+        self._budget_start = {id(client): len(client.request_ids)
+                              for client in getattr(self, "budget_clients", [])}
         return {"id": item["id"], "status": "ran", "gold_type": item["expected_outcome"]["type"],
                 "category": item.get("category"), "language": item.get("language"),
                 "group": group, "turn_in_group": turn, **gold_flags(item), **_scope_fields(item),
@@ -1040,12 +1118,26 @@ class RunContext:
         tools = sorted({t for a in attempts for t in a.get("tool_calls", [])})
         metered = after["usage_event"] - before["usage_event"]
         sent = sum(a["outcome"] != "not_sent" for a in attempts)
+        stt_rows = after.get("stt_usage", 0) - before.get("stt_usage", 0)
         result = {"latency_ms": latency, "attempts": attempts, "tools": tools,
                   "provider_requests": sent, "usage_rows": metered,
                   # the engine also meters a refused (cap) attempt as a failed call
-                  "metering_consistent": metered == len(attempts),
+                  "metering_consistent": metered == len(attempts) + stt_rows,
                   "reply": texts_of(payloads), "payload_types": [p.get("type") for p in payloads]}
-        if self.stopped() and any(a["outcome"] == "not_sent" for a in attempts):
+        if isinstance(self.provider.guard, LedgerGuard):
+            result["budget_request_ids"] = [rid for client in self.budget_clients
+                for rid in client.request_ids[self._budget_start[id(client)]:]]
+            keys = ("provider", "model", "operation", "input_tokens", "output_tokens",
+                    "cached_input_tokens", "thinking_tokens", "audio_seconds", "outcome")
+            rows = env.query("SELECT provider,model,operation,input_tokens,output_tokens,"
+                "cached_input_tokens,thinking_tokens,audio_seconds,outcome FROM usage_event "
+                "ORDER BY created_at,id OFFSET %s", (before["usage_event"],))
+            result["metering"] = [dict(zip(keys, row, strict=True)) for row in rows]
+            for event in result["metering"]:
+                if event["audio_seconds"] is not None:
+                    event["audio_seconds"] = str(event["audio_seconds"])
+        if self.stopped() and (isinstance(self.provider.guard, LedgerGuard)
+                               or any(a["outcome"] == "not_sent" for a in attempts)):
             result["status"] = "stopped_by_cap"
         return result
 
@@ -1061,6 +1153,122 @@ def score_tools(records):
             r["tools_ok"] = set(r["tools"]) == set(r["expected_tools"])
 
 
+class LedgerGuard:
+    """Compatibility facade; the transport reserves currency in the durable ledger."""
+    def __init__(self, ledger, max_calls):
+        self.ledger, self.max_calls = ledger, max_calls
+        self.calls, self.stopped = 0, None
+
+    @property
+    def stopped(self):
+        return self._stopped or self.ledger.stopped
+
+    @stopped.setter
+    def stopped(self, value):
+        self._stopped = value
+
+    def reserve(self):
+        if self.stopped or self.calls >= self.max_calls:
+            self.stopped = self.stopped or "max_calls"
+            raise SpendCapReached(self.stopped)
+        self.calls += 1
+        return Decimal(0)
+
+    def settle(self, size, model, usage):
+        return None  # transport records all LLM AND STT requests in one ledger
+
+    def summary(self):
+        return {**self.ledger.summary(), "local_calls": self.calls, "stopped": self.stopped,
+                "currency_guaranteed": False,
+                "boundary": "shared bench clients only; estimates, not an account invoice"}
+
+
+def day13_guard(args, environ):
+    from app import day13_bench
+    from app.bench_budget import Ledger, load_policy
+    required = (args.confirm_live, args.max_calls and args.max_calls > 0,
+                args.budget_ledger, args.day13_policy, args.freeze, args.primary,
+                args.failover, environ.get("GEMINI_API_KEY"), args.commit != "unknown")
+    if not all(required):
+        raise BenchError("Day13 needs confirmation, max calls, ledger, policy, freeze, models, key, commit")
+    try:
+        policy = load_policy(args.day13_policy)
+        freeze = day13_bench.check_freeze(args.freeze)
+        if policy.get("gold_sha256") != day13_bench.file_hash(args.freeze):
+            raise ValueError("policy is not bound to this reviewed freeze")
+        if any(m not in policy["models"] for m in (args.primary, args.failover)):
+            raise ValueError("all runtime models need verified bounded prices")
+        if args.set in ("voice", "controls"):
+            day13_bench.recordings(args.manifest, args.audio_dir, args.verified_gold, freeze)
+            if not policy.get("scribe") or not environ.get("ELEVENLABS_API_KEY") \
+                    or args.stt_fallback not in policy["models"]:
+                raise ValueError("fresh speech needs Scribe key/rates and a priced STT fallback")
+        return LedgerGuard(Ledger(args.budget_ledger, policy), args.max_calls)
+    except (ValueError, OSError, KeyError, stt_bench.BenchError) as exc:
+        raise BenchError(f"Day13 preflight refused: {exc}") from None
+
+
+def prepare_voice(ctx, environ, fallback):
+    from app import day13_bench, speech, stt
+    from app.bench_budget import BoundedScribe
+    freeze = day13_bench.check_freeze(ctx.args.freeze)
+    ctx.recording_check, ctx.voice_gold = day13_bench.recordings(
+        ctx.args.manifest, ctx.args.audio_dir, ctx.args.verified_gold, freeze)
+    primary = BoundedScribe(stt.ScribeClient(environ["ELEVENLABS_API_KEY"]),
+                           ledger=ctx.provider.guard.ledger, phase=ctx.args.phase)
+    ctx.speech_factory = lambda storage: speech.SpeechService(
+        primary, storage, fallback=fallback, fallback_model=ctx.args.stt_fallback,
+        thinking_level=ctx.args.thinking_level)
+    ctx.budget_clients.append(primary)
+    ctx.clients.append(primary)
+
+
+def voice_result(env, item, ctx):
+    from app import demo_dataset, location
+    rows = env.query("SELECT transcript,stt_meta FROM message WHERE message_type='audio' "
+                     "ORDER BY created_at DESC LIMIT 1")
+    text, meta = rows[0] if rows else (None, {})
+    meta = meta or {}
+    gold = ctx.voice_gold[item["id"]]
+    # No transcript/model prose is exported; the private verified gold stays private.
+    # Scorer gazetteer is the seed's offline index, independent of the model's slots.
+    from app.stt_bench import judge_item
+    cache = location.Gazetteer.from_dataset(demo_dataset.load())
+    slots, exact, _, reason = judge_item(text or "", gold.extraction, cache,
+                                       accepted=meta.get("status") in ("transcribed", "truncated"))
+    row = ctx.recording_check.rows[item["id"]]
+    return {"fresh_stt": True, "audio_sha256": row.sha256, "noise": row.noise,
+            "duration_ms": row.duration_ms, "sla_eligible": row.duration_ms <= 30_000,
+            "stt": {"status": meta.get("status"), "speech_ms": meta.get("speech_ms"),
+                    "exact": exact, "reason": reason, "slots": slots,
+                    "usable": meta.get("status") in ("transcribed", "truncated")}}
+
+
+def run_fresh_controls(ctx, items):
+    """Fresh provider calls through production SpeechService, never cached STT replay."""
+    out = []
+    for n, item in enumerate(items, 1):
+        if ctx.stopped():
+            out.append(ctx.not_run(item, "stopped_by_cap"))
+            continue
+        with ctx.env() as env:
+            record = ctx.begin(item, group=[item["id"]], turn=1)
+            before = env.counts()
+            sender = f"{CUSTOMER_PREFIX}9{n:03d}"
+            payloads, latency = env.run_turn(env.voice(
+                sender, (Path(ctx.args.audio_dir) / f"{item['id']}.ogg").read_bytes()))
+            after = env.counts()
+            zero = (not _slots(env, sender) and after["requirement_patch_log"]
+                    == before["requirement_patch_log"] and after["search_run"] == before["search_run"])
+            record.update(ctx.finish(env, latency, payloads, before, after))
+            record.update(fresh_stt=True, zero_requirements=zero,
+                          verdict="PASS" if zero and not ctx.stopped() else "FAIL")
+            if ctx.stopped():
+                record["status"] = "stopped_by_cap"
+            out.append(record)
+    return out
+
+
 # --- identity, plan, CLI ----------------------------------------------------------------------
 
 def text_sha256(path):
@@ -1071,12 +1279,9 @@ def text_sha256(path):
 
 def identity(args, mode, provider_name, guard):
     files = {name: text_sha256(benchmark.BENCH_DIR / name)
-             for name in ("customer_text.json", "scope_conversations.json", "staff.json",
-                          "staff_spans.json", "voice_controls.json")}
-    sources = {name: text_sha256(Path(__file__).resolve().parent / name)
-        for name in ("bench_live.py", "turn_engine.py", "ai_tools.py", "customer_tools.py",
-                     "requirements.py", "search.py", "staff_tools.py", "staff_normalise.py",
-                     "speech.py", "llm.py")}
+             for name in IDENTITY_FILES}
+    sources = {path.name: text_sha256(path)
+               for path in sorted(Path(__file__).resolve().parent.glob("*.py"))}
     from app import turn_engine
     return {"schema": SCHEMA, "task": TASK, "run_id": uuid.uuid4().hex, "mode": mode,
             "set": args.set, "commit": args.commit, "commit_source": args.commit_source,
@@ -1103,6 +1308,9 @@ def load_set(name):
     if name == "scope":
         text = json.loads((benchmark.BENCH_DIR / "customer_text.json").read_text("utf-8"))
         return benchmark.scope_items(benchmark.load_scope(), text)
+    if name == "voice":
+        return [{**i, "input": i["script"]} for i in json.loads(
+            (benchmark.BENCH_DIR / "customer_voice.json").read_text("utf-8"))]
     if name == "staff":
         return json.loads((benchmark.BENCH_DIR / "staff.json").read_text("utf-8"))
     return json.loads((benchmark.BENCH_DIR / "voice_controls.json").read_text("utf-8"))
@@ -1111,14 +1319,18 @@ def load_set(name):
 def plan(name):
     items = load_set(name)
     turns = len(items)
-    groups = (text_groups(items) if name in ("text", "scope")
+    if name == "voice":
+        items = voice_case_items(items)
+    groups = (text_groups(items) if name in ("text", "voice", "scope")
               else [[i["id"]] for i in items])
-    calls = {k: v * turns for k, v in CALLS_PER_TURN.items()}
+    calls = {k: v * len(items) for k, v in CALLS_PER_TURN.items()}
     if name == "controls":
         calls["min"] = 0  # a note the speech checks reject never reaches the model
-    return {"set": name, "items": turns, "case_groups": len(groups),
+    return {"set": name, "items": turns, "setup_turns": len(items) - turns,
+            "case_groups": len(groups),
             "groups": [g for g in groups if len(g) > 1], "turns": turns,
             "requests_per_repeat": calls,
+            "additional_lead_summary_requests_max": 2 * len(items),
             "note": "requests per repeat: min / typical / max from the turn engine bounds; "
                     "R16 4.4 asks for 3 repeats of the LLM steps"}
 
@@ -1155,7 +1367,7 @@ def scope_summary(records):
 
 
 def summarise(name, records):
-    if name == "text":
+    if name in ("text", "voice"):
         return text_summary(records)
     if name == "scope":
         return scope_summary(records)
@@ -1214,6 +1426,17 @@ def coverage(set_ids, requested, filtered, records):
 
 
 def execute(args, environ, transport=None):
+    clients = []
+    try:
+        return _execute(args, environ, transport, clients)
+    finally:
+        for client in reversed(clients):
+            close = getattr(client, "close", None)
+            if close:
+                close()
+
+
+def _execute(args, environ, transport, clients):
     """transport: an httpx transport for the Gemini client (tests only)."""
     everything = load_set(args.set)
     items, requested, filtered = select_items(everything, args.only)
@@ -1221,31 +1444,50 @@ def execute(args, environ, transport=None):
     guard = scripted = None
     if args.mode == "live":
         guard = live_guard(args, environ)
-        client = llm.GeminiClient(environ["GEMINI_API_KEY"], transport=transport)
+        if isinstance(guard, LedgerGuard):
+            from app.bench_budget import BoundedGemini
+            client = BoundedGemini(environ["GEMINI_API_KEY"], ledger=guard.ledger,
+                                   phase=args.phase, transport=transport)
+        else:
+            client = llm.GeminiClient(environ["GEMINI_API_KEY"], transport=transport)
         provider_name = "gemini"
     else:
         scripted = client = ScriptedClient()
         provider_name = "scripted-dry-run"
     provider = MeteredProvider(client, guard)
+    clients.append(client)
     ctx = RunContext(args, provider, scripted, live=args.mode == "live")
+    ctx.clients = clients
+    ctx.budget_clients = [client] if isinstance(guard, LedgerGuard) else []
+    if args.set == "voice":
+        if args.mode != "live" or not isinstance(guard, LedgerGuard):
+            raise BenchError("fresh voice requires live mode and the shared Day13 budget")
+        prepare_voice(ctx, environ, client)
+    elif args.set == "controls" and isinstance(guard, LedgerGuard):
+        prepare_voice(ctx, environ, client)
     ctx.media = MEDIA_FIXTURE_PHOTOS if args.set == "scope" else 0
     run_identity = identity(args, args.mode, provider_name, guard)
+    if isinstance(guard, LedgerGuard):
+        run_identity["day13"] = {"freeze_sha256": guard.ledger.policy["gold_sha256"],
+            "policy_sha256": guard.ledger.policy_hash, "phase": args.phase,
+            "speech": args.stt_fallback, "fresh_stt": args.set in ("voice", "controls")}
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     repeats = []
     for repeat in range(1, args.repeats + 1):
-        if args.set in ("text", "scope"):
+        if args.set in ("text", "voice", "scope"):
             records = run_text(ctx, items)
         elif args.set == "staff":
             spans = json.loads((benchmark.BENCH_DIR / staff_bench.SPANS_FILE).read_text("utf-8"))
             records = run_staff(ctx, items, spans)
         else:
-            records = run_controls(ctx, items, load_transcripts(args.stt_run)
-                                   if args.stt_run else {}, args.audio_dir)
+            records = (run_fresh_controls(ctx, items) if isinstance(guard, LedgerGuard)
+                       else run_controls(ctx, items, load_transcripts(args.stt_run)
+                                         if args.stt_run else {}, args.audio_dir))
         score_tools(records)
         repeats.append({"repeat": repeat, "summary": summarise(args.set, records),
                         "coverage": coverage(set_ids, requested, filtered, records),
-                        "items": records})
+                        "items": records, "setup": getattr(ctx, "setup_records", [])})
         stt_bench.write_json_atomic(out_dir / "result.json", {
             "identity": run_identity, "banner": banner(args.mode), "status": "in_progress",
             "repeats_planned": args.repeats, "repeats": repeats,
@@ -1284,6 +1526,8 @@ def banner(mode):
 
 
 def live_guard(args, environ):
+    if getattr(args, "budget_ledger", None) or getattr(args, "day13_policy", None):
+        return day13_guard(args, environ)
     missing = [name for name, value in (
         ("--confirm-live", args.confirm_live), ("--max-calls", args.max_calls),
         ("--spend-cap-usd", args.spend_cap_usd), ("--prices-file", args.prices_file),
@@ -1323,6 +1567,13 @@ def main(argv=None, environ=None, out=None, transport=None):
     parser.add_argument("--prices-file")
     parser.add_argument("--stt-run", help="controls: a stt_bench run directory")
     parser.add_argument("--audio-dir", help="controls: private <item_id>.ogg recordings")
+    parser.add_argument("--manifest", help="Day13: real webhook recording manifest")
+    parser.add_argument("--verified-gold", help="Day13: human verified audio-bound gold")
+    parser.add_argument("--freeze", help="Day13: reviewed gold and threshold freeze")
+    parser.add_argument("--day13-policy", help="Day13: verified prices and bounded requests")
+    parser.add_argument("--budget-ledger", help="Day13: one shared SQLite ledger for ALL runs")
+    parser.add_argument("--phase", choices=("tuning", "formal", "retry"), default="tuning")
+    parser.add_argument("--stt-fallback", help="Day13: verified runtime STT fallback model ID")
     parser.add_argument("--commit", default=environ.get("BENCH_GIT_COMMIT"),
                         help="the commit the run is made from, when git cannot tell (a worktree "
                              "mounted into a container); checked against git when both exist")

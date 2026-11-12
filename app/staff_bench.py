@@ -8,8 +8,8 @@ What this measures: the backend rules (span checks, normalisers, resolver, confl
 duplicates, codes, candidate matching, update checks) over the demo dataset, in memory.
 What it does NOT measure: any model. The spans are written by a person from the inputs, so a
 score here says nothing about live Gemini accuracy; a live run is a separate, owner-approved
-step and its results must carry mode "live" (refused here). The ST-01 duplicate gold is
-reported on its own, as a known disagreement, and the gold file is never touched.
+step and its results must carry mode "live" (refused here). Day13's owner-approved
+ST-01 gold now follows the RFC duplicate rule; its workflow check is fully scored.
 
 Critical fields (docs/STAFF_EXTRACTION.md section 10): a draft item is exact when purpose,
 property type, location, size (value, unit and nominal bucket when the gold has one), price
@@ -35,12 +35,9 @@ MODE = "fixture"
 BANNER = ("FIXTURE RUN - spans were written by hand from the inputs. This measures the backend "
           "rules only; it is NOT a model benchmark and says nothing about live Gemini accuracy.")
 # Gold values this code disagrees with on purpose; reported, never hidden or tuned away.
-KNOWN_GOLD_DISAGREEMENTS = {
-    ("ST-01", "duplicate_of"): (
-        "DH6-101 (7.8 crore, 4 bed / 5 bath, 500 yd, same phase) and the reserved DH6-106 are "
-        "closer to ST-01 than BTK-101 is to ST-02, which the gold does flag; the RFC rule "
-        "(same location + size + price within tolerance) flags both. Owner question Q1."),
-}
+# Owner approved the RFC duplicate rule before Day13 paid runs (2026-11-10).
+# ST-01 now expects DH6-101/DH6-106 as non-blocking warnings in the gold.
+KNOWN_GOLD_DISAGREEMENTS = {}
 MISSING_NAMES = {"location": "location_key"}
 
 

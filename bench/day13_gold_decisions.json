@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "decided_by": "owner",
+  "decided_on": "2026-11-10",
+  "before_paid_runs": true,
+  "decisions": [
+    {
+      "item": "SC-18",
+      "prior_behavior": "Gold no_match marked unresolved pending a Clifton graph decision",
+      "approved_behavior": "Use the current approved neighbour graph; expect no_match; add no Clifton neighbours",
+      "reason": "Freeze benchmark behavior against current approved fixtures before any paid results",
+      "evidence": "Owner accepted current graph and RFC duplicate rule in Day13 implementation conversation; demo/location_neighbors.csv; docs/BENCH_LIVE.md section 4"
+    },
+    {
+      "item": "ST-01",
+      "prior_behavior": "Gold duplicate_of=[]; duplicate workflow check unscored",
+      "approved_behavior": "duplicate_of=[DH6-101,DH6-106]; non-blocking warning; save_allowed remains true",
+      "reason": "Apply documented RFC location/size/price-tolerance duplicate rule consistently with ST-02",
+      "evidence": "Owner accepted current graph and RFC duplicate rule in Day13 implementation conversation; docs/STAFF_EXTRACTION.md sections 1 and 4.4"
+    },
+    {
+      "item": "CV-30",
+      "decided_by": "source reconciliation under approved implementation plan",
+      "prior_behavior": "Legacy gold request_handoff.reason=agent_request is invalid under the existing tool schema",
+      "approved_behavior": "Use reason=agent for the same explicit agent-request intent",
+      "reason": "Conform to the already-approved production enum; do not change intent or product policy",
+      "evidence": "app/ai_tools.py request_handoff.parameters; caught by the fresh mocked-provider worker regression before paid runs"
+    }
+  ]
+}

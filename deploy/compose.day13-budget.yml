@@ -1,0 +1,19 @@
+# Opt-in only: combine with compose.yml after verified pricing and a tested image.
+# Both services MUST bind the same host directory; never fork a live ledger.
+x-day13-budget: &day13-budget
+  environment:
+    DAY13_BUDGET_POLICY: /day13/prices.json
+    DAY13_BUDGET_LEDGER: /day13/budget.sqlite
+    DAY13_BUDGET_PHASE: ${DAY13_BUDGET_PHASE:?set tuning, formal or retry}
+    DAY13_BUDGET_COLLECTION: ${DAY13_BUDGET_COLLECTION:-false}
+    DAY13_GOLD_FREEZE: /day13/freeze.json
+  volumes:
+    - type: bind
+      source: ${DAY13_BUDGET_DIR:?set one shared absolute host directory}
+      target: /day13
+
+services:
+  web:
+    <<: *day13-budget
+  worker:
+    <<: *day13-budget

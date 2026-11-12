@@ -1042,8 +1042,12 @@ def build_engine(settings, requirements=None):
     update_requirements tool keeps its 6.1 stub body)."""
     if getattr(settings, "ai_provider", "stub") != "gemini":
         return None
+    from app.bench_budget import BoundedGemini, runtime_budget
+    budget = runtime_budget(settings)
+    provider = (BoundedGemini(settings.gemini_api_key, ledger=budget[0], phase=budget[1])
+                if budget else GeminiClient(settings.gemini_api_key))
     return TurnEngine(
-        GeminiClient(settings.gemini_api_key),
+        provider,
         settings.llm_primary_model, settings.llm_failover_model,
         thinking_level=getattr(settings, "llm_thinking_level", llm.DEFAULT_THINKING_LEVEL),
         requirements=requirements,
