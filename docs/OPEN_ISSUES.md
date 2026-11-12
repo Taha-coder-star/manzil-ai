@@ -1,3 +1,15 @@
+2026-11-12 DAY13 RESUMED: CANDIDATE FIX DOES NOT CLOSE ACCEPTANCE GAPS.
+Owner now prioritizes Day13 completion. Conservative terminal-search optimization
+and benchmark cost-unknown fix validated locally. Full run retained4076pass/42skip/
+7harness/setup failures; corrected recheck185PASS covers all failures, with lint
+PASS. See ../output/day13-completion-validation.json for the exact candidate.
+Docs/DAY13_SEARCH_COMPLETION.md describes the boundary. Current deployment has not
+changed. Text target remains unmet on saved low/minimal cohorts; candidate requires
+fresh measurements. Current voice, cache evidence, complete cost and formal Run2
+coverage remain open. Existing accepted functional evidence is retained by source
+build/date. GitHub network unavailable in this session; publication/CI/live steps
+need the owner-run path. No new safety failure or waiver is asserted by this note.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.

@@ -53,7 +53,8 @@ def test_text_dry_run_scores_a_result_and_a_clarification_end_to_end(test_databa
     assert scenario["end_to_end"]["ok"] and scenario["critical_exact"]
     assert scenario["end_to_end"]["shown"] and not scenario["end_to_end"]["hidden_shown"]
     assert scenario["tools"] == ["search_properties", "update_requirements"]
-    assert scenario["metering_consistent"] and scenario["provider_requests"] == 2
+    # Gold supplies update+search in one round; no redundant STOP round is needed.
+    assert scenario["metering_consistent"] and scenario["provider_requests"] == 1
     assert scenario["latency_ms"] is not None
     block6 = records["CT-25"]
     assert block6["end_to_end"]["ok"] and not block6["end_to_end"]["searched"]

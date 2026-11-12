@@ -1,3 +1,19 @@
+2026-11-12 DAY13 RESUMED: SEARCH COMPLETION AND COST-UNKNOWN FIX.
+Owner asks to complete Day13. Added conservative search-only completion after real
+rendered results, retaining continuation for compound/unknown/error/clarification
+paths. Existing send-time grounding/control gates are unchanged. Fixed benchmark
+call_cost to require all four valid token counts; missing does not mean zero.
+Initial focused217pass/1skip; lint PASS. Full4125cases:4076pass/42skip/7failures
+from obsolete request count, unused scripted STOP responses and missing local CI
+role name. Corrected recheck185PASS covers all seven failures, customer/search
+holds, full webhook replay and role denial. No application/security assertion
+was weakened; original full-run failures retained. No provider/runtime changes.
+Source baseline7b044b3; candidate branch feature/day13-search-completion. Local
+disposable PostgreSQL is loopback55478/manzil_schema_test, never a project.env URL.
+Network GitHub probe failed; publication helper prepared, commit/receipt pinned
+locally at session completion. No new GitHub CI, merge or deployment is claimed.
+Day13 OPEN until measured/coverage gates or explicit concrete owner exceptions.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.

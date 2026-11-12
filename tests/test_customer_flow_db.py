@@ -52,12 +52,15 @@ def turn(st, body, *calls, sender=CUSTOMER_B, context=None):
     before = len(st.client.sent)
     for n, (name, args) in enumerate(calls):
         st.script.append(tools_answer(tool(name, args, call_id=f"call-{n}")))
-    st.script.append(answer())
+    stop = answer()
+    st.script.append(stop)
     message = text(body, sender=sender)
     if context:
         message["context"] = {"id": context}
     st.deliver(message)
     st.drain()
+    if st.script and st.script[0] is stop:
+        st.script.pop(0)  # All scripted tools ran; a completed search needs no STOP round.
     return [payload for _, payload in st.client.sent[before:]]
 
 
@@ -126,6 +129,28 @@ def test_scenario_1_sends_no_note_the_results_line_already_says(st):
     assert sent_text(payloads[:1]).startswith("Here are offices for rent in Karachi")
     assert TEMPLATES["requirements_saved"] not in sent_text(payloads)
     assert TEMPLATES_EN["requirements_saved"] not in sent_text(payloads)
+
+
+def test_plain_search_finishes_after_two_calls_through_worker_and_gateway(st):
+    st.script += [tools_answer(tool("update_requirements", {"patch": SCENARIO_1_PATCH})),
+                  tools_answer(tool("search_properties"))]
+    st.deliver(text("office on rent in Karachi, around 5 lakh per month", sender=CUSTOMER_A))
+    st.drain()
+    assert len(st.requests) == 2 and st.script == []
+    assert set(latest_shown(st, CUSTOMER_A)) == {"DH6-108", "PEC-101", "SHF-101"}
+    assert "Here are offices for rent in Karachi" in sent_text([p for _, p in st.client.sent])
+    assert st.query("SELECT count(*) FROM usage_event WHERE operation='L1'") == [(2,)]
+    assert st.query("SELECT status FROM conversation_turn") == [("replied",)]
+
+
+def test_search_with_another_requested_action_still_continues_through_worker(st):
+    st.script += [tools_answer(tool("update_requirements", {"patch": SCENARIO_1_PATCH})),
+                  tools_answer(tool("search_properties")), answer()]
+    st.deliver(text("office on rent in Karachi, around 5 lakh per month and send photos",
+                    sender=CUSTOMER_A))
+    st.drain()
+    assert len(st.requests) == 3 and st.script == []
+    assert set(latest_shown(st, CUSTOMER_A)) == {"DH6-108", "PEC-101", "SHF-101"}
 
 
 def test_misbucketed_location_can_be_repaired_without_false_unknown_place_reply(st):
