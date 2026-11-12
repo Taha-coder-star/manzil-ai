@@ -30,8 +30,12 @@ both_on() {   # both services' containers run image id $1
   done
 }
 
-alive() {     # the public routes answer
-  $CURL -fsS "https://$SITE/health" >/dev/null || return 1
+# /health (database + bucket) is not public (Caddy answers 404, audit MA-014): checked inside web.
+HEALTH_PY='import sys, urllib.request; sys.exit(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=10).status != 200)'
+
+alive() {     # health inside web; the public routes answer
+  compose exec -T web python -c "$HEALTH_PY" </dev/null >/dev/null 2>&1 || return 1
+  $CURL -fsS "https://$SITE/live" >/dev/null || return 1
   [[ "$($CURL -s -o /dev/null -w '%{http_code}' -X POST "https://$SITE/webhook" -d '{}')" == 401 ]]
 }
 

@@ -16,6 +16,9 @@ services:
     command: ["worker"]
     env_file: ../.env
     restart: unless-stopped
+    # SIGTERM stops new claims; running turns (up to ~50 s of provider time) finish
+    # instead of being killed after Docker's default 10 s (audit MA-011).
+    stop_grace_period: 90s
 
   caddy:
     image: caddy:2

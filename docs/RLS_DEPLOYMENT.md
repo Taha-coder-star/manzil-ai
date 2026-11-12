@@ -99,8 +99,10 @@ selective browser-terminal transfer workflow. Do not merge without separate appr
    PY
    ```
 
-8. Check the public /health endpoint returns HTTP 200 and both database/bucket checks
-   are ok. Confirm both containers remain running. A healthy SELECT 1 alone does not
+8. Check /health returns HTTP 200 and both database/bucket checks are ok. Since audit
+   WP2 (MA-014) /health is answered only inside the web container (`docker compose ...
+   exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10).read().decode())"`);
+   the public URL answers 404. Confirm both containers remain running. A healthy SELECT 1 alone does not
    prove restricted credentials; retain the identity verification result too.
 
 If the switch fails, retain diagnostics containing exception types only, stop further

@@ -1,3 +1,13 @@
+2026-11-13 AUDIT WP2 ROLLOUT NOTE: PUBLIC /health BECOMES 404.
+WP2 (branch fix/wp2-ops-quick-wins, uncommitted, stacked on WP1 9dc3fa8) changes
+deploy/Caddyfile (/health answers 404 publicly) and deploy/compose.yml (worker
+stop_grace_period 90s). Health is now checked inside web (docs/RELEASE_10_2.md s8);
+public liveness is /live. Any external monitor on /health must move to /live.
+Release kits built before WP2 still curl public /health in fresh_search_switch.sh
+and would roll back: rebuild the kit from a branch with WP2. Owner steps, hashes
+and rollback: output/claude-remediation/WP2_IMPLEMENTATION_REPORT.md section 6.
+Env split per container is a proposal only (docs/release/ENV_SPLIT.md). Not deployed.
+
 2026-11-12 AUDIT WP1 ROLLOUT NOTE: HANDOFFS ALREADY PENDING ARE NOT HEALED.
 WP1 (branch fix/wp1-customer-reliability, uncommitted) makes round 2 of the accept
 timer release an unaccepted lead (MA-001). Handoffs pending in production whose

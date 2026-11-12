@@ -38,7 +38,8 @@ aws ec2 describe-instances --instance-ids $EC2_ID --region $REGION --query 'Rese
 # on the instance:
 cd /home/ubuntu/manzil-ai && docker compose -f deploy/compose.yml --env-file .env up -d web worker caddy
 docker compose -f deploy/compose.yml --env-file .env ps
-curl -fsS https://<SITE_ADDRESS>/health
+docker compose -f deploy/compose.yml --env-file .env exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10).read().decode())"   # health is internal only (audit MA-014)
+curl -fsS https://<SITE_ADDRESS>/live
 curl -s -o /dev/null -w '%{http_code}\n' -X POST https://<SITE_ADDRESS>/webhook -d '{}'      # 401 = the route is alive
 ```
 

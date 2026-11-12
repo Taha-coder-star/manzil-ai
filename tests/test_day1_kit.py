@@ -1,13 +1,16 @@
 """Packaging gates: unmerged refs and unsupported layers cannot produce a kit."""
 import hashlib
 import importlib.util
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
 
 import pytest
 
-SPEC = importlib.util.spec_from_file_location(
+pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="needs git (absent from the test image)")
+
+SPEC =importlib.util.spec_from_file_location(
     "day1_kit", Path(__file__).resolve().parents[1] / "docs/release/build_day1_kit.py")
 kit = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(kit)

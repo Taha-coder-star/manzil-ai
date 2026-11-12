@@ -9,6 +9,7 @@ nothing is written to `property` (Save, commit and code allocation are 9.2).
 # ruff: noqa: F811  (tests take the imported inv fixture as a parameter)
 
 import hashlib
+import shutil
 import subprocess
 import threading
 import uuid
@@ -105,6 +106,7 @@ def property_count(conn, tenant):
 
 # --- the migration ------------------------------------------------------------------------
 
+@pytest.mark.skipif(shutil.which("git") is None, reason="needs git (absent from the test image)")
 def test_applied_migrations_are_byte_identical_and_016_follows_015():
     for name, digest in APPLIED.items():
         # Applied integrity is checked against committed bytes. Windows can check
