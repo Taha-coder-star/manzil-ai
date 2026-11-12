@@ -251,7 +251,10 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         handoff_alert.alert(conn, job, client_factory, engine, place_names())
 
     def accept_timeout(conn, job):
-        handoff_alert.accept_timeout(conn, job, client_factory, place_names())
+        if int(job.payload.get("round", 1)) >= 2:   # audit MA-001: nobody accepted
+            handoff_actions.expire(conn, job, client_factory)
+        else:
+            handoff_alert.accept_timeout(conn, job, client_factory, place_names())
 
     def release(conn, job):
         handoff_actions.release(conn, job, client_factory)

@@ -1,3 +1,13 @@
+2026-11-12 AUDIT WP1 ROLLOUT NOTE: HANDOFFS ALREADY PENDING ARE NOT HEALED.
+WP1 (branch fix/wp1-customer-reliability, uncommitted) makes round 2 of the accept
+timer release an unaccepted lead (MA-001). Handoffs pending in production whose
+round-2 job already ran under the old code stay pending: nothing re-schedules them.
+After a release, read-only, in each agency's tenant context:
+  SELECT l.code, h.requested_at FROM handoff h JOIN lead l ON l.id = h.lead_id
+  WHERE h.status = 'pending' AND h.accept_due_at < now() - interval '1 hour';
+Remedy with existing features: an admin taps Accept on the card, then #done L-nn.
+Timers fire only while the worker runs. Not deployed; no production access made.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.

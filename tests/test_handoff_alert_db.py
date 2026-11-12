@@ -171,10 +171,10 @@ def test_the_timeout_adds_the_admin_and_keeps_the_broker(st):
     assert to(st, BROKER_NUMBER, before) == []
     assert st.query("SELECT h.status, h.escalated_at IS NOT NULL, s.role FROM handoff h "
                     "JOIN staff s ON s.id = h.assigned_staff_id") == [("pending", True, "broker")]
-    # Round 2 is queued; when it runs it only logs.
-    before = len(st.client.sent)
+    # Round 2 is queued; when it runs nobody has accepted, so the lead is released to the
+    # AI (audit MA-001; tests/test_audit_regressions_db.py has the full checks).
     run_due(st, handoff.TIMEOUT_JOB)
-    assert st.client.sent[before:] == []
+    assert st.query("SELECT status FROM handoff") == [("released",)]
     assert st.query("SELECT count(*) FROM job WHERE job_type = %s AND status = 'succeeded'",
                     (handoff.TIMEOUT_JOB,)) == [(2,)]
 

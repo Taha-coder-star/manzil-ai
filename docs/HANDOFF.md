@@ -31,6 +31,7 @@ release), `app/outbound.py` (send-time gate), `app/orchestrator.py` (where each 
 | Accept (first tap wins) | `accepted`, release due +48 h | | `human_owned` / `human` | assigned broker or any admin |
 | Pass | `pending`, assigned -> admin, `escalated_at` | assigned -> admin | unchanged | assigned broker |
 | Accept timeout (round 1) | `escalated_at`; admins get the card | | unchanged | job |
+| Accept timeout (round 2, still pending; audit MA-001, owner BD-1 / BD-2) | `released`, `accepted_at` NULL | `closed` | `ai_active` / `ai` | job; customer and staff told |
 | Called | `called_at` (first) | | unchanged | assigned / accepter / admin |
 | Customer message while pending / accepted | release due +48 h (accepted) | | unchanged | forwarded |
 | `#done L-xx` | `completed` | `closed` | `ai_active` / `ai` | accepter or admin |
@@ -94,8 +95,24 @@ are forwarded. `closed` (R17) is not used.
   there is a handoff), in the agent's conversation (their window applies: a closed window records
   `outside_window` and the holding reply still goes). No model call, no search ("aur dikhao"
   included, R-28 c).
-- **Holding reply**: once per handoff ("Ahmed ko aapka message bhej diya hai; woh jald jawab
-  denge."), dedupe key `handoff:{id}:holding`, then `holding_reply_sent_at`.
+- **Holding reply**: once per handoff, dedupe key `handoff:{id}:holding`, then
+  `holding_reply_sent_at`. When at least one forward of that turn was `sent`: "Ahmed ko aapka
+  message bhej diya hai; woh jald jawab denge." Otherwise (closed window, refused, unknown) the
+  reply does not claim delivery (audit MA-005): "Aapka message mehfooz hai; Ahmed aapki request
+  ke sath yeh bhi dekhenge." (true: Accept shows the last 10 customer messages).
+- **No content**: a customer turn of only reactions, `unsupported` or `system` messages is closed
+  `replied` before the gate (audit MA-010): not answered, not forwarded, the holding reply not
+  used. A turn with any other message is handled as usual.
+- **Unaccepted lead** (audit MA-001): round 2 of the accept timer (2 x `HANDOFF_ACCEPT_MINUTES`)
+  releases a still-pending handoff (`released`, `accepted_at` NULL, lead `closed`,
+  `ai_active` / `ai`, one transaction under the handoff row lock), then sends, each at most once:
+  the customer "Main dobara aapki madad ke liye haazir hoon. Aapka reference L-01 hamare
+  consultant Ahmed ke paas hai; aap unse seedha bhi baat kar sakte hain." with the same "Chat with
+  Ahmed" CTA (`handoff:{id}:expired`); the assigned staff member (if active) and each active
+  admin "⏰ L-01 was not accepted within 30 min. The AI assistant is answering the customer
+  again." with the customer's chat link (`handoff:{id}:expired:{staff_id}`). A closed window
+  records `outside_window`; the release stands. A later Accept tap gets "L-01 is closed."; a new
+  request opens a new lead with fresh timers.
 - **Commands** (R-15): `#done L-07` (also `#done L-7`, or bare `#done` with one accepted lead),
   `#pass L-07`. Any other broker message -> the help reply with their open leads; never listing
   extraction, never a model call. Admin texts that are not commands keep the staff flow.
@@ -105,7 +122,7 @@ are forwarded. `closed` (R17) is not used.
 | Job | Dedupe key | When | Does |
 |---|---|---|---|
 | `handoff_alert` | `handoff-alert:{id}` | at once | summary + card / template |
-| `handoff_accept_timeout` | `handoff-timeout:{id}:1`, `:2` | +15 min each | round 1: admins get the card; round 2: log only. No-op unless pending |
+| `handoff_accept_timeout` | `handoff-timeout:{id}:1`, `:2` | +15 min each | round 1 (`handoff_alert.accept_timeout`): admins get the card; round 2 (`handoff_actions.expire`): released to the AI, customer and staff told. No-op unless pending (round 2 also re-sends after a retry: released with no accepter) |
 | `handoff_release` | `handoff-release:{id}:{due epoch}` | +48 h after Accept / each customer message | released if accepted and `release_due_at <= now()`; else no-op (a newer job exists) |
 
 No callback time is promised to the customer on escalation (R-29's "aaj 6 baje tak" is not
@@ -123,6 +140,10 @@ Customer: the handoff message and CTA, "Kaunsi property ke liye visit?" / "Sab",
 the holding reply (Roman Urdu + English). Staff (English): the card, Full details, the button
 replies, the commands' replies, the help, the release notice.
 
+Approved by the owner on 2026-11-12 (BD-4, audit remediation WP1): the customer's unsent holding
+reply (`holding_unsent`) and expiry message (`expired`) in `app/handoff.py`, and the staff expiry
+notice (`expired`) in `app/handoff_actions.py`.
+
 Layout (2026-10-16): the lead card and Full details have bold labels (👤 *Customer:*,
 🏠 *Wants:*, 📍 *Property:* as a `- ` list, 💬 *Last message:*), blank lines between sections, and
 Full details puts each message under its own italic time line. Forwards read "💬 *L-07* · +92…"
@@ -132,7 +153,13 @@ reference. The `new_lead_alert` template is unchanged (approved; parameters cann
 ## Limits
 
 - A forward to an agent whose window is closed is recorded, not delivered (no template for
-  forwards); the demo-day rule stands: the broker writes to the bot first (R-29).
+  forwards); the customer is told the message is saved, not that it was passed on. The demo-day
+  rule stands: the broker writes to the bot first (R-29).
+- An unaccepted lead ends after 2 x `HANDOFF_ACCEPT_MINUTES`, also outside office hours. Timers
+  run only while the worker runs. Handoffs already pending whose round-2 job ran before this
+  change stay pending (remedy: an admin taps Accept, then `#done L-xx`).
+- If the handoff has no assigned staff member, the expiry sends the customer no message (there is
+  no chat link to give); the conversation is still returned to the AI.
 - Low-confidence voice intent confirmation ([Haan] [Nahi] before a voice handoff) is not built;
   a voice handoff still confirms the property.
 - Outcome buttons (visit booked / not interested / deal) and reassignment history (R-32) are not

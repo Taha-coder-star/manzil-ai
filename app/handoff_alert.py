@@ -16,8 +16,8 @@ lead.summary), and the card goes to the assigned agent's own conversation:
 
 handoff_accept_timeout job (R-29, owner decision 2026-10-16): still pending after
 HANDOFF_ACCEPT_MINUTES -> the admins get the card too (escalated_at); the broker keeps it.
-While pending, the assigned agent or any active admin may Accept (step 4). A second
-timeout only logs: no callback time is promised to the customer.
+While pending, the assigned agent or any active admin may Accept (step 4). The second
+timeout releases the lead to the AI (audit MA-001: app.handoff_actions.expire).
 
 L3 (RFC 7.3): one structured call through the engine's provider, primary then failover,
 one usage_event per attempt (operation L3). The summary sees no phone number; it must pass
@@ -406,9 +406,10 @@ def escalate(conn, client, agency_id, packet, minutes):
 
 
 def accept_timeout(conn, job, client_factory, gazetteer=None):
-    """The handoff_accept_timeout job: round 1 escalates to the admins and starts round 2;
-    round 2 only logs. A handoff no longer pending makes it a no-op."""
-    handoff_id, round_ = job.payload["handoff_id"], int(job.payload.get("round", 1))
+    """The handoff_accept_timeout job, round 1: escalates to the admins and starts round 2
+    (app.handoff_actions.expire, dispatched by app.handlers). A handoff no longer pending
+    makes it a no-op."""
+    handoff_id = job.payload["handoff_id"]
     with tenant_transaction(conn, job.agency_id):
         conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
         row = conn.execute("SELECT status FROM handoff WHERE id = %s FOR UPDATE",
@@ -416,13 +417,9 @@ def accept_timeout(conn, job, client_factory, gazetteer=None):
         if row is None or row[0] != "pending":
             return
         minutes = handoff.accept_minutes()
-        if round_ == 1:
-            queue.enqueue_job(conn, handoff.TIMEOUT_JOB, f"handoff-timeout:{handoff_id}:2",
-                              {"handoff_id": handoff_id, "round": 2},
-                              delay_seconds=minutes * 60)
-    if round_ != 1:
-        logger.warning("Handoff %s still pending after the admin escalation", handoff_id)
-        return
+        queue.enqueue_job(conn, handoff.TIMEOUT_JOB, f"handoff-timeout:{handoff_id}:2",
+                          {"handoff_id": handoff_id, "round": 2},
+                          delay_seconds=minutes * 60)
     packet = load_packet(conn, job.agency_id, handoff_id, gazetteer)
     with _client(conn, job.agency_id, client_factory) as client:
         escalate(conn, client, job.agency_id, packet, minutes)

@@ -313,3 +313,72 @@ def test_backoff_doubles_and_caps(attempts, expected):
 def test_error_code_never_carries_the_message():
     assert queue.error_code(ValueError("Customer said: DHA Phase 6")) == "ValueError"
     assert queue.error_code(queue.PermanentJobError("bad_payload")) == "bad_payload"
+
+
+# --- audit MA-004: a busy conversation must not hide other conversations' jobs ----------
+
+def _advisory_locks(conn):
+    return conn.execute(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = "
+        "pg_backend_pid()").fetchone()[0]
+
+
+def test_jobs_of_a_busy_conversation_do_not_hide_another_conversations_job(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)    # a turn in progress
+    for n in range(queue.CLAIM_BATCH):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    other = queue_db["enqueue"](a, "other", conversation_key=CUSTOMER_Y)
+    worker = queue_db["connect"]()
+    job = claim(worker, a)
+    assert job is not None and job.id == other
+    queue.finish_job(worker, job, "w1")
+    assert _advisory_locks(worker) == 0
+
+
+def test_the_free_job_is_found_behind_three_busy_conversations(queue_db):
+    a = queue_db["a"]
+    busy = ["923000000011", "923000000012", "923000000013"]
+    holder = queue_db["connect"]()
+    for key in busy:
+        assert queue.try_lock_conversation(holder, a, key)
+    for n in range(25):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=busy[n % 3])
+    free = queue_db["enqueue"](a, "free", conversation_key=CUSTOMER_Y)
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == free
+
+
+def test_a_job_without_a_key_is_claimed_while_every_conversation_is_busy(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH + 2):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    keyless = queue_db["enqueue"](a, "keyless")
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == keyless
+
+
+def test_nothing_claimable_returns_none_and_leaves_no_lock(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH + 3):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    worker = queue_db["connect"]()
+    assert claim(worker, a) is None
+    assert _advisory_locks(worker) == 0
+
+
+def test_among_free_conversations_the_oldest_due_job_wins(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    older = queue_db["enqueue"](a, "older", conversation_key=CUSTOMER_Y)
+    queue_db["enqueue"](a, "newer", conversation_key="923000000003")
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == older

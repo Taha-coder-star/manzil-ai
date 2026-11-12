@@ -81,6 +81,21 @@ def customer(language="roman_urdu", **flags):
 CARD = whatsapp.reply_buttons("Ji, ye options hain:", [("photos:DH6-101", "Aur photos")])
 
 
+@pytest.mark.parametrize("kind", ["failed", "refused", "done"])
+def test_an_opened_handoff_is_the_whole_reply_whatever_the_outcome(kind):
+    # Audit MA-002: the handoff is committed before a later round fails or refuses; its
+    # message is the only one the gate lets through.
+    message = whatsapp.cta_url("connecting you", "Chat with Ahmed", "https://wa.me/1")
+    binding = SimpleNamespace(**{**vars(customer()), "handoff": message})
+    assert render_customer(Outcome(kind, "x", ("requirements_saved",)), binding) == [message]
+
+
+@pytest.mark.parametrize(("kind", "key"), [("failed", "failure"), ("refused", "refusal")])
+def test_without_a_handoff_failure_and_refusal_keep_their_templates(kind, key):
+    binding = SimpleNamespace(**{**vars(customer()), "handoff": None})
+    assert render_customer(Outcome(kind, "x"), binding) == [whatsapp.text(TEMPLATES[key])]
+
+
 def test_the_voice_echo_question_is_not_preceded_by_notes_it_already_says():
     # Task 10.2: the echo lists the purpose, budget and the saved values.
     echo = whatsapp.reply_buttons("Aap ne kaha: (no facts in this fake) -- sahi hai?",

@@ -1,3 +1,25 @@
+2026-11-12 AUDIT WP1 IMPLEMENTED (UNCOMMITTED): SIX CUSTOMER-FACING FIXES.
+Worktree .claude/worktrees/wp1-customer-reliability, branch fix/wp1-customer-reliability
+(local, no upstream), base 7b044b3 (app tree = 7eefb9c). Plan:
+output/claude-remediation-plan/ (IMPLEMENTATION_SEQUENCE WP1, TD-02..TD-08); owner
+BD-1/BD-2/BD-4 defaults approved. Code only, no migration (next free number 021).
+MA-002 render_customer: handoff message first for every outcome kind.
+MA-003 TurnEngine._salvage: customer route, tool round done, later provider error or
+malformed answer -> tool output (+ code search) as done/round_failed; staff unchanged.
+MA-010 orchestrator._answer: reaction/unsupported/system-only customer turn closed
+replied before the gate (no reply, no forward, no holding reply, no model call).
+MA-004 queue.claim_job: re-query excluding busy conversation keys, max 20 passes.
+MA-005 handoff.forward_turn: holding_unsent wording unless a forward was sent.
+MA-001 handoff_actions.expire (round 2 via handlers): pending -> released, lead closed,
+ai_active; customer cta_url + staff/admin notices once each (handoff:{id}:expired*).
+Tests: 27 new (tests/test_audit_regressions_db.py 13, test_queue 5, test_turn_engine 4,
+test_customer_tools 5); 2 existing expectations changed (MA-001, MA-005; quoted in
+report). Full image run 4097: 4079 passed, 7 skipped, 1 failed + 10 errors = the 11
+git-only baseline cases; host git tests 16 passed; Ruff clean; audit proofs: 6
+behaviour proofs fail, catalog passes. Reports: output/claude-remediation/WP1_*.md.
+Not committed/pushed/deployed. Rollout: pending prod handoffs not healed (OPEN_ISSUES).
+Next: owner review; commit/PR only on owner instruction; WP2 not started.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.
