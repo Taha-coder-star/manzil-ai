@@ -120,7 +120,24 @@ def test_every_attempt_is_recorded_including_the_failed_one_before_a_failover():
     assert first["estimated_cost_usd"] is None  # a failed request is charged its reservation
     assert second["outcome"] == "succeeded" and second["tool_calls"] == ["search_properties"]
     assert second["usage"]["input_tokens"] == 100 and second["item"] == "CT-01"
-    assert guard.started == 2 and guard.unpriced == 1
+    # The successful response omits cache/thinking metadata, so it is unpriced too.
+    assert second["estimated_cost_usd"] is None
+    assert guard.started == 2 and guard.unpriced == 2
+
+
+@pytest.mark.parametrize("field", ["input_tokens", "output_tokens",
+                                   "cached_input_tokens", "thinking_tokens"])
+@pytest.mark.parametrize("value", [None, -1, True, 1.5, 2**63])
+def test_cost_does_not_invent_missing_or_invalid_usage(field, value):
+    counts = {"input_tokens": 100, "output_tokens": 10,
+              "cached_input_tokens": 0, "thinking_tokens": 0}
+    counts[field] = value
+    assert bench_live.call_cost(PRICES, "p", Usage(**counts)) is None
+
+
+def test_cost_distinguishes_explicit_zero_from_missing_counts():
+    assert bench_live.call_cost(PRICES, "p", Usage(100, 10, 0, 0)) == Decimal("0.00014")
+    assert bench_live.call_cost(PRICES, "p", Usage(100, 10, 101, 0)) is None
 
 
 def test_a_request_over_the_cap_is_never_sent():

@@ -242,11 +242,13 @@ def test_a_repeated_request_reuses_the_open_handoff(st):
 def test_after_the_handoff_the_ai_stays_silent(st):
     scenario_2(st)
     tap(st, "visit:DH6-101")
+    requests_before = len(st.requests)
     payloads = turn(st, "price kam ho sakti hai?")   # the turn is gated: no model call
     # Only the one holding reply (Task 11.2), sent as a system message.
     assert [p["text"]["body"] for p in payloads] == [
         "✅ *Ahmed* ko aapka message bhej diya hai; woh jald jawab denge."]
     assert st.script  # the scripted model answer was never used
+    assert len(st.requests) == requests_before
 
 
 def test_lead_numbers_follow_each_other_across_customers(st):

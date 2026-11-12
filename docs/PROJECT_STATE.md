@@ -1,3 +1,36 @@
+2026-11-13 DAY13 CI CORRECTION: PRESERVE GATED-TURN TEST SENTINEL.
+Owner imported exact3e24e4e failed push43282665298/PR43282681155 logs. Both Linux
+runs:4124PASS/1FAIL, solely test_after_the_handoff_the_ai_stays_silent. The shared
+test turn helper removed its unused STOP even for zero-tool/gated turns, erasing
+the test's no-model sentinel. Restrict cleanup to explicitly scripted tool turns;
+retain the sentinel assertion and add direct unchanged-provider-request count.
+Application files, send-time gate, models/config/schema/runtime remain unchanged.
+Focused handoff/gate/customer/search-hold/replay/guard regression128PASS, no skips;
+lint PASS. Prior3e24e4e candidate and failed CI retained. Test/docs-only correction
+is pinned in ../output/day13-completion-validation.json; publish the new head and
+require fresh push+PR CI. Earlier failed workflows are not rerun as proof of a fix.
+Publisher now pushes an explicit branch without -u, avoiding local config writes.
+Day13 OPEN; new exact-head CI and live acceptance still required.
+
+2026-11-12 DAY13 RESUMED: BOUNDED SEARCH COMPLETION CANDIDATE.
+Owner requested completing Day13 before Day14. Source baseline7b044b3 (only docs
+since7eefb9c); branch feature/day13-search-completion. Candidate ends a completed,
+grounded customer search without a redundant STOP call only for conservatively
+recognized single-purpose requests; compound/unknown requests keep continuation.
+Benchmark cost no longer substitutes zero for missing cache/thinking metadata.
+No migration/provider/model/effort/billing change. Detail docs/DAY13_SEARCH_COMPLETION.md.
+Local validation: initial focused217pass/1skip. Full4125cases:4076pass/42platform
+skips/7harness-or-setup failures retained. Corrected recheck185PASS includes every
+failed case, complete affected customer flows/replay, and the CI-role denial check.
+Application bytes unchanged between full/recheck; lint PASS. This is not a claim
+that the initial full-suite exit code was zero. Receipt ../output/day13-completion-validation.json.
+Latest recorded runtime still low/image976dff195d20/schema020, not changed here.
+GitHub connection from this session failed; no push/PR/new CI or deployment claimed.
+Next publish the exact candidate via ../output/day13-completion-publish.ps1, verify CI, prepare a NEW pinned
+release against the current runtime, then obtain fresh candidate timing/voice and
+coverage evidence. Do not reuse old tuning deploy operators with the wrong base.
+Day13 remains OPEN: no latency/cache/cost/voice/fullRun2 pass or exception inferred.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.
