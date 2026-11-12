@@ -1,3 +1,15 @@
+2026-11-13 DAY13 CI FAILURE DIAGNOSED: TEST HELPER ONLY.
+Imported owner read-only CI diagnostics for3e24e4e: both Linux runs4124pass/1fail.
+Failure tests/test_handoff_db.py::test_after_the_handoff_the_ai_stays_silent was
+assert st.script after the helper discarded its gated-turn no-model sentinel.
+Added calls guard to STOP cleanup and explicit unchanged model-request assertion;
+kept existing holding reply/sentinel checks. No application or safety gate change.
+Focused affected-path regression128PASS (no skips); lint PASS, disposable loopback
+DB only. The failing handoff test keeps both its sentinel and a direct no-provider
+request-count assertion. App/bench/deploy/schema/data/dependency bytes unchanged
+from3e24e4e; new candidate requires fresh exact-head CI, not an old-run retry.
+Archive old receipts; pin new test/docs-only commit and fresh CI before deployment.
+
 2026-11-12 DAY13 RESUMED: SEARCH COMPLETION AND COST-UNKNOWN FIX.
 Owner asks to complete Day13. Added conservative search-only completion after real
 rendered results, retaining continuation for compound/unknown/error/clarification

@@ -59,7 +59,8 @@ def turn(st, body, *calls, sender=CUSTOMER_B, context=None):
         message["context"] = {"id": context}
     st.deliver(message)
     st.drain()
-    if st.script and st.script[0] is stop:
+    # No-tool turns retain their sentinel for no-model/hand-off gate assertions.
+    if calls and st.script and st.script[0] is stop:
         st.script.pop(0)  # All scripted tools ran; a completed search needs no STOP round.
     return [payload for _, payload in st.client.sent[before:]]
 

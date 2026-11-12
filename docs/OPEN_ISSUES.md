@@ -1,3 +1,10 @@
+2026-11-13 DAY13 TEST-HELPER CORRECTION VERIFIED LOCALLY; NEW CI PENDING.
+Both3e24e4e CI runs4124pass/1fail at gated-turn unused-answer assertion. Shared
+helper cleanup was too broad for zero-tool turns. Correction preserves the
+sentinel and adds direct no-provider-call verification; app/runtime untouched.
+Correction128local tests PASS, lint PASS. Await new exact-head CI. Latency, voice,
+cache/cost and formalRun2 gaps remain open; no deployment/closeout is claimed.
+
 2026-11-12 DAY13 RESUMED: CANDIDATE FIX DOES NOT CLOSE ACCEPTANCE GAPS.
 Owner now prioritizes Day13 completion. Conservative terminal-search optimization
 and benchmark cost-unknown fix validated locally. Full run retained4076pass/42skip/

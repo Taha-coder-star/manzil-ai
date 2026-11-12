@@ -1,3 +1,17 @@
+2026-11-13 DAY13 CI CORRECTION: PRESERVE GATED-TURN TEST SENTINEL.
+Owner imported exact3e24e4e failed push43282665298/PR43282681155 logs. Both Linux
+runs:4124PASS/1FAIL, solely test_after_the_handoff_the_ai_stays_silent. The shared
+test turn helper removed its unused STOP even for zero-tool/gated turns, erasing
+the test's no-model sentinel. Restrict cleanup to explicitly scripted tool turns;
+retain the sentinel assertion and add direct unchanged-provider-request count.
+Application files, send-time gate, models/config/schema/runtime remain unchanged.
+Focused handoff/gate/customer/search-hold/replay/guard regression128PASS, no skips;
+lint PASS. Prior3e24e4e candidate and failed CI retained. Test/docs-only correction
+is pinned in ../output/day13-completion-validation.json; publish the new head and
+require fresh push+PR CI. Earlier failed workflows are not rerun as proof of a fix.
+Publisher now pushes an explicit branch without -u, avoiding local config writes.
+Day13 OPEN; new exact-head CI and live acceptance still required.
+
 2026-11-12 DAY13 RESUMED: BOUNDED SEARCH COMPLETION CANDIDATE.
 Owner requested completing Day13 before Day14. Source baseline7b044b3 (only docs
 since7eefb9c); branch feature/day13-search-completion. Candidate ends a completed,

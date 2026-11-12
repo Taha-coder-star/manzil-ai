@@ -61,3 +61,20 @@ original full Run2. Missing cache/cost/voice or formal coverage stays a named ga
 
 Day13 remains OPEN until results support closure or the owner explicitly accepts
 a concrete conditional demo closeout. No exception has been accepted by this patch.
+
+## 13 November: exact-head CI helper correction
+
+Both CI runs for3e24e4e executed the full Linux suite:4,124 passed and one failed,
+`test_after_the_handoff_the_ai_stays_silent`. The customer holding-reply assertion
+passed, but the shared test helper had removed the unused STOP response used as
+a no-model sentinel, including for gated turns with no scripted tools.
+
+Cleanup now requires explicitly scripted tool calls. Zero-tool/gated turns retain
+the sentinel. The handoff test also checks that the actual provider-request count
+does not change. This preserves and strengthens the gate assertion; no application,
+provider, runtime, schema or deployment change is part of the correction.
+
+The focused correction suite passed128tests with no skips (handoff, send gate,
+customer/search holds, replay and completion guards); lint passed. Prior CI logs
+and validation receipts are retained. Publish the new test/docs-only head and
+require both fresh CI events before any deployment or Day13 closeout decision.
