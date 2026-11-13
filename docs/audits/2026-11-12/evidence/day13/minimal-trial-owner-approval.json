@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "recorded_on": "2026-11-12",
+  "source": "owner conversation reply",
+  "owner_direction": "Try the minimal-effort comparison",
+  "owner_approved_for_trial": true,
+  "authorized_change": "Temporary low-to-minimal effort override on both pinned services; reversible recreation",
+  "permanent_adoption": false,
+  "remote_switch_observed": true,
+  "operator_sha256": "4daad3c7d81f072bb6d22e4ddd7d39c51786536bb94bbf3af623520cfac7aac7",
+  "plan_sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+  "candidate_config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+  "runbook": "minimal-trial-runbook.md",
+  "readiness_receipt": "minimal-trial-ready-owner.json"
+}

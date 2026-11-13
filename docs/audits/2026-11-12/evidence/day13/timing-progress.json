@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "scope": "day13_small_timing_10text_6voice",
+  "plan_sha256": "6fb6b83f04f925012fb6692e095de83da38f4b793ffac12adc9d29686c985f7d",
+  "window_start_utc": "2026-11-11T18:51:55.834069+00:00",
+  "actor_suffix": "2614",
+  "observed_samples": [
+    {
+      "id": "T01",
+      "modality": "text",
+      "source": "owner-pasted WhatsApp bot replies",
+      "displayed_reply_time_pkt": "2026-11-11 23:55",
+      "timestamp_precision": "minute",
+      "original_inbound_message_returned": false,
+      "clear_setup_acknowledgement_returned": false,
+      "expected_results_visible": true,
+      "functional_observation": "Expected office-rent result set and monthly prices; summary plus three coverless cards",
+      "visible_listings": [
+        {
+          "code": "DH6-108",
+          "monthly_price_pkr": 500000
+        },
+        {
+          "code": "PEC-101",
+          "monthly_price_pkr": 550000
+        },
+        {
+          "code": "SHF-101",
+          "monthly_price_pkr": 450000
+        }
+      ],
+      "visible_reply_parts": 4,
+      "server_turn_mapping": "verified privately by exact script and actor; UUID not exported",
+      "primary_latency_ms": 11929.345,
+      "timing_status": "server verified",
+      "replacement_attempt_requested": false,
+      "server_attempt_label": "T01-attempt-1",
+      "server_received_at": "2026-11-11T18:55:02.762019+00:00",
+      "cohort_latency_state": "measured_substantive_reply",
+      "outcome": "succeeded",
+      "diagnostic": "t02-diagnostic-owner.json"
+    },
+    {
+      "id": "T02",
+      "modality": "text",
+      "source": "owner WhatsApp screenshots",
+      "displayed_request_time_pkt": "2026-11-11 23:57",
+      "displayed_reply_time_pkt": "2026-11-11 23:57",
+      "timestamp_precision": "minute",
+      "original_inbound_message_returned": true,
+      "expected_results_visible": false,
+      "functional_observation": "First attempt received processing-failure apology",
+      "initial_failure_visible": true,
+      "server_turn_mapping": "verified privately by exact script and actor; UUID not exported",
+      "primary_latency_ms": null,
+      "timing_status": "server verified; failure apology not substantive",
+      "replacement_attempt_requested": false,
+      "server_attempt_label": "T02-attempt-1",
+      "server_received_at": "2026-11-11T18:57:07.177968+00:00",
+      "cohort_latency_state": "infinity_failed_first_attempt",
+      "outcome": "failed",
+      "diagnostic": "t02-diagnostic-owner.json"
+    }
+  ],
+  "next_sample": "T03",
+  "text_observed": 2,
+  "voice_observed": 0,
+  "samples_with_measured_primary_latency": 1,
+  "day13_closed": false,
+  "extra_attempts": [
+    {
+      "sample": "T02",
+      "attempt": 2,
+      "source": "owner screenshots",
+      "displayed_request_time_pkt": "2026-11-11 23:58",
+      "interim_visible": true,
+      "subsequent_correct_result_visible": true,
+      "server_correlation_verified": true,
+      "visible_listings": [
+        {
+          "code": "DH6-102",
+          "price_pkr": 80000000
+        },
+        {
+          "code": "DH6-101",
+          "price_pkr": 78000000
+        },
+        {
+          "code": "DH7-101",
+          "price_pkr": 75000000,
+          "nearby": true
+        }
+      ],
+      "replaces_original_cohort_attempt": false,
+      "primary_latency_ms": 19953.195,
+      "server_attempt_label": "T02-attempt-2",
+      "automatic_recovery": false,
+      "provider_attempts": 5
+    }
+  ],
+  "paused_before_next_sample": true,
+  "pause_reason": "T01 above7s plus failed first T02 make 10sample p90 target impossible; next tuning/cohort decision pending",
+  "samples_with_verified_failure": 1,
+  "phase": "baseline_cannot_meet_text_p90"
+}

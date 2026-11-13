@@ -30,8 +30,10 @@ def test_a_previously_resolved_listing_without_a_public_row_is_unavailable(monke
         None, SimpleNamespace(agency_id="demo", messages=()), None, None, (),
         language="roman_urdu")
     result = binding.details_card(references.Item(1, "id", "DH6-109"))
-    assert result.notice == ai_tools.Notice("listing_unavailable", (("code", "DH6-109"),))
-    assert result.payloads == ()  # never return a card/price from old shown history
+    assert result.payloads[0]["interactive"]["body"]["text"] == "DH6-109 abhi available nahi."
+    assert result.payloads[0]["interactive"]["action"]["buttons"][0]["reply"]["id"] == "similar:DH6-109"
+    assert len(result.payloads) == 1
+    assert "header" not in result.payloads[0]["interactive"]  # no old card/photo/price
 
 
 @pytest.mark.parametrize(("text", "position"), [
@@ -77,6 +79,21 @@ def customer(language="roman_urdu", **flags):
 
 
 CARD = whatsapp.reply_buttons("Ji, ye options hain:", [("photos:DH6-101", "Aur photos")])
+
+
+@pytest.mark.parametrize("kind", ["failed", "refused", "done"])
+def test_an_opened_handoff_is_the_whole_reply_whatever_the_outcome(kind):
+    # Audit MA-002: the handoff is committed before a later round fails or refuses; its
+    # message is the only one the gate lets through.
+    message = whatsapp.cta_url("connecting you", "Chat with Ahmed", "https://wa.me/1")
+    binding = SimpleNamespace(**{**vars(customer()), "handoff": message})
+    assert render_customer(Outcome(kind, "x", ("requirements_saved",)), binding) == [message]
+
+
+@pytest.mark.parametrize(("kind", "key"), [("failed", "failure"), ("refused", "refusal")])
+def test_without_a_handoff_failure_and_refusal_keep_their_templates(kind, key):
+    binding = SimpleNamespace(**{**vars(customer()), "handoff": None})
+    assert render_customer(Outcome(kind, "x"), binding) == [whatsapp.text(TEMPLATES[key])]
 
 
 def test_the_voice_echo_question_is_not_preceded_by_notes_it_already_says():

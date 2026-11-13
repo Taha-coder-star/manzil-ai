@@ -8,6 +8,7 @@ wall-clock deadline is tested in tests/test_llm_gemini.py. All data is fictional
 
 import copy
 import json
+import logging
 import threading
 import time
 from types import SimpleNamespace
@@ -396,6 +397,42 @@ def test_no_failover_after_a_model_has_answered(ai):
     assert ai.sent_texts() == [TEMPLATES["interim"], TEMPLATES["search_unavailable"]]
 
 
+def test_a_customer_round_failing_after_a_tool_round_keeps_the_tool_output(ai, caplog):
+    # Audit MA-003: the stub search's notice is sent instead of the failure template.
+    ai.script += [tools_answer(tool("search_properties")), 503]
+    ai.deliver(text("ghar"))
+    with caplog.at_level(logging.WARNING, logger="app.turn_engine"):
+        ai.drain()
+    assert len(ai.requests) == 2
+    assert ai.sent_texts() == [TEMPLATES["search_unavailable"]]
+    assert any("round_failed:http_503" in r.getMessage() for r in caplog.records)
+
+
+def test_a_malformed_closing_round_after_a_tool_round_keeps_the_tool_output(ai):
+    ai.script += [tools_answer(tool("search_properties")),
+                  candidate([tool("search_properties")], "MALFORMED_FUNCTION_CALL")]
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert ai.sent_texts() == [TEMPLATES["search_unavailable"]]
+
+
+def test_a_refusal_after_a_tool_round_still_gets_the_refusal_template(ai):
+    ai.script += [tools_answer(tool("search_properties")), candidate([], "PROHIBITED_CONTENT")]
+    ai.deliver(text("ghar"))
+    ai.drain()
+    assert ai.sent_texts() == [TEMPLATES["refusal"]]
+
+
+def test_a_staff_round_failing_after_a_tool_round_still_gets_the_failure_template(ai):
+    # Staff keep the failure text (MA-003 is customer-only; BD-16 not approved).
+    ai.script += [tools_answer(tool("list_my_listings")), 503]
+    ai.deliver(text("meri listings", sender=AGENT))
+    ai.drain()
+    flush_staff_segments(ai)
+    assert len(ai.requests) == 2
+    assert ai.sent_texts() == [TEMPLATES["failure"]]
+
+
 def test_after_failover_the_turn_stays_on_the_failover_model(ai):
     ai.script += [timeout_after(ai.clock, 3), tools_answer(tool("search_properties")),
                   answer()]
@@ -630,12 +667,12 @@ def test_concurrent_builds_send_the_first_stored_plan(ai, monkeypatch):
     started = []
     original = TurnEngine.plan
 
-    def plan(self, conn, job, turn, notify=None):
+    def plan(self, conn, job, turn, notify=None, **kwargs):
         if not started:
             started.append(turn.id)
             other_job = SimpleNamespace(id=job.id, attempts=job.attempts + 100)
             self.respond(second, other_job, turn)
-        return original(self, conn, job, turn, notify)
+        return original(self, conn, job, turn, notify, **kwargs)
 
     monkeypatch.setattr(TurnEngine, "plan", plan)
     ai.script += [tools_answer(tool("search_properties")), answer(), answer()]
@@ -941,6 +978,7 @@ def test_the_schema_check_passes_on_a_migrated_database(ai):
      "migration 013"),
     (orchestrator.check_schema, "ALTER TABLE conversation_turn DROP COLUMN attempts",
      "migration 014"),
+    (orchestrator.check_schema, "DROP TABLE ai_recovery", "019"),
     (orchestrator.check_schema,
      ("ALTER TABLE conversation_turn DROP CONSTRAINT conversation_turn_status_check, "
       "ADD CONSTRAINT conversation_turn_status_check "

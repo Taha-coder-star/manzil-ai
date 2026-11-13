@@ -204,13 +204,41 @@ class Evidence:
     flags: tuple = ()    # voice only: extra echo reasons (llm_uncertain)
     after: tuple = ()    # the message text right after each occurrence of the span
     #                      (Task 10.2: an operator the model left out, "8 crore" + "tak")
+    before: tuple = ()   # same occurrences, paired with after; never another message
 
 
 def evidence(src, *, reextracted=False, uncertain=False, span=None):
     """The Evidence of a verified span's message; uncertain: the model marked the op
     uncertain (R16 7.4 b), which only counts for a heard value (it can only add an echo)."""
     flags = ("llm_uncertain",) if src.kind == "voice" and uncertain else ()
-    return Evidence(src.kind, src.weak, reextracted, flags, _after(span, src.text))
+    return Evidence(src.kind, src.weak, reextracted, flags, _after(span, src.text),
+                    _before(span, src.text))
+
+
+def _before(span, text):
+    """Same occurrence matching as _after, preserving paired source context."""
+    words = (span or "").split()
+    if not words:
+        return ()
+    pattern = r"\s+".join(map(re.escape, words))
+    return tuple(text[:m.start()] for m in re.finditer(pattern, text or "", re.IGNORECASE))
+
+
+_ONLY_PLACE_BEFORE = re.compile(
+    r"(?<!\w)(?:sirf|siraf|only|صرف|सिर्फ|सिर्फ़|केवल)"
+    r"(?:\s+(?:in|mein|mai|में|میں))?\s*$", re.IGNORECASE)
+_ONLY_PLACE_AFTER = re.compile(
+    r"^\s*(?:(?:in|mein|mai|में|میں)\s+)?(?:only|hi|ही|ہی)(?!\w)", re.IGNORECASE)
+
+
+def restricted_place(ev):
+    """Only/sirf attached to this verified place, not another message or budget."""
+    for before in ev.before:
+        match = _ONLY_PLACE_BEFORE.search(before)
+        if match and not re.search(r"\b(?:not|nahi|nahin|mat)\s*$", before[:match.start()],
+                                   re.IGNORECASE):
+            return True
+    return any(_ONLY_PLACE_AFTER.search(after) for after in ev.after)
 
 
 def _after(span, text):
@@ -747,6 +775,8 @@ class Patch:
             kind = "add"   # several places named in one patch are a union, never a replacement
         if kind == "set" and additive_place(span, [s.text for s in ctx.sources]):
             kind = "add"   # "Phase 8 mein bhi dekho" adds, whatever op the model chose
+        if kind in ("set", "add") and restricted_place(ev):
+            kind = "add" if self.extends_location else "set"
         if kind in ("set", "add") and affirmation_key(span) in AFFIRMATIONS:
             chosen = self.affirmed_candidate()
             if chosen is not None:
@@ -824,6 +854,9 @@ class Patch:
             return self._remove_nodes(op, current, nodes)
         value = {"nodes": nodes, "mode": result.mode, "city": ctx.city_code,
                  "status": location.RESOLVED, "raw": op["raw_span"], "terms": [term]}
+        if restricted_place(ev) or (kind == "add" and current
+                                    and current["value"].get("no_nearby")):
+            value["no_nearby"] = True
         if kind == "add" and current:
             old = current["value"]
             merged = old["nodes"] + [n for n in nodes if n not in old["nodes"]]
@@ -875,6 +908,9 @@ class Patch:
         value = {"nodes": [node], "mode": mode, "city": ctx.city_code,
                  "status": location.RESOLVED, "raw": origin.get("raw", op["raw_span"]),
                  "terms": [term]}
+        if origin.get("no_nearby") or (kind == "add" and current
+                                       and current["value"].get("no_nearby")):
+            value["no_nearby"] = True
         confirmed = ev.source == "text"
         base = 1.0
         echo = []
@@ -897,6 +933,8 @@ class Patch:
         ctx = self.ctx
         origin = {"op": kind, "raw": op["raw_span"], "source": ev.source, "weak": ev.weak,
                   "turn": ctx.turn_id, "call": ctx.call_id, "method": result.method}
+        if restricted_place(ev):
+            origin["no_nearby"] = True
         cands = [{"location_id": str(c.location_id), "score": c.score,
                   "name": ctx.gazetteer.places[ctx.ids[str(c.location_id)]].display_name,
                   "origin": origin} for c in result.candidates]
@@ -930,16 +968,19 @@ class Patch:
 
     def _budget(self, op, ev, reextracted=False):
         span = op["raw_span"]
-        # Read with what follows each occurrence of the span in its message: "8 crore" said
-        # twice, once with "tak", is no budget to pick an operator for (Task 10.2).
+        # Read the adjacent context of each occurrence in its own message: "8 crore"
+        # said twice with different operators is no budget to pick an operator for.
         readings = {}
-        for after in ev.after or ("",):
-            got = normalise.parse_budget(span, purpose=self._purpose_now(), after=after)
+        afters = ev.after or ("",)
+        befores = ev.before or ("",) * len(afters)
+        for before, after in zip(befores, afters, strict=True):
+            got = normalise.parse_budget(span, purpose=self._purpose_now(), after=after,
+                                         before=before)
             readings.setdefault((got.status, got.mode, got.min, got.max, got.reason), got)
         if len(readings) > 1:
             return self._record(op, "ask", "repeated_amount", notices=[_notice("budget_unclear")])
         parsed = next(iter(readings.values()))
-        span = parsed.raw   # with an operator read from right after the span (same message)
+        span = parsed.raw   # includes a recovered adjacent operator from the same message
         if parsed.status == normalise.NONE:
             if normalise.NON_LATIN.search(span):
                 # Task 10.2: a budget in words the normaliser cannot read (Devanagari) is

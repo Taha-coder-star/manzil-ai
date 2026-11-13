@@ -38,6 +38,7 @@ from app import (
     customer_intent,
     customer_reply,
     details,
+    freshness,
     grounding,
     handoff,
     location,
@@ -136,11 +137,48 @@ def misbucketed_location(span, gazetteer):
         or _LOCATION_MONEY_CLAUSE.fullmatch(span.strip()))
 
 
+def qualified_location_tokens(span):
+    tokens = location.clean_tokens(span, strip=True)
+    return tokens if (set(tokens) & (location.LEVEL_WORDS | {'p'})
+                      and location.identifiers(tokens)) else []
+
+
+def incomplete_location_span(span, text, previous=()):
+    """Do not shorten a qualified place into its parent or an unscoped child.
+
+    Uses the resolver's canonical tokens, never invents a place or an identifier.
+    A full grounded alternative is allowed; old turns do not restrict new requests.
+    """
+    tokens = location.clean_tokens(span, strip=True)
+    if not tokens:
+        return False
+    for old in previous:
+        full = qualified_location_tokens(old)
+        if len(full) > len(tokens) and any(
+                full[i:i + len(tokens)] == tokens for i in range(len(full) - len(tokens) + 1)):
+            return True
+    source = location.clean_tokens(text)
+    for i in range(len(source) - len(tokens) + 1):
+        if source[i:i + len(tokens)] != tokens:
+            continue
+        tail = source[i + len(tokens):]
+        # Only adjacent locality words ("Bahria Town phase 8" / "DHA mein phase 8").
+        while tail[:1] and tail[0] in {'mein', 'me', 'mai', 'main', 'ke', 'ki', 'ka',
+                                      'town', 'city', 'karachi'}:
+            tail = tail[1:]
+        if (tail[:1] and tail[0] in location.LEVEL_WORDS | {'p'}
+                and location.identifiers(tail[:2])):
+            return True
+    return False
+
+
 class CustomerBinding:
     def __init__(self, conn, turn, gazetteer, requirements_binding, texts, language=None):
         self.conn, self.turn, self.gazetteer = conn, turn, gazetteer
         self.requirements = requirements_binding
-        self.text = "\n".join(text for _, text in texts if text)
+        self.texts = tuple(text for _, text in texts if text)
+        self.text = "\n".join(self.texts)
+        self.location_spans = None  # current-turn qualified attempts, including retries
         self.wamids = tuple(m.context_wamid for m in turn.messages if m.context_wamid)
         self.purpose_told = False
         self.asked = False      # a clarification with answer buttons is in the reply
@@ -148,6 +186,7 @@ class CustomerBinding:
         self.results = False    # listings or the honest no-match are in the reply
         self.handoff = None     # Task 11.1: the SYSTEM entry of a handoff in this turn
         self.place_unresolved = False   # this turn's place was not found: no search yet
+        self.cheaper_checked = False   # a relative budget op was handled in this turn
         self.facts = grounding.Facts()
         self._language = language
 
@@ -162,6 +201,23 @@ class CustomerBinding:
                                    payloads=tuple(payloads), trusted_codes=frozenset(codes))
 
     # -- update_requirements (7.3) --
+
+    def _location_spans(self):
+        if self.location_spans is None:
+            with tenant_transaction(self.conn, self.turn.agency_id):
+                self.conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+                rows = self.conn.execute(
+                    "SELECT ops FROM requirement_patch_log WHERE conversation_id=%s "
+                    "AND source_message_id=ANY(%s) ORDER BY version",
+                    (self.turn.conversation_id, [m.id for m in self.turn.messages])).fetchall()
+            self.location_spans = [op['raw_span'] for (ops,) in rows for op in ops
+                                   if op.get('slot') == 'location'
+                                   and op.get('op') in ('set', 'add')
+                                   and isinstance(op.get('raw_span'), str)
+                                   and qualified_location_tokens(op['raw_span'])
+                                   and any(ai_tools.span_in_turn(op['raw_span'], text)
+                                           for text in self.texts)]
+        return self.location_spans
 
     def update(self, patch):
         # D2-02: substring grounding alone accepted whole requirement/budget clauses
@@ -183,7 +239,31 @@ class CustomerBinding:
                          "property_types is 'office', purpose is 'on rent', budget is "
                          "'around 5 lakh per month'. Never invent or silently omit a place."},
                 error="invalid_location_span", notice="requirements_unclear")
+        places = [op['raw_span'] for op in patch if op.get('slot') == 'location'
+                  and op.get('op') in ('set', 'add') and isinstance(op.get('raw_span'), str)
+                  and any(ai_tools.span_in_turn(op['raw_span'], text) for text in self.texts)]
+        if places:
+            previous = self._location_spans()
+            qualified = [span for span in places if qualified_location_tokens(span)]
+            if any(incomplete_location_span(span, text, [*previous, *qualified])
+                   for span in places for text in self.texts if ai_tools.span_in_turn(span, text)):
+                self.place_unresolved = True
+                return ai_tools.ToolResult(
+                    'update_requirements', False,
+                    {'status': 'error', 'error': 'incomplete_location_span',
+                     'hint': 'Keep the complete stated place, including its phase, block, '
+                             'precinct or sector. Do not repair an unknown subarea by '
+                             'dropping its qualifier or area. Resend a complete grounded '
+                             'place, or ask for clarification before searching.'},
+                    error='incomplete_location_span', notice='requirements_unclear')
+            previous.extend(span for span in qualified if span not in previous)
         result = self.requirements.update(patch)
+        if (any(op.get("slot") == "budget" and op.get("op") in ("set", "relative")
+                and customer_intent.cheaper_command(op.get("raw_span"))
+                for op in patch)
+                and any(op.get("slot") == "budget" and op.get("status") in ("applied", "ask")
+                        for op in (result.response or {}).get("ops", ()))):
+            self.cheaper_checked = True
         if "purpose_inferred" in _keys(result.notice):
             self.purpose_told = True
         # Live 2026-10-18: "Block 6 main flat chahiye" (place not found) was answered with
@@ -217,6 +297,18 @@ class CustomerBinding:
         if self.place_unresolved:   # the update's own notice already asks for the place
             return self._result("search_properties",
                                 {"status": "answer_first", "needs_answer": ["location"]})
+        # D2-03: the model searched the old filters for "Kuch sasta dikhao"
+        # without calling update_requirements. Run the existing normaliser/merge
+        # before search; an explicit update or a second search must not apply it twice.
+        span = customer_intent.cheaper_command(self.text)
+        if span and not self.cheaper_checked:
+            updated = self.update([{"slot": "budget", "op": "relative", "raw_span": span}])
+            if not updated.ok or not self.cheaper_checked:
+                return ai_tools.ToolResult(
+                    "search_properties", False,
+                    {"status": "error", "error": "relative_budget_not_applied"},
+                    error="relative_budget_not_applied",
+                    notice=updated.notice or "requirements_unclear")
         turn, gz = self.turn, self.gazetteer
         slots, pending, version = self._state()
         if pending is None:
@@ -259,7 +351,8 @@ class CustomerBinding:
         self.results |= plan.kind in (render.RESULTS, render.NO_MATCH_KIND)
         payloads = list(plan.payloads)
         if plan.shown and result.search_run_id is not None:
-            payloads.append(customer_reply.shown_entry(result.search_run_id, plan.shown))
+            payloads.append(customer_reply.shown_entry(result.search_run_id, plan.shown,
+                {x.code: x.price_pkr for x in listings}))
         response["results"] = [{"position": position, "code": code}
                                for position, _, code in plan.shown]
         return self._result("search_properties", response, payloads, plan.facts,
@@ -298,6 +391,10 @@ class CustomerBinding:
         values only, without those still waiting for the customer's answer."""
         slots, _, _ = self._state()
         waiting = set(self.requirements.inherited())
+        # An unresolved replacement keeps the old stored place for a later correction,
+        # but it is not accepted for this turn and must not appear in its acknowledgement.
+        if self.place_unresolved:
+            waiting.add("location")
         active = {name: entry for name, entry in slots.items() if name not in waiting}
         types = (active.get("property_types") or {}).get("value") or []
         category = (active.get("category") or {}).get("value")
@@ -375,16 +472,21 @@ class CustomerBinding:
                 return self._result("send_property_photos", {"status": "not_found"},
                                     notice="listing_unknown")
             item = ref.item
+        if not cards.load_listings(self.conn, self.turn.agency_id, [item.code]):
+            return self._unavailable(item)
         media = self._unsent_photos(item.property_id)
         response = {"status": "ok", "position": item.position, "code": item.code,
                     "photos": len(media)}
         facts = self._listing_facts(item)
         if not media:
-            return self._result("send_property_photos", response, facts=facts,
-                                codes=[item.code],
-                                notice=_notice("no_more_photos", ref=ref_text(item)))
-        entries = [customer_reply.image_entry(item.property_id, m, ref_text(item))
-                   for m in media]
+            body = (f"{ref_text(item)}: no more photos of this property are available right now."
+                    if self.language == ENGLISH else
+                    f"{ref_text(item)}: is property ki mazeed photos abhi available nahi hain.")
+            return self._result("send_property_photos", response,
+                                [freshness.guard(whatsapp.text(body), item, self.language)],
+                                facts, [item.code])
+        entries = [freshness.guard(customer_reply.image_entry(item.property_id, m, ref_text(item)),
+                                   item, self.language) for m in media]
         return self._result("send_property_photos", response, entries, facts, [item.code])
 
     def _unsent_photos(self, property_id):
@@ -421,22 +523,29 @@ class CustomerBinding:
                                     notice="listing_unknown")
             item = ref.item
         known = details.load_known(self.conn, self.turn.agency_id, item.code)
+        if known is None:
+            return self._unavailable(item)
         fields = details.field_for(self.text)
         payloads = details.answer_detail(known, fields, self.language, item.position)
         money = [v for k, v in (known.public if known else {}).items() if k.endswith("_pkr")
                  or k == "maintenance_pkr_month"]
         return self._result("get_property", {"status": "ok", "position": item.position,
                                              "code": item.code},
-                            payloads, self._listing_facts(item, money), [item.code])
+                            [freshness.guard(p, item, self.language, kind="detail", fields=fields)
+                             for p in payloads], self._listing_facts(item, money), [item.code])
+
+    def _unavailable(self, item):
+        return self._result("get_property", {"status": "not_found"},
+                            [freshness.unavailable(item.code, self.language)],
+                            grounding.Facts(codes=frozenset({item.code})), [item.code])
 
     def details_card(self, item):
         """A listing: tap (overflow list row): the listing's card from its public row."""
         listings = cards.load_listings(self.conn, self.turn.agency_id, [item.code])
         if not listings:
-            return self._result("get_property", {"status": "not_found"},
-                                notice=_notice("listing_unavailable", code=item.code))
+            return self._unavailable(item)
         payload = cards.single_card(listings[0], self.language)
-        return self._result("get_property", {"status": "ok"}, [payload],
+        return self._result("get_property", {"status": "ok"}, [freshness.guard(payload, item, self.language, kind="card")],
                             self._listing_facts(item), [item.code])
 
     def show_listing(self, code):
@@ -548,6 +657,8 @@ class CustomerBinding:
                 return [self._result("echo", {"status": "stale"}, notice="echo_stale")]
             return [self.search_properties({}, None)]
         card, code, loc, choice, purpose, value, nomatch, step, handoff, _ = match.groups()
+        if card == "similar":
+            return [self.search_properties({}, None)]
         if card:
             ref = references.resolve(self.conn, self.turn.agency_id, self.turn.conversation_id,
                                      text=code)

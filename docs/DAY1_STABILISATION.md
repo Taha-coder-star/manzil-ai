@@ -40,7 +40,8 @@ test -n "$IID" && test "$(wc -w <<< "$IID")" -eq 1 && aws ec2 start-instances --
 
 Use EC2 Instance Connect as ubuntu. Run the generated local
 `Handoffs/codex/day1-baseline-paste.txt`: it transfers a checksummed, read-only script
-using quote-free lines ending in ` #`. Return its output, plus `/health` status.
+using quote-free lines ending in ` #`. Return its output, plus the `/health` status read inside
+the web container (public `/health` is 404 since audit WP2; command in `docs/RELEASE_10_2.md` §8).
 It prints source hashes, container differences, provider, inventory/draft/job/role counts;
 it does not print credentials, phone numbers or message text.
 Expected: matching healthy web/worker; no unexplained /app changes.

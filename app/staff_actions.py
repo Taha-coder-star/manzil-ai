@@ -61,6 +61,14 @@ ATTACH = re.compile(rf"attach:({_UUID}):([dp]):({_UUID})")
 ATTACH_CONFIRM = re.compile(rf"attachc:(confirm|cancel):({_UUID}):({_UUID}):({_VERSION})")
 TAPS = (DRAFT_TAP, UNDO_TAP, UNDO_CONFIRM, PICK, ATTACH, ATTACH_CONFIRM)
 UNDO_COMMAND = re.compile(r"\s*#\s*undo\s+#?([A-Za-z0-9]{2,4}-[0-9]{3})\s*", re.IGNORECASE)
+RECONFIRM_COMMAND = re.compile(r"\s*#reconfirm\s+([A-Za-z0-9]{2,4}-[0-9]{3})\s*", re.IGNORECASE)
+
+
+def reconfirm_command(message):
+    match = RECONFIRM_COMMAND.fullmatch(message.text or "") if message.type == "text" else None
+    return match.group(1).upper() if match else None
+
+
 CHANGE_STATUSES = frozenset({"active", "reserved", "on_hold", "sold", "rented", "withdrawn"})
 
 
@@ -193,7 +201,7 @@ def split(conn, turn):
         text = (message.text or "").strip()
         plain = message.type == "text" and bool(text) and not text.startswith("#")
         ref = refs.get(message.context_wamid)
-        if (tap_of(message) or undo_command(message) or str(message.id) in applied
+        if (tap_of(message) or undo_command(message) or reconfirm_command(message) or str(message.id) in applied
                 or (ref and message.id in photos)  # photos for the card's draft or listing
                 or (ref and ref[0] is not None and plain)):  # a correction of the card's draft
             mine.append(message)
@@ -259,6 +267,9 @@ def _one(ctx, message, ref):
             return [_notice("staff_attach_cancelled")]
         return _attach_listing(ctx, message, match.group(2), match.group(3),
                                int(match.group(4)))
+    code = reconfirm_command(message)
+    if code:
+        return _reconfirm_ask(ctx, code)
     code = undo_command(message)
     if code:
         return _undo_ask(ctx, code)
@@ -326,6 +337,8 @@ def _closed_reply(draft, message):
     closed it (a retried turn), else what happened to it. Nothing is written."""
     done = draft["payload"].get("done") or {}
     if done.get("message_id") == str(message.id):
+        if done.get("action") == "reconfirm":
+            return [whatsapp.text("Availability re-confirmed.")]
         action = done.get("action")
         if action == "save":
             return [staff_cards.saved_reply(done["code"], done["event_id"])]
@@ -519,6 +532,19 @@ def _confirm(ctx, conn, draft, message):
         _close_draft(conn, draft, "superseded",
                      {"message_id": str(message.id), "action": "stale"})
         return [_notice("staff_update_stale")]
+    if payload.get("action") == "reconfirm":
+        if facts["status"] != "active":
+            _close_draft(conn, draft, "superseded", {"message_id": str(message.id), "action": "stale"})
+            return [_notice("staff_update_stale")]
+        version = _apply(conn, facts["id"], {}, facts["version"])
+        conn.execute(
+            "INSERT INTO property_event (agency_id, property_id, event_type, actor_staff_id, "
+            "listing_draft_id, from_version, to_version, changes) "
+            "VALUES (current_agency_id(), %s, 'reconfirmed', %s, %s, %s, %s, %s)",
+            (facts["id"], ctx.turn.staff_id, draft["id"], facts["version"], version,
+             _jsonb({"message_id": str(message.id)})))
+        _close_draft(conn, draft, "saved", {"message_id": str(message.id), "action": "reconfirm"})
+        return [whatsapp.text("Availability re-confirmed.")]
     wanted = {field: change["to"] for field, change in payload["changes"].items()}
     checked = sn.check_update(facts, wanted)
     if "error" in checked:
@@ -1005,3 +1031,34 @@ def register_cards(conn, turn, payloads):
                 (f"turn:{turn.id}:{seq}", draft_id, property_id, draft_id, property_id),
             )
 
+
+
+def _reconfirm_ask(ctx, code):
+    with _tx(ctx) as conn:
+        staff_tools._lock_turn(conn, ctx.turn)
+        drafts = staff_tools._stored(conn, ctx.turn.id, "update")
+        if drafts:
+            draft = drafts[0]
+            code = draft.payload["target_code"]
+        else:
+            facts = staff_tools.property_facts(conn, code=code, lock=True)
+            if facts is None or facts["status"] != "active":
+                return [whatsapp.text("No ACTIVE listing found for re-confirmation.")]
+            conn.execute(
+                "UPDATE listing_draft SET status = 'superseded', closed_at = now(), "
+                "version = version + 1 WHERE staff_id = %s AND target_property_id = %s "
+                "AND kind = 'update' AND status = 'open'", (ctx.turn.staff_id, facts["id"]))
+            conn.execute(
+                "INSERT INTO listing_draft (agency_id, staff_id, kind, target_property_id, "
+                "base_property_version, source_turn_id, ordinal, payload) "
+                "VALUES (current_agency_id(), %s, 'update', %s, %s, %s, 1, %s)",
+                (ctx.turn.staff_id, facts["id"], facts["version"], ctx.turn.id,
+                 _jsonb({"schema": 1, "action": "reconfirm", "target_code": code, "changes": {}})))
+            draft = staff_tools._stored(conn, ctx.turn.id, "update")[0]
+        facts = staff_tools.property_facts(conn, code=code)
+        amount = cards.price_text(facts["price_pkr"], facts["purpose"])
+        return [whatsapp.reply_buttons(
+            f"{code}: {facts['property_type']} / {facts['purpose']} / {amount}. "
+            "Is this listing still available at these details?",
+            [(staff_cards.draft_button("confirm", draft.id, draft.version), "Confirm"),
+             (staff_cards.draft_button("cancel", draft.id, draft.version), "Cancel")])]

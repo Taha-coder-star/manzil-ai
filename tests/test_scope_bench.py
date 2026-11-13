@@ -43,7 +43,8 @@ def test_the_committed_scope_set_is_valid_and_covers_the_source_counts(scope, co
     assert len(follow) == 20 and {i["follow_up_kind"] for i in follow} == benchmark.SCOPE_KINDS
     assert len([i for i in photos if i["id"] != "CT-27"]) == 10 and "CT-27" in {
         i["id"] for i in photos}
-    assert [i["id"] for i in turns if i.get("gold_status") == "unresolved"] == ["SC-18"]
+    assert [i["id"] for i in turns if i.get("gold_status") == "unresolved"] == []
+    assert item(scope, "SC-18")["expected_outcome"]["type"] == "no_match"
 
 
 def test_the_r16_text_items_are_referenced_unchanged(committed):
@@ -74,7 +75,7 @@ def test_the_r16_text_items_are_referenced_unchanged(committed):
      "does not follow SC-04"),
     ("SC-09", lambda i: i["expected_tools"][0]["args"]["patch"][0].update(raw_span="7 lakh"),
      "patch span '7 lakh' not in input"),
-    ("SC-18", lambda i: i.update(note="no reason given"), "must say why"),
+    ("SC-18", lambda i: i.update(gold_status="unresolved", note="no reason given"), "must say why"),
     ("SC-06", lambda i: i.pop("source"), "a source are required"),
 ])
 def test_broken_scope_gold_is_caught(scope, committed, item_id, change, message):

@@ -71,6 +71,11 @@ def send_message(
     media_source: (table, id) of the stored image an image payload shows (app.media).
     A template payload needs ai_generated=False (ValueError otherwise).
     """
+    if ai_generated and media_source:
+        blocked = guard_property_media(conn, client, agency_id, conversation_id, recipient,
+                                       dedupe_key, media_source)
+        if blocked is not None:
+            return blocked
     if payload["type"] == "template" and ai_generated:
         raise ValueError("a template is a system message: pass ai_generated=False")
     outbound_id, status = _prepare(
@@ -141,6 +146,13 @@ def _prepare(conn, agency_id, conversation_id, recipient, payload, dedupe_key, a
                 return outbound_id, "unknown"
             if status != "pending":
                 return outbound_id, status
+            # A retryable failure sent no content. A listing guard may have refreshed
+            # its facts; keep the audit payload identical to the bytes about to send.
+            conn.execute("UPDATE outbound_message SET payload=%s WHERE id=%s",
+                         (Jsonb(payload), outbound_id))
+            conn.execute("UPDATE message SET text_body=%s WHERE id=(SELECT message_id "
+                         "FROM outbound_message WHERE id=%s)",
+                         (whatsapp.summary(payload), outbound_id))
         else:
             message_id = conn.execute(
                 """
@@ -217,3 +229,31 @@ def _record(conn, agency_id, outbound_id, status, *, wamid=None, error_code=None
             )
         else:
             _set_status(conn, outbound_id, status, error_code=error_code)
+
+
+def guard_property_media(conn, client, agency_id, conversation_id, recipient,
+                         dedupe_key, media_source):
+    """Block hidden customer media before upload/presigning as well as HTTP dispatch."""
+    if media_source[0] == "property_media":
+        with tenant_transaction(conn, agency_id):
+            public = conn.execute(
+                "SELECT v.listing_code, v.id FROM property_media m "
+                "JOIN v_public_listing v ON v.id = m.property_id WHERE m.id = %s",
+                (media_source[1],)).fetchone()
+            if public is None:
+                row = conn.execute("SELECT p.listing_code, p.id FROM property_media m "
+                    "JOIN property p ON p.id = m.property_id WHERE m.id = %s",
+                    (media_source[1],)).fetchone()
+        if public is None:
+            if row:
+                from types import SimpleNamespace
+
+                from app.customer_tools import conversation_language
+                from app.freshness import unavailable
+                language = conversation_language(conn, SimpleNamespace(
+                    agency_id=agency_id, conversation_id=conversation_id))
+                notice = send_message(conn, client, agency_id, conversation_id, recipient,
+                    unavailable(row[0], language), f"{dedupe_key}:unavailable")
+                return SendResult("cancelled" if notice.status == "sent" else notice.status)
+            return SendResult("cancelled")
+    return None

@@ -81,7 +81,9 @@ Steps (same pattern as migrations 007 and 010):
 4. Run the migrator with the admin migrate.env and `PGOPTIONS='-c lock_timeout=3s'` so it fails
    fast instead of stalling. Expect 1 applied, 10 skipped.
 5. A lock timeout or failed CHECK rolls everything back: investigate and retry.
-6. Replace web / worker with the release image; check `/health` and a staff `#demo buttons`.
+6. Replace web / worker with the release image; check `/health` inside the web container (public
+   `/health` is 404 since audit WP2, MA-014; see `docs/RELEASE_10_2.md` section 8) and a staff
+   `#demo buttons`.
 
 Rollback: code that does not know the new columns ignores them, so the previous image keeps
 working on a migrated database. Dropping the columns needs a new migration; never edit 011 after

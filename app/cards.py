@@ -397,7 +397,7 @@ def plan_results(conn, agency_id, conversation_id, listings, *, note=None, force
     return ([whatsapp.text(note)] if note else []) + render(listings, fallback=fallback)
 
 
-def fixed_plan(conn, agency_id, turn_id, build):
+def fixed_plan(conn, agency_id, turn_id, build, *, on_store=None):
     """The turn's payloads: build() runs only while the turn has no stored plan; the
     first stored list wins and every later attempt gets it back unchanged."""
     with tenant_transaction(conn, agency_id):
@@ -412,6 +412,13 @@ def fixed_plan(conn, agency_id, turn_id, build):
     payloads = build()
     with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
+        stored = conn.execute(
+            "SELECT reply_plan FROM conversation_turn WHERE id = %s FOR UPDATE", (turn_id,),
+        ).fetchone()
+        if stored[0] is not None:
+            return stored[0]
+        if on_store is not None:
+            on_store(conn)
         return conn.execute(
             """
             UPDATE conversation_turn SET reply_plan = COALESCE(reply_plan, %s)

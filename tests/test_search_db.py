@@ -55,7 +55,35 @@ def scenario_2(st):
     return find(st, CUSTOMER_B)
 
 
+def test_strict_area_allows_neighbours_only_after_explicit_nearby_request(st):
+    st.say("sirf DHA Phase 8 mein 500 gaz ghar, budget 8 crore tak",
+           [p("location", "set", "DHA Phase 8"), p("size", "set", "500 gaz"),
+            p("property_types", "set", "ghar"), p("budget", "set", "8 crore tak")],
+           sender=CUSTOMER_B)
+    result = find(st, CUSTOMER_B)
+    assert set(result.codes) == {"DH8-101", "DH8-102"}
+    assert "neighbour" not in result.relaxations
+    expanded = search.search_conversation(st.conn, st.agency, conversation(st, CUSTOMER_B),
+                                           st.cache.get(), nearby=True)
+    assert "DH7-101" in expanded.codes
+    saved = st.query("SELECT filters FROM search_run WHERE id=%s", (expanded.search_run_id,))[0][0]
+    assert saved["no_nearby"] and saved["nearby_requested"]
+
+
 # --- the plan's golden scenarios ------------------------------------------------------
+
+
+def test_strict_area_no_match_is_not_filled_with_a_neighbour(st):
+    st.say("sirf DHA Phase 6 mein 500 gaz ghar khareedna hai, budget 6.6 crore tak",
+           [p("location", "set", "DHA Phase 6"), p("size", "set", "500 gaz"),
+            p("purpose", "set", "khareedna"), p("property_types", "set", "ghar"),
+            p("budget", "set", "6.6 crore tak")], sender=CUSTOMER_B)
+    result = find(st, CUSTOMER_B)
+    assert result.status == search.NO_MATCH and not result.codes
+    assert result.lowest_price_pkr == 78_000_000
+    expanded = search.search_conversation(st.conn, st.agency, conversation(st, CUSTOMER_B),
+                                           st.cache.get(), nearby=True)
+    assert "DH7-101" in expanded.codes
 
 def test_scenario_1_office_on_rent_anywhere_in_karachi(st):
     st.say("Hi, I'm looking for an office on rent in Karachi, around 5 lakh per month.",

@@ -103,6 +103,7 @@ class Request:
     excluded: frozenset = frozenset()
     unmapped: tuple = ()
     echo: tuple = ()               # ((slot, (reasons...)), ...) for unconfirmed slots
+    no_nearby: bool = False        # explicit only/sirf area; automatic neighbours forbidden
 
     @classmethod
     def from_slots(cls, slots):
@@ -129,6 +130,7 @@ class Request:
             types=tuple(allowed),
             nodes=tuple(str(n) for n in place.get("nodes") or ()),
             mode=place.get("mode"),
+            no_nearby=bool(place.get("no_nearby")),
             budget_min=budget.get("min"),
             budget_max=budget.get("max"),
             stated=budget.get("stated_pkr"),
@@ -153,6 +155,7 @@ class Request:
         return {
             "purpose": self.purpose, "types": list(self.types), "nodes": list(self.nodes),
             "mode": self.mode, "budget_min": self.budget_min, "budget_max": self.budget_max,
+            "no_nearby": self.no_nearby,
             "no_budget_relaxation": self.no_budget_relaxation,
             "size": {k: (self.size or {}).get(k) for k in
                      ("nominal_sqyd", "sqft", "mode", "min_sqft", "max_sqft")}
@@ -568,6 +571,8 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
     else:
         requested = subtree(gazetteer, nodes) & city
         near = (subtree(gazetteer, neighbours(conn, gazetteer, nodes)) & city) - requested
+    if request.no_nearby and not nearby:
+        near = set()  # explicit Nearby-area action may broaden; the ladder cannot
     if nearby and not near:
         return Result(NO_MATCH, no_neighbours=True)
     now = conn.execute("SELECT now()").fetchone()[0]
@@ -642,7 +647,8 @@ def run(conn, gazetteer, *, conversation_id, requirement_version, slots,
         VALUES (current_agency_id(), %s, %s, %s, %s, %s)
         RETURNING id
         """,
-        (conversation_id, requirement_version, Jsonb(request.filters()),
+        (conversation_id, requirement_version,
+         Jsonb({**request.filters(), **({"nearby_requested": True} if nearby else {})}),
          Jsonb(relaxations), len(kept)),
     ).fetchone()[0]
     logger.info("Search %s: %s, %d result(s), relaxations [%s]", result.search_run_id,
@@ -674,19 +680,20 @@ def search_conversation(conn, agency_id, conversation_id, gazetteer, nearby=Fals
 
 
 def record_shown(conn, agency_id, conversation_id, search_run_id, property_ids,
-                 card_message_ids=None):
+                 card_message_ids=None, rendered_prices=None):
     """After the results were sent (Task 10.1): shown_item rows in position order. Only
     shown listings count for "Property 2", demotion and the cheaper rule."""
     cards = list(card_message_ids or [None] * len(property_ids))
     with tenant_transaction(conn, agency_id):
         _set_timeout(conn)
-        for position, (property_id, card) in enumerate(zip(property_ids, cards), 1):
+        prices = list(rendered_prices or [None] * len(property_ids))
+        for position, (property_id, card, price) in enumerate(zip(property_ids, cards, prices), 1):
             conn.execute(
                 """
                 INSERT INTO shown_item (agency_id, conversation_id, search_run_id, position,
-                                        property_id, card_message_id)
-                VALUES (current_agency_id(), %s, %s, %s, %s, %s)
+                                        property_id, card_message_id, rendered_price_pkr)
+                VALUES (current_agency_id(), %s, %s, %s, %s, %s, %s)
                 ON CONFLICT DO NOTHING
                 """,
-                (conversation_id, search_run_id, position, property_id, card),
+                (conversation_id, search_run_id, position, property_id, card, price),
             )

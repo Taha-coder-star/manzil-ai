@@ -10,6 +10,7 @@ functions, no database, no logging of message text.
 
 import re
 
+from app import normalise
 from app.grounding import LISTING_CODE
 
 NEW_SEARCH, CLEAR_OLD = "new_search", "clear_old"
@@ -68,6 +69,41 @@ _DOUBT = frozenset({"kya", "can", "could", "should", "would", "shall", "kaise", 
 
 def _tokens(text):
     return _TOKEN.findall((text or "").casefold())
+
+
+_CHEAPER = frozenset({"sasta", "saste", "sasti", "cheaper"})
+_CHEAPER_FILLER = frozenset({
+    "kuch", "thoda", "thora", "ji", "jee", "please", "plz", "pls", "mujhe", "mjhy",
+    "dikhao", "dikhayein", "dikhaiye", "dikha", "do", "dein", "show", "me", "something",
+    "anything", "options", "option", "properties", "property", "listings", "listing",
+    "a", "little", "bit", "aur",
+})
+# Scribe can write Roman Urdu speech in Devanagari. Normalize only known command
+# fillers here; unknown words remain and fail the standalone allowlist below.
+_CHEAPER_DEVANAGARI = {
+    "कुछ": "kuch", "दिखाओ": "dikhao", "दिखाइए": "dikhaiye",
+    "दिखाएं": "dikhayein", "दिखायें": "dikhayein", "मुझे": "mujhe",
+    "जी": "ji", "प्लीज": "please", "और": "aur",
+}
+_COMMAND_DEVANAGARI_WORD = re.compile(r"[\u0900-\u0963\u0970-\u097f]+")
+
+
+def cheaper_command(text):
+    """Exact span of a standalone, affirmative cheaper request, else None.
+
+    Only guards search when the model omitted the relative budget update. Extra
+    requirements, negation, conditions and questions still need model extraction.
+    No amounts, places or property types are inferred here.
+    """
+    text = (text or "").strip()
+    normalized = normalise.romanise(text)
+    normalized = _COMMAND_DEVANAGARI_WORD.sub(
+        lambda m: _CHEAPER_DEVANAGARI.get(m.group(), m.group()), normalized)
+    words = set(_tokens(normalized))
+    if (not words or len(text) > 200 or any(c in text for c in "?\uff1f\u061f")
+            or not words & _CHEAPER or words - (_CHEAPER | _CHEAPER_FILLER)):
+        return None
+    return text
 
 
 def greeting_kind(text):

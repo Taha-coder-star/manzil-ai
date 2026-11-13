@@ -149,6 +149,20 @@ end-to-end guarantee.
   thought signatures and their acceptance by another model is not documented or
   verified, and executed tool actions are never replayed. No signatures are invented or
   stripped.
+- **Salvaged rounds** (audit MA-003, 2026-11-12): on the **customer** route, when a
+  round ends with a provider error (after the continuation) or a malformed / truncated /
+  other response, and at least one tool round has completed, the turn keeps what the
+  tools produced: the code search runs first when every call was `update_requirements`
+  (as at the iteration limit), and if there are payloads or notices the outcome is
+  `done` with detail `round_failed:<error>` (logged at WARNING, like `iteration_limit`).
+  Everything still passes `ground_customer`. Otherwise the failure template as before. A
+  first-call failure (no tool ran) keeps the failure template and recovery scheduling; a
+  refusal keeps the refusal template. Staff turns keep the failure template (a partly
+  read segment with no notice would hide lost listings; BD-16 not approved).
+- **Handoff first** (audit MA-002): in `render_customer`, a turn that opened a handoff
+  replies with the handoff message alone, whatever the outcome kind (done, failed,
+  refused): the conversation is already `handoff_pending`, and any AI message would be
+  cancelled by the send-time gate.
 - Retries are bounded: at most one primary and one failover attempt per iteration,
   three iterations, the turn budget.
 - Classification (`app.llm.parse_response`): `promptFeedback.blockReason` or finish

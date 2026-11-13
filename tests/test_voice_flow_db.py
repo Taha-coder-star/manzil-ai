@@ -139,6 +139,93 @@ def test_scenario_2_by_voice_gives_the_three_listings_in_roman_urdu(vf):
     assert runs(st) == 1
 
 
+@pytest.mark.parametrize("explicit_update", [False, True])
+def test_devanagari_cheaper_voice_applies_missing_budget_update_once(vf, explicit_update):
+    st = vf.st
+    vf.scribe.script.append(scribe_body(SPOKEN))
+    vf.say(vf.voice(), calls=search_calls(SPOKEN_PATCH))
+    vf.scribe.script.append(scribe_body("कुछ सस्ता दिखाओ"))
+    calls = search_calls([p("budget", "relative", "कुछ सस्ता")]) if explicit_update else []
+    reply = vf.say(vf.voice(seconds=3), calls=[*calls, ("search_properties", {}),
+                                               ("search_properties", {})])
+    budget = slots(st)["budget"]["value"]
+    assert budget["max"] == 72_750_000 and budget["relative"] == "cheaper"
+    assert "7.8 crore" in sent_text(reply)
+    assert "DH6-102" not in sent_text(reply) and "DH6-101" not in sent_text(reply)
+    assert not any(pl["type"] == "image" for pl in reply)
+    patches = st.query("SELECT count(*) FROM requirement_patch_log, "
+                       "jsonb_array_elements(ops) op WHERE op->>'slot'='budget' "
+                       "AND op->>'op'='relative' AND op->>'status'='applied'")
+    assert patches == [(1,)]
+
+
+def test_english_voice_keeps_up_to_when_budget_span_omits_prefix(vf):
+    vf.scribe.script.append(scribe_body(
+        "I want to buy a 500 square yard house in DHA Phase 6. "
+        "My budget is up to 8 crore rupees."))
+    reply = vf.say(vf.voice(), calls=search_calls([
+        p("purpose", "set", "buy"), p("property_types", "set", "house"),
+        p("size", "set", "500 square yard"), p("location", "set", "DHA Phase 6"),
+        p("budget", "set", "8 crore")]))
+    value = slots(vf.st)["budget"]["value"]
+    assert (value["mode"], value["min"], value["max"]) == ("max", None, 80_000_000)
+    assert "around 8 crore" not in sent_text(reply)
+    filters = vf.st.query("SELECT filters FROM search_run")[0][0]
+    assert filters["budget_min"] is None and filters["budget_max"] == 80_000_000
+
+
+def test_budget_prefix_does_not_cross_messages(vf):
+    vf.say(text("up to", sender=CUSTOMER_B), text("8 crore", sender=CUSTOMER_B),
+           calls=[("update_requirements", {"patch": [p("budget", "set", "8 crore")]})])
+    value = slots(vf.st)["budget"]["value"]
+    assert (value["mode"], value["min"], value["max"]) == ("around", 72_000_000, 88_000_000)
+
+
+def test_repeated_amount_with_different_prefixes_asks_instead_of_choosing(vf):
+    vf.scribe.script.append(scribe_body("up to 8 crore or around 8 crore"))
+    reply = vf.say(vf.voice(), calls=search_calls([p("budget", "set", "8 crore")]))
+    assert "budget" not in slots(vf.st) and runs(vf.st) == 0
+    assert turn_engine.TEMPLATES_EN["budget_unclear"] in sent_text(reply)
+
+
+def test_sirf_phase8_voice_never_automatically_adds_phase7(vf):
+    vf.scribe.script.append(scribe_body(SPOKEN))
+    vf.say(vf.voice(), calls=search_calls(SPOKEN_PATCH))
+    vf.scribe.script.append(scribe_body("Sirf Defence Phase 8 mein ghar dikhao, budget 8 crore tak"))
+    reply = vf.say(vf.voice(), calls=search_calls([
+        p("location", "add", "Defence Phase 8"), p("budget", "set", "8 crore tak")]))
+    assert set(latest_shown(vf.st)) == {"DH8-101", "DH8-102"}
+    assert "DH7-101" not in sent_text(reply)
+    assert slots(vf.st)["location"]["value"]["no_nearby"] is True
+    # A budget-only follow-up retains the area restriction.
+    vf.say(text("budget 9 crore tak", sender=CUSTOMER_B),
+           calls=search_calls([p("budget", "set", "9 crore tak")]))
+    assert set(latest_shown(vf.st)) == {"DH8-101", "DH8-102"}
+    filters = vf.st.query("SELECT filters FROM search_run ORDER BY created_at DESC LIMIT 1")[0][0]
+    assert filters["no_nearby"] is True
+
+
+def test_voice_unknown_phase_cannot_be_retried_as_only_the_parent_area(vf):
+    st = vf.st
+    vf.say(text('Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak', sender=CUSTOMER_B),
+           calls=search_calls([p('location', 'set', 'Gulshan-e-Iqbal Block 13'),
+                               p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]))
+    before, searches = slots(st)['location'], runs(st)
+    heard = 'Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing'
+    vf.scribe.script.append(scribe_body(heard))
+    payloads = vf.say(vf.voice(seconds=16), calls=[
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('beds_min', 'set', '2 bed'), p('baths_min', 'set', '3 bathroom')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('search_properties', {})])
+    assert slots(st)['location'] == before
+    assert slots(st)['beds_min']['value'] == 2 and slots(st)['baths_min']['value'] == 3
+    assert runs(st) == searches
+    assert 'BTK-101' not in sent_text(payloads)
+    assert len(vf.scribe.calls) == 1 and not vf.gemini.calls
+
+
 def test_scenario_2_in_urdu_script_gives_the_same_three_listings(vf):
     """Urdu script is read (R16: the normalisers cover both scripts): same slots, same ids."""
     st = vf.st

@@ -80,6 +80,7 @@ from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.gazetteer import GazetteerUnavailable
 from app.queue import PermanentJobError, error_code
+from app.turn_assembly import before_dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,9 @@ TURN_FAILED = "turn_failed"
 # reply): TEMPLATES["failure"] under turn:{id}:failed, through the send-time gate.
 FAILED_NOTICE_SUFFIX = "failed"
 INTERIM_SUFFIX = "interim"
+# Audit MA-010: a customer turn of only these (a thumbs-up, a poll, a system notice) has
+# nothing to answer or forward; it is closed silently, as the staff buffer does.
+NO_CONTENT_TYPES = staff_buffer.IGNORED_TYPES | {"system"}
 # Reply ids of the listing cards (app.cards). The id is client-supplied: only this exact
 # shape is ever echoed back.
 TAP_ID = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
@@ -139,6 +143,8 @@ class Turn:
     # the segment's items), with the segment's flags (app.staff_buffer).
     staff_segment_id: UUID | None = None
     segment_flags: tuple[str, ...] = ()
+    original_message_ids: tuple[UUID, ...] = ()
+    outbound_prefix: str | None = None
 
     @property
     def ai_allowed(self):
@@ -227,7 +233,7 @@ def assemble_turn(conn, job, sender, abandoned=None):
             """,
             (conversation_id,),
         ).fetchone()
-        if turn is not None and turn[6] >= MAX_TURN_ATTEMPTS:
+        if turn is not None and turn[6] >= max(MAX_TURN_ATTEMPTS, job.max_attempts):
             # Every attempt so far ended without closing the turn (a crash runs no
             # cleanup; this count is all it leaves): give the turn up, then answer
             # the messages waiting behind it.
@@ -257,7 +263,12 @@ def assemble_turn(conn, job, sender, abandoned=None):
                 (turn[0],),
             ).fetchall()
             logger.info("Resuming open turn %s (%d messages)", turn[0], len(rows))
-            return _turn(job.agency_id, conversation_id, sender, turn, rows), True
+            result = _turn(job.agency_id, conversation_id, sender, turn, rows)
+            original = conn.execute(
+                "SELECT original_message_ids FROM conversation_turn WHERE id = %s",
+                (result.id,),
+            ).fetchone()[0]
+            return dataclasses.replace(result, original_message_ids=tuple(original)), True
 
         rows = conn.execute(
             f"""
@@ -401,13 +412,16 @@ def segment_turn(conn, job, sender, conversation_id, segment_id):
 
 
 def check_schema(conn, agency_id):
-    """Raise ConfigurationError unless migration 014 (conversation_turn.attempts and
+    """Raise ConfigurationError unless migration 018 (durable turn replanning) and 014
     the 'failed' status) is applied; the turn lifecycle needs it with any AI_PROVIDER.
     Runs as the runtime login inside a tenant transaction (RLS on)."""
     try:
         with tenant_transaction(conn, agency_id):
             _set_timeout(conn)
             conn.execute("SELECT attempts FROM conversation_turn LIMIT 0")
+            conn.execute("SELECT replan_count, original_message_ids, dispatch_started "
+                         "FROM conversation_turn LIMIT 0")
+            conn.execute("SELECT status, reply_plan FROM ai_recovery LIMIT 0")
             row = conn.execute(
                 """
                 SELECT pg_catalog.pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint
@@ -421,8 +435,8 @@ def check_schema(conn, agency_id):
     except psycopg.Error:
         raise ConfigurationError("Schema check failed: database unavailable") from None
     if row is None or "'failed'" not in row[0]:
-        raise ConfigurationError("The worker requires migration 014 (turn attempts and "
-                                 "failed turns)")
+        raise ConfigurationError("The worker requires migration 014 and migrations 018 and 019 "
+                                 "(turn attempts, failed turns and durable replanning)")
 
 
 def close_turn(conn, turn, status):
@@ -674,11 +688,15 @@ def _close_failed(conn, turn_id):
         (turn_id,),
     ).fetchone()
     if closed is not None:
-        conn.execute(
+        dead = conn.execute(
             "UPDATE job SET status = 'dead', completed_at = now(), last_error_code = %s "
-            "WHERE id = %s AND status = 'pending'",
+            "WHERE id = %s AND status = 'pending' RETURNING id, conversation_key",
             (TURN_FAILED, closed[0]),
-        )
+        ).fetchone()
+        if dead:
+            from app.queue import DEAD_ALERT_JOB, enqueue_job
+            enqueue_job(conn, DEAD_ALERT_JOB, f"dead-alert:{dead[0]}",
+                        {"job_id": str(dead[0])}, conversation_key=dead[1])
 
 
 def fail_turn(conn, turn, error):
@@ -745,6 +763,12 @@ def answer_turn(conn, client, job, turn, *, engine=None):
 
 
 def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, storage=None):
+    if (turn.route == "customer" and turn.messages
+            and all(m.type in NO_CONTENT_TYPES for m in turn.messages)):
+        # Before the gate: a reaction during a handoff is neither forwarded nor answered.
+        close_turn(conn, turn, "replied")
+        logger.info("Turn %s ignored (no content)", turn.id)
+        return
     if not turn.ai_allowed:
         # Control-state gate: no AI output. Task 11.2 (R-28): while a handoff is open, a
         # customer's messages (voice as its transcript) go to whoever holds it, plus one
@@ -819,6 +843,9 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
                 payloads = tap_reply(turn)
             if payloads is None:
                 payloads = _respond(conn, client, job, turn, engine)
+            expanded = before_dispatch(conn, job, turn, payloads)
+            if expanded is not None:
+                return _answer(conn, client, job, expanded, demo, engine, speech_service, storage)
             _send(conn, client, turn, [*actions, *payloads], storage)
             return
     except whatsapp.PermanentSendError as exc:

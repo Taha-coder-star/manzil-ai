@@ -1,3 +1,6 @@
 {$SITE_ADDRESS} {
+	# /health reads the database and S3: operators check it inside the web container
+	# (audit MA-014); the public liveness check is /live.
+	respond /health 404
 	reverse_proxy web:8000
 }

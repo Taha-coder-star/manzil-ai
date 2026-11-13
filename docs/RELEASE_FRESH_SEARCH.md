@@ -216,7 +216,8 @@ The script (`docs/release/fresh_search_switch.sh`, `set -Eeuo pipefail`, tested 
   is rebuilt or pulled).
 - **Pinning:** both services use the single tag `manzil-ai:latest`. After the recreate the script requires, for **web and
   worker**: container image ID equals the release image ID, `sha256sum -c SHA256SUMS` passes **inside the running
-  container**, `/health` answers, `POST /webhook` returns 401, and the worker log shows `Worker started`.
+  container**, `/health` answers 200 **inside the web container** (public `/health` is 404 since audit WP2, MA-014),
+  public `/live` answers, `POST /webhook` returns 401, and the worker log shows `Worker started`.
 - **Any failure after the switch triggers an explicit rollback by the recorded image ID** (never by the `pre-fresh` tag,
   which the tests deliberately corrupt): re-tags the ID to `latest`, recreates both, requires both on the recorded ID and the
   site answering. Exit 1 = rolled back; **exit 2 = the rollback itself could not be verified: manual intervention**.

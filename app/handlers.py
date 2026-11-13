@@ -212,6 +212,14 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         )
 
     handlers["process_message"] = process
+    from app import recovery
+
+    def recover(conn, job):
+        recovery.run(conn, job, client_factory, engine, storage)
+
+    handlers[recovery.JOB_TYPE] = recover
+    from app.queue import DEAD_ALERT_JOB, emit_dead_alert
+    handlers[DEAD_ALERT_JOB] = emit_dead_alert
     # Task 7.4: staff buffer segments (app.staff_buffer).
     handlers[staff_buffer.FLUSH_JOB] = staff_buffer.flush
 
@@ -243,7 +251,10 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
         handoff_alert.alert(conn, job, client_factory, engine, place_names())
 
     def accept_timeout(conn, job):
-        handoff_alert.accept_timeout(conn, job, client_factory, place_names())
+        if int(job.payload.get("round", 1)) >= 2:   # audit MA-001: nobody accepted
+            handoff_actions.expire(conn, job, client_factory)
+        else:
+            handoff_alert.accept_timeout(conn, job, client_factory, place_names())
 
     def release(conn, job):
         handoff_actions.release(conn, job, client_factory)
@@ -285,6 +296,9 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
         except PermanentJobError:
             pass  # left pending: that job dead-letters itself when it runs
     sender = message["from"]
+    from app.turn_assembly import debounce
+
+    debounce(conn, job, sender)
 
     with closing(client_factory(phone_number_id)) as client:
         def demo(turn, command, dedupe_prefix):

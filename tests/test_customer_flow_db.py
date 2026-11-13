@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import customer_tools, grounding, turn_engine, whatsapp
+from app import ai_tools, customer_tools, grounding, turn_engine, whatsapp
 from app.handlers import make_handlers
 from app.turn_engine import TEMPLATES, TEMPLATES_EN
 from app.worker import Worker
@@ -172,6 +172,75 @@ def test_bad_location_repair_cannot_search_previous_filters(st):
                     ('search_properties', {}), sender=CUSTOMER_A)
     assert st.query('SELECT count(*) FROM search_run')[0][0] == before
     assert 'DH6-108' not in sent_text(payloads)
+
+
+def test_unknown_qualified_place_cannot_be_repaired_by_dropping_its_phase(st):
+    turn(st, 'Gulshan-e-Iqbal Block 13 mein ghar 90 lakh tak',
+         ('update_requirements', {'patch': [p('location', 'set', 'Gulshan-e-Iqbal Block 13'),
+              p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}))
+    before = st.state()[1]['location']
+    searches = st.query('SELECT count(*) FROM search_run')[0][0]
+    body = 'Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing'
+    reply = turn(st, body,
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('beds_min', 'set', '2 bed'), p('baths_min', 'set', '3 bathroom')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('search_properties', {}))
+    assert st.state()[1]['location'] == before
+    assert st.state()[1]['beds_min']['value'] == 2
+    assert st.state()[1]['baths_min']['value'] == 3
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == searches
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_parent_place_only_cannot_omit_an_adjacent_phase_before_first_resolution(st):
+    reply = turn(st, 'Bahria Town Phase 8 mein ghar chahiye',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town'),
+             p('property_types', 'set', 'ghar')]}), ('search_properties', {}))
+    assert not st.query('SELECT id FROM search_run')
+    assert not st.query('SELECT id FROM requirement_patch_log')
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_a_complete_grounded_alternative_can_repair_the_place(st):
+    reply = turn(st, 'Bahria Town Phase 8 ya Defence Phase 8 mein ghar 90 lakh tak',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}),
+        ('update_requirements', {'patch': [p('location', 'set', 'Defence Phase 8')]}),
+        ('search_properties', {}))
+    assert st.state()[1]['location']['raw'] == 'Defence Phase 8'
+    assert 'DHA Phase 8' in sent_text(reply)
+    assert 'BTK-101' not in sent_text(reply)
+
+
+def test_a_later_customer_turn_can_explicitly_choose_the_broader_area(st):
+    turn(st, 'Bahria Town Phase 8 mein ghar 90 lakh tak',
+        ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8'),
+             p('property_types', 'set', 'ghar'), p('budget', 'set', '90 lakh tak')]}))
+    turn(st, 'Bahria Town', ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town')]}))
+    assert st.state()[1]['location']['raw'] == 'Bahria Town'
+
+
+def test_retry_history_still_blocks_an_unscoped_child_of_the_unknown_place(st, monkeypatch):
+    scenario_2(st)
+    version, state = st.state()
+    searches = st.query('SELECT count(*) FROM search_run')[0][0]
+    load = customer_tools.CustomerBinding._location_spans
+
+    def reload_from_audit(binding):
+        binding.location_spans = None
+        return load(binding)
+
+    monkeypatch.setattr(customer_tools.CustomerBinding, '_location_spans', reload_from_audit)
+    turn(st, 'Bahria Town Phase 8 mein ghar',
+         ('update_requirements', {'patch': [p('location', 'set', 'Bahria Town Phase 8')]}),
+         ('update_requirements', {'patch': [p('location', 'set', 'Phase 8')]}),
+         ('search_properties', {}))
+    assert st.state()[0] == version + 1  # only the original unknown attempt was recorded
+    assert st.state()[1]['location'] == state['location']
+    assert st.query('SELECT count(*) FROM search_run')[0][0] == searches
 
 
 def test_an_inferred_purpose_note_comes_before_the_cards_and_is_said_once(st):
@@ -356,6 +425,75 @@ def test_scenario_3b_cheaper_is_an_honest_no_match_with_three_buttons(st):
     assert st.state()[1]["budget"]["value"]["max"] <= 80_000_000  # never raised
 
 
+def test_cheaper_search_cannot_reuse_old_filters_when_model_skips_update(st):
+    scenario_2(st)
+    previous_version, old = st.state()
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    version, slots = st.state()
+    assert version == previous_version + 1
+    assert slots["budget"]["value"]["max"] == 72_750_000
+    assert slots["budget"]["value"]["relative"] == "cheaper"
+    assert len(slots["excluded_property_ids"]["value"]) == 3
+    assert slots["location"] == old["location"]
+    assert slots["size"] == old["size"]
+    assert len(payloads) == 1
+    assert "Yahan price 7.8 crore se shuru hoti hai." in sent_text(payloads)
+    assert button_ids(payloads[0]) == ["nomatch:nearby", "nomatch:budget", "handoff:request"]
+    assert not images(payloads)
+
+
+def test_repeated_search_calls_apply_the_cheaper_update_only_once(st):
+    scenario_2(st)
+    version = st.state()[0]
+    turn(st, "Kuch sasta dikhao", ("search_properties", {}), ("search_properties", {}))
+    assert st.state()[0] == version + 1
+
+
+def test_explicit_cheaper_update_is_not_applied_again_before_search(st):
+    scenario_2(st)
+    version = st.state()[0]
+    turn(st, "Kuch sasta dikhao",
+         ("update_requirements", {"patch": [p("budget", "relative", "Kuch sasta")]}),
+         ("search_properties", {}))
+    assert st.state()[0] == version + 1
+
+
+def test_cheaper_without_a_shown_search_asks_instead_of_using_old_budget(st):
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    assert not st.query("SELECT id FROM search_run")
+    assert not latest_shown(st)
+    assert "budget" in sent_text(payloads).lower()
+
+
+def test_a_failed_cheaper_update_never_searches_the_old_filters(st, monkeypatch):
+    scenario_2(st)
+    searches = st.query("SELECT count(*) FROM search_run")[0][0]
+    monkeypatch.setattr(st.engine.requirements, "apply", lambda *a, **kw: ai_tools.ToolResult(
+        "update_requirements", False, {"status": "error"}, error="gazetteer_unavailable"))
+    payloads = turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    assert st.query("SELECT count(*) FROM search_run")[0][0] == searches
+    assert "DH6-102" not in sent_text(payloads)
+
+
+def test_a_negated_cheaper_request_does_not_change_the_budget_in_code(st):
+    scenario_2(st)
+    version, slots = st.state()
+    turn(st, "sasta nahi chahiye", ("search_properties", {}))
+    assert st.state() == (version, slots)
+
+
+def test_phase8_after_repaired_cheaper_search_retains_the_cap_and_adds_the_area(st):
+    scenario_2(st)
+    turn(st, "Kuch sasta dikhao", ("search_properties", {}))
+    cap = st.state()[1]["budget"]["value"]["max"]
+    payloads = turn(st, "Phase 8 mein bhi dekho",
+                    ("update_requirements", {"patch": [p("location", "add", "Phase 8")]}),
+                    ("search_properties", {}))
+    assert st.state()[1]["budget"]["value"]["max"] == cap
+    assert set(latest_shown(st)) == {"DH8-102", "DH8-101"}
+    assert "budget se thoda upar" in sent_text(payloads)
+
+
 def test_the_budget_button_asks_for_a_new_maximum(st):
     cheaper(st)
     budget = st.state()[1]["budget"]
@@ -448,9 +586,13 @@ def test_previously_shown_listing_that_became_hidden_gets_unavailable(st, status
     assert "DH6-101" in latest_shown(st)
     st.query("UPDATE property SET status=%s WHERE listing_code='DH6-101' RETURNING id", (status,))
     calls = len(st.requests)
-    assert sent_text(typed_only(st, "DH6-101")) == "DH6-101 abhi available nahi."
+    reply = typed_only(st, "DH6-101")
+    assert reply[0]["interactive"]["body"]["text"] == "DH6-101 abhi available nahi."
+    assert button_ids(reply[0]) == ["similar:DH6-101"]
     assert len(st.requests) == calls
-    assert sent_text(tap(st, "listing:DH6-101")) == "DH6-101 abhi available nahi."
+    reply = tap(st, "listing:DH6-101")
+    assert reply[0]["interactive"]["body"]["text"] == "DH6-101 abhi available nahi."
+    assert button_ids(reply[0]) == ["similar:DH6-101"]
 
 
 def purpose_buttons(payloads):

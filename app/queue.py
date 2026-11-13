@@ -8,7 +8,9 @@ connection and the lease reaper requeues the job.
 
 Ordering note: a job waiting on retry backoff does not block newer jobs of the
 same conversation. The conversation orchestrator (C3) coalesces all pending
-messages of a turn in WhatsApp timestamp order, so this is safe.
+messages of a turn in WhatsApp timestamp order, so this is safe. Jobs of a busy
+conversation do not block other conversations either: claim_job re-queries past
+them (audit MA-004); among free conversations the oldest due job still wins.
 
 Never log job payloads or exception messages; they can contain customer data.
 """
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 STATEMENT_TIMEOUT = "5s"
 CLAIM_BATCH = 10
+MAX_CLAIM_PASSES = 20   # safety cap on claim_job's re-queries past busy conversations
 DEFAULT_LEASE_SECONDS = 300
 BACKOFF_BASE_SECONDS = 5
 BACKOFF_CAP_SECONDS = 300
@@ -37,6 +40,7 @@ MAX_ERROR_CODE_LENGTH = 100
 # handling; the reaper queues this job so the customer still hears that the turn
 # failed (app.orchestrator.notify_failed_job; RFC 13 poison jobs).
 TURN_FAILED_NOTICE_JOB = "turn_failed_notice"
+DEAD_ALERT_JOB = "dead_letter_alert"
 _NOTICE_FOR = "process_message"
 
 _JOB_COLUMNS = (
@@ -51,6 +55,13 @@ class PermanentJobError(Exception):
     def __init__(self, code="permanent_error"):
         super().__init__(code)
         self.code = code
+
+
+class DeferJob(Exception):
+    """Scheduling, not failure: release the lease without spending an attempt."""
+
+    def __init__(self, seconds):
+        self.seconds = max(0, seconds)
 
 
 @dataclass(frozen=True)
@@ -102,7 +113,7 @@ def _set_timeout(conn):
 
 def enqueue_job(
     conn, job_type, dedupe_key, payload=None, *, conversation_key=None,
-    delay_seconds=0, inbound_event_id=None,
+    delay_seconds=0, inbound_event_id=None, max_attempts=3,
 ):
     """Inside tenant_transaction: add a job, optionally delayed. Returns its id, or
     None when a job with this dedupe_key already exists."""
@@ -110,17 +121,17 @@ def enqueue_job(
         """
         INSERT INTO job (
             agency_id, inbound_event_id, job_type, dedupe_key, payload,
-            conversation_key, available_at
+            conversation_key, available_at, max_attempts
         )
         VALUES (
             current_agency_id(), %s, %s, %s, %s, %s,
-            now() + make_interval(secs => %s)
+            now() + make_interval(secs => %s), %s
         )
         ON CONFLICT (agency_id, dedupe_key) DO NOTHING
         RETURNING id
         """,
         (inbound_event_id, job_type, dedupe_key, Jsonb(payload or {}),
-         conversation_key, delay_seconds),
+         conversation_key, delay_seconds, max_attempts),
     ).fetchone()
     return row[0] if row else None
 
@@ -128,43 +139,57 @@ def enqueue_job(
 def claim_job(conn, agency_id, job_types, locked_by, lease_seconds=DEFAULT_LEASE_SECONDS):
     """Claim the oldest due job of the given types whose conversation is free.
 
+    Candidates come CLAIM_BATCH at a time; when every candidate's conversation is
+    busy (its lock is held), the next pass excludes those conversations, so one
+    busy conversation with many waiting jobs cannot hide another's (audit MA-004).
+    Each unproductive pass adds at least one busy conversation, and only running
+    jobs hold locks, so passes stay few; MAX_CLAIM_PASSES is a safety cap.
+
     On success the caller holds the conversation lock (if the job has a key)
     and must release it through finish_job.
     """
     locked_key = None
+    busy = []
     try:
         with tenant_transaction(conn, agency_id):
             _set_timeout(conn)
-            candidates = conn.execute(
-                """
-                SELECT id, conversation_key FROM job
-                WHERE status = 'pending' AND available_at <= now()
-                  AND job_type = ANY(%s)
-                ORDER BY available_at, created_at
-                LIMIT %s
-                FOR UPDATE SKIP LOCKED
-                """,
-                (list(job_types), CLAIM_BATCH),
-            ).fetchall()
-            for job_id, key in candidates:
-                if key is not None:
-                    if not try_lock_conversation(conn, agency_id, key):
-                        continue
-                    locked_key = key
-                row = conn.execute(
-                    f"""
-                    UPDATE job SET
-                        status = 'running',
-                        attempts = attempts + 1,
-                        locked_at = now(),
-                        locked_by = %s,
-                        lease_expires_at = now() + make_interval(secs => %s)
-                    WHERE id = %s
-                    RETURNING {_JOB_COLUMNS}
+            for _ in range(MAX_CLAIM_PASSES):
+                candidates = conn.execute(
+                    """
+                    SELECT id, conversation_key FROM job
+                    WHERE status = 'pending' AND available_at <= now()
+                      AND job_type = ANY(%s)
+                      AND (conversation_key IS NULL OR conversation_key <> ALL(%s::text[]))
+                    ORDER BY available_at, created_at
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
                     """,
-                    (locked_by, lease_seconds, job_id),
-                ).fetchone()
-                return Job(*row)
+                    (list(job_types), busy, CLAIM_BATCH),
+                ).fetchall()
+                if not candidates:
+                    return None
+                for job_id, key in candidates:
+                    if key is not None:
+                        if not try_lock_conversation(conn, agency_id, key):
+                            busy.append(key)
+                            continue
+                        locked_key = key
+                    row = conn.execute(
+                        f"""
+                        UPDATE job SET
+                            status = 'running',
+                            attempts = attempts + 1,
+                            locked_at = now(),
+                            locked_by = %s,
+                            lease_expires_at = now() + make_interval(secs => %s)
+                        WHERE id = %s
+                        RETURNING {_JOB_COLUMNS}
+                        """,
+                        (locked_by, lease_seconds, job_id),
+                    ).fetchone()
+                    return Job(*row)
+            logger.warning("Claim stopped after %d passes over busy conversations",
+                           MAX_CLAIM_PASSES)
         return None
     except BaseException:
         # Session locks survive a rollback; release one taken for an unclaimed job.
@@ -182,7 +207,18 @@ def finish_job(conn, job, locked_by, error=None, *, backoff=backoff_seconds):
     try:
         with tenant_transaction(conn, job.agency_id):
             _set_timeout(conn)
-            if error is None:
+            if isinstance(error, DeferJob):
+                row = conn.execute(
+                    """
+                    UPDATE job SET status = 'pending', attempts = attempts - 1,
+                        available_at = now() + make_interval(secs => %s),
+                        locked_at = NULL, locked_by = NULL, lease_expires_at = NULL,
+                        last_error_code = NULL
+                    WHERE id = %s AND status = 'running' AND locked_by = %s
+                    RETURNING status
+                    """, (error.seconds, job.id, locked_by),
+                ).fetchone()
+            elif error is None:
                 row = conn.execute(
                     """
                     UPDATE job SET
@@ -212,6 +248,8 @@ def finish_job(conn, job, locked_by, error=None, *, backoff=backoff_seconds):
                         "code": error_code(error), "id": job.id, "locked_by": locked_by,
                     },
                 ).fetchone()
+                if row and row[0] == "dead":
+                    finalize_dead_media(conn, job.id)
     finally:
         if job.conversation_key is not None and not conn.closed:
             unlock_conversation(conn, job.agency_id, job.conversation_key)
@@ -219,7 +257,45 @@ def finish_job(conn, job, locked_by, error=None, *, backoff=backoff_seconds):
     if row is None:
         logger.warning("Job %s finished after losing its lease", job.id)
         return None
+    if row[0] == "dead":
+        alert_dead(job.agency_id, job.id, job.job_type, job.attempts,
+                   job.max_attempts, error_code(error))
     return row[0]
+
+
+def alert_dead(agency_id, job_id, job_type, attempts, max_attempts, reason):
+    logger.error("ALERT dead_letter agency=%s job=%s type=%s attempts=%s max_attempts=%s reason=%s",
+                 agency_id, job_id, job_type, attempts, max_attempts, reason,
+                 extra={"event": "dead_letter", "agency_id": str(agency_id),
+                        "job_id": str(job_id), "job_type": job_type,
+                        "attempts": attempts, "max_attempts": max_attempts, "reason": reason})
+
+
+def finalize_dead_media(conn, job_id):
+    """Inside the dead transition transaction, including final-attempt lease expiry."""
+    for table, kind, key in (("inbound_media", "fetch_media", "inbound_media_id"),
+                             ("inbound_audio", "fetch_audio", "inbound_audio_id")):
+        conn.execute(
+            f"UPDATE {table} m SET status = 'failed', error_code = 'job_dead', updated_at = now() "
+            "FROM job j WHERE j.id = %s AND j.job_type = %s "
+            f"AND m.id::text = j.payload->>%s AND m.status = 'pending'",
+            (job_id, kind, key),
+        )
+    conn.execute(
+        "UPDATE ai_recovery r SET status = 'failed', reason = 'job_dead', completed_at = now() "
+        "FROM job j WHERE j.id = %s AND j.job_type = 'ai_recovery' "
+        "AND r.source_turn_id::text = j.payload->>'source_turn_id' "
+        "AND r.status NOT IN ('completed', 'cancelled', 'failed')", (job_id,),
+    )
+
+
+def emit_dead_alert(conn, job):
+    with tenant_transaction(conn, job.agency_id):
+        row = conn.execute("SELECT id, job_type, attempts, max_attempts, last_error_code "
+                           "FROM job WHERE id = %s AND status = 'dead'",
+                           (job.payload["job_id"],)).fetchone()
+    if row:
+        alert_dead(job.agency_id, *row)
 
 
 def reap_expired(conn, agency_id):
@@ -237,12 +313,12 @@ def reap_expired(conn, agency_id):
             _set_timeout(conn)
             expired = conn.execute(
                 """
-                SELECT id, conversation_key, job_type FROM job
+                SELECT id, conversation_key, job_type, attempts, max_attempts FROM job
                 WHERE status = 'running' AND lease_expires_at < now()
                 FOR UPDATE SKIP LOCKED
                 """
             ).fetchall()
-            for job_id, key, job_type in expired:
+            for job_id, key, job_type, attempts, max_attempts in expired:
                 if key is not None:
                     if not try_lock_conversation(conn, agency_id, key):
                         continue
@@ -261,7 +337,9 @@ def reap_expired(conn, agency_id):
                     """,
                     (job_id,),
                 ).fetchone()[0]
-                reaped.append((job_id, status))
+                reaped.append((job_id, status, job_type, attempts, max_attempts))
+                if status == "dead":
+                    finalize_dead_media(conn, job_id)
                 if status == "dead" and job_type == _NOTICE_FOR:
                     enqueue_job(conn, TURN_FAILED_NOTICE_JOB, f"turn-failed-notice:{job_id}",
                                 {"job_id": str(job_id)}, conversation_key=key)
@@ -272,6 +350,8 @@ def reap_expired(conn, agency_id):
         if not conn.closed:
             for key in locked_keys:
                 unlock_conversation(conn, agency_id, key)
-    for job_id, status in reaped:
+    for job_id, status, job_type, attempts, max_attempts in reaped:
         logger.warning("Job %s lease expired; now %s", job_id, status)
+        if status == "dead":
+            alert_dead(agency_id, job_id, job_type, attempts, max_attempts, "lease_expired")
     return len(reaped)

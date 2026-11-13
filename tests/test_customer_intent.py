@@ -8,10 +8,34 @@ from app.customer_intent import (
     NEW_SEARCH,
     SALAM,
     asks_for_agent,
+    cheaper_command,
     fresh_command,
     greeting_kind,
     listing_lookup,
 )
+
+
+@pytest.mark.parametrize("body", [
+    "Kuch sasta dikhao", "sasta", "Please show me something cheaper!",
+    "Ji, thora sasta dikhayein", "show cheaper options",
+    "कुछ सस्ता दिखाओ", "सस्ता दिखाओ।", "जी थोड़ा सस्ता दिखाइए",
+    "कुछ sasta दिखाओ", "मुझे सस्ती दिखाएं",
+])
+def test_standalone_cheaper_command_keeps_the_customers_exact_span(body):
+    assert cheaper_command(body) == body
+
+
+@pytest.mark.parametrize("body", [
+    "", "show me options", "sasta nahi chahiye", "don't show cheaper options",
+    "kya sasta mil sakta hai?", "cheaper?", "if cheaper show me", "sirf sasta",
+    "Kuch sasta DHA Phase 8 mein", "sasta flat dikhao", "cheaper than 7 crore",
+    "sasta aur bara ghar", "not cheaper", "less expensive documents",
+    "सस्ता नहीं दिखाओ", "कुछ सस्ता मत दिखाओ", "अगर सस्ता दिखाओ",
+    "कुछ सस्ता दिखाओ?", "कुछ सस्ता DHA Phase 8 में", "सस्ता फ्लैट दिखाओ",
+    "कुछ सस्ता xyz दिखाओ", "सस्ता चाहिए", "सस्ता 7 crore तक",
+])
+def test_mixed_or_ambiguous_cheaper_requests_still_need_extraction(body):
+    assert cheaper_command(body) is None
 
 
 @pytest.mark.parametrize("text, kind", [

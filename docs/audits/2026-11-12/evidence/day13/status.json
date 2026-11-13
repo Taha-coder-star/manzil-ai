@@ -1,0 +1,966 @@
+{
+  "schema": 1,
+  "recorded_on": "2026-11-11",
+  "status": "TARGETED_EFFORT_COMPARISON_COMPLETE_ACCEPTANCE_GAPS_OPEN",
+  "owner_direction": "Reuse completed stabilization tests; no redundant full manual replay/new corpus by default",
+  "tasks": {
+    "13.1": "implemented and deployed",
+    "13.2": "implemented and deployed",
+    "13.3": "Implemented/deployed tooling; low/minimal text trials miss target; voice/cache/cost acceptance gaps open",
+    "13.4": "evidence consolidation in progress; full formal Run2 not established"
+  },
+  "candidate": {
+    "commit": "7eefb9c787ef39b8d24b84f420dbc13e335e90bd",
+    "image": "sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a",
+    "config_sha256": "34d4b870796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60",
+    "schema": 20,
+    "provider": "gemini",
+    "effort": "low"
+  },
+  "ci": [
+    {
+      "conclusion": "success",
+      "databaseId": 42861430103,
+      "event": "push",
+      "headSha": "7eefb9c787ef39b8d24b84f420dbc13e335e90bd",
+      "status": "completed",
+      "url": "https://github.com/Taha-coder-star/manzil-ai/actions/runs/42861430103",
+      "workflowName": "Manzil AI CI"
+    },
+    {
+      "conclusion": "success",
+      "databaseId": 42861446643,
+      "event": "pull_request",
+      "headSha": "7eefb9c787ef39b8d24b84f420dbc13e335e90bd",
+      "status": "completed",
+      "url": "https://github.com/Taha-coder-star/manzil-ai/actions/runs/42861446643",
+      "workflowName": "Manzil AI CI"
+    }
+  ],
+  "functional_acceptance": "retain prior accepted rows with their dates/builds",
+  "current_build_regression": "exact-head CI success; no rerun triggered by this audit",
+  "formal_gates": [
+    {
+      "id": "text_p50_ms",
+      "family": "timing",
+      "threshold": {
+        "max": 4000
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "historical_timings_recovered_zero_current_runtime_samples",
+      "sources": [
+        "output/day12-burst-acceptance-evidence.json",
+        "output/day12-voice-correction-acceptance-evidence.json",
+        "output/day2-t02-ordering-evidence.json",
+        "output/day2-b51146c-english-acceptance-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "text_p90_ms",
+      "family": "timing",
+      "threshold": {
+        "max": 7000
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "historical_timings_recovered_zero_current_runtime_samples",
+      "sources": [
+        "output/day12-burst-acceptance-evidence.json",
+        "output/day12-voice-correction-acceptance-evidence.json",
+        "output/day2-t02-ordering-evidence.json",
+        "output/day2-b51146c-english-acceptance-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "voice_p50_ms",
+      "family": "timing",
+      "threshold": {
+        "max": 7000
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "historical_timings_recovered_zero_current_runtime_samples",
+      "sources": [
+        "output/day12-burst-acceptance-evidence.json",
+        "output/day12-voice-correction-acceptance-evidence.json",
+        "output/day2-t02-ordering-evidence.json",
+        "output/day2-b51146c-english-acceptance-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "voice_p90_ms",
+      "family": "timing",
+      "threshold": {
+        "max": 10000
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "historical_timings_recovered_zero_current_runtime_samples",
+      "sources": [
+        "output/day12-burst-acceptance-evidence.json",
+        "output/day12-voice-correction-acceptance-evidence.json",
+        "output/day2-t02-ordering-evidence.json",
+        "output/day2-b51146c-english-acceptance-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "stt_p90_ms",
+      "family": "timing",
+      "threshold": {
+        "max": 3000
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "historical_timings_recovered_zero_current_runtime_samples",
+      "sources": [
+        "output/day12-burst-acceptance-evidence.json",
+        "output/day12-voice-correction-acceptance-evidence.json",
+        "output/day2-t02-ordering-evidence.json",
+        "output/day2-b51146c-english-acceptance-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "text_cost_usd",
+      "family": "cost",
+      "threshold": {
+        "max": 0.06
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "usage_recovered_required_billing_fields_missing",
+      "sources": [
+        "output/day13-provider-account-evidence.json",
+        "output/day13-gemini-quota-evidence.json",
+        "output/day13-elevenlabs-capacity.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "voice_cost_usd",
+      "family": "cost",
+      "threshold": {
+        "max": 0.07
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "usage_recovered_required_billing_fields_missing",
+      "sources": [
+        "output/day13-provider-account-evidence.json",
+        "output/day13-gemini-quota-evidence.json",
+        "output/day13-elevenlabs-capacity.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "inquiry_cost_usd",
+      "family": "cost",
+      "threshold": {
+        "max": 0.6
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "usage_recovered_required_billing_fields_missing",
+      "sources": [
+        "output/day13-provider-account-evidence.json",
+        "output/day13-gemini-quota-evidence.json",
+        "output/day13-elevenlabs-capacity.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "text_exact",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "voice_exact",
+      "family": "voice_corpus",
+      "threshold": {
+        "min": 0.9
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-b51146c-final-voice-cohort.json",
+        "output/day2-b51146c-english-acceptance-evidence.json",
+        "output/day2-2ee415b-voice-acceptance-evidence.json",
+        "output/day2-36989b5-strict-visible-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "paired_gap",
+      "family": "voice_corpus",
+      "threshold": {
+        "max": 0.07
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-b51146c-final-voice-cohort.json",
+        "output/day2-b51146c-english-acceptance-evidence.json",
+        "output/day2-2ee415b-voice-acceptance-evidence.json",
+        "output/day2-36989b5-strict-visible-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "stt_exact",
+      "family": "voice_corpus",
+      "threshold": {
+        "min": 0.85
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-b51146c-final-voice-cohort.json",
+        "output/day2-b51146c-english-acceptance-evidence.json",
+        "output/day2-2ee415b-voice-acceptance-evidence.json",
+        "output/day2-36989b5-strict-visible-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "stt_quiet_exact",
+      "family": "voice_corpus",
+      "threshold": {
+        "min": 0.9
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-b51146c-final-voice-cohort.json",
+        "output/day2-b51146c-english-acceptance-evidence.json",
+        "output/day2-2ee415b-voice-acceptance-evidence.json",
+        "output/day2-36989b5-strict-visible-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "stt_usable",
+      "family": "voice_corpus",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-b51146c-final-voice-cohort.json",
+        "output/day2-b51146c-english-acceptance-evidence.json",
+        "output/day2-2ee415b-voice-acceptance-evidence.json",
+        "output/day2-36989b5-strict-visible-evidence.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "control_requirements",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "clarify_recall",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.9
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "unnecessary_clarification",
+      "family": "customer_function",
+      "threshold": {
+        "max": 0.1
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "price_normalisation",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.98
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "aliases",
+      "family": "customer_function",
+      "threshold": {
+        "min": 1.0
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "text_result_sets",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.9
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "voice_result_sets",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.85
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "hidden_listings",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "assertion_violations",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "invented_facts",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "unconfirmed_writes",
+      "family": "staff",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "wrong_property",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "ai_after_takeover",
+      "family": "handoff",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-completion-20261108.md",
+        "output/day12-3-12-4-completion.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "context_retention",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "correct_images",
+      "family": "safety",
+      "threshold": {
+        "min": 1.0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "repeat_images",
+      "family": "safety",
+      "threshold": {
+        "max": 0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "handoff_recall",
+      "family": "handoff",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-completion-20261108.md",
+        "output/day12-3-12-4-completion.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "false_handoff",
+      "family": "handoff",
+      "threshold": {
+        "max": 0.05
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-completion-20261108.md",
+        "output/day12-3-12-4-completion.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "lead_card_complete",
+      "family": "handoff",
+      "threshold": {
+        "min": 1.0
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-completion-20261108.md",
+        "output/day12-3-12-4-completion.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "staff_fields",
+      "family": "staff",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "next_query_price_status",
+      "family": "safety",
+      "threshold": {
+        "min": 1.0
+      },
+      "safety": true,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "schema_valid",
+      "family": "staff",
+      "threshold": {
+        "min": 1.0
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+        "output/day13-tuning-publication.json"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "correct_tool",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    },
+    {
+      "id": "language",
+      "family": "customer_function",
+      "threshold": {
+        "min": 0.95
+      },
+      "safety": false,
+      "formal_value": null,
+      "formal_denominator": null,
+      "status": "saved_functional_evidence_retained_formal_coverage_not_yet_established",
+      "sources": [
+        "output/day2-checks-left.md",
+        "output/day2-20261108-text-cohort.json",
+        "Handoffs/codex/Weekend_Stabilisation_Plan.md"
+      ],
+      "rerun_required": "not established; recover and reconcile first",
+      "passed": null,
+      "waived": false
+    }
+  ],
+  "historical_timing_observations": [
+    {
+      "case": "D2 cheaper voice",
+      "commit": "2ee415bd79965530c8ae1287f119782f4941c921",
+      "duration_ms": 4646.513,
+      "boundary": "receipt to sent",
+      "interpretation": "historical individual sample, not p90",
+      "source": "output/day2-2ee415b-voice-acceptance-evidence.json"
+    },
+    {
+      "case": "D2 English voice",
+      "commit": "b51146ce1af783cf6c642582fb2b82b3caf9251e",
+      "duration_ms": 6574.384,
+      "boundary": "receipt to last sent",
+      "interpretation": "historical individual sample, not p90",
+      "source": "output/day2-b51146c-english-acceptance-evidence.json"
+    },
+    {
+      "case": "D12 text burst",
+      "commit": "d908a8612c9da8d1cb09637cb90f6e7321f52367",
+      "duration_ms": 11474.417,
+      "boundary": "first receipt to last sent",
+      "interpretation": "historical individual sample, not p90",
+      "source": "output/day12-burst-acceptance-evidence.json"
+    },
+    {
+      "case": "D12 voice and typed correction",
+      "commit": "d908a8612c9da8d1cb09637cb90f6e7321f52367",
+      "duration_ms": 7338.028,
+      "boundary": "first receipt to last sent",
+      "interpretation": "historical individual sample, not p90",
+      "source": "output/day12-voice-correction-acceptance-evidence.json"
+    }
+  ],
+  "formal_p50_p90": null,
+  "cache_hit_rate": null,
+  "metered_turn_cost": null,
+  "budget_guard_activated": false,
+  "new_provider_calls": 0,
+  "new_live_tests": 0,
+  "accepted_existing_exceptions": [
+    "iPhone untested",
+    "81-second long-note duration exception",
+    "S18 Undo across later media write deferred; version guard retained"
+  ],
+  "not_adopted": [
+    "new threshold/corpus waiver",
+    "always-on voice echo fallback",
+    "Sonnet provider switch"
+  ],
+  "findings_to_reconcile": [
+    "D2-01 coverless-card delivery order presentation issue",
+    "staff-source/Note behavior observed on new-area agency demo",
+    "formal cohort/corpus/repeat denominators and device rehearsal coverage"
+  ],
+  "next": "Use output/claude-system-audit prompts for independent code/readiness audit; no Day13 waiver or additional timing campaign",
+  "evidence": [
+    {
+      "path": "Handoffs/codex/Weekend_Stabilisation_Plan.md",
+      "sha256": "926d15425b5c140767c34872ab8e1372c7d0e5a93b12b5f70d4541bdcf431df8"
+    },
+    {
+      "path": "manzil-ai/bench/day13_thresholds.json",
+      "sha256": "d65a84622393bbe4c3bc976aa9e7656701f90cda3519136ebe5bf5f353ad7747"
+    },
+    {
+      "path": "output/day12-3-12-4-completion.md",
+      "sha256": "715d9c57cc065551954f21361b48bbd88afdbe33698903c862e4873295370293"
+    },
+    {
+      "path": "output/day12-burst-acceptance-evidence.json",
+      "sha256": "303cd37ec5a295d10112e9d9e64be055f2dfdc2c4064d0f32e10a885abb95b4d"
+    },
+    {
+      "path": "output/day12-voice-correction-acceptance-evidence.json",
+      "sha256": "aa7d8498b1fee8235b9cbdc99cb3b5b813a31ad4dc9f7d0dc4d54a5856358a18"
+    },
+    {
+      "path": "output/day13-closeout-audit-validation.json",
+      "sha256": "a36791ed307cc00b80fd20d74f2d8091c82152b6aabc44045c06f291292337c5"
+    },
+    {
+      "path": "output/day13-elevenlabs-capacity.json",
+      "sha256": "d6cb9815cb39443287374138ae879fea2fb0bb35fc22a49fe4d22423048fe1c9"
+    },
+    {
+      "path": "output/day13-gemini-quota-evidence.json",
+      "sha256": "afccf648e88eec19dc01895a4950e333019c759afc6298b98e954fa02304977d"
+    },
+    {
+      "path": "output/day13-provider-account-evidence.json",
+      "sha256": "b7a68fdf9b3d39f1d3c8b587d5edf7c8a94aca0c47b206948c8585127dae7f64"
+    },
+    {
+      "path": "output/day13-tuning-deployment-verified.json",
+      "sha256": "e7118ef7cbc93de17fdd14445671b50d8664245da3fd8b92701547c809e71792"
+    },
+    {
+      "path": "output/day13-tuning-publication.json",
+      "sha256": "724109af95881a9e60811b8173998488814ed231d8a6d2e0d4105ce963e8a8ae"
+    },
+    {
+      "path": "output/day2-20261108-text-cohort.json",
+      "sha256": "8c48a8633e3b5bf59a107f24e63f101fc1fa1541c400b6939cff0f36ff6ea635"
+    },
+    {
+      "path": "output/day2-2ee415b-voice-acceptance-evidence.json",
+      "sha256": "fcc4237ade3fcb48c91c277032111ca432ab175066e4deec9e41f970217e80f4"
+    },
+    {
+      "path": "output/day2-36989b5-strict-visible-evidence.json",
+      "sha256": "d7a8fbd3e5dc36aaee18634c32fbbf80bf40614c69869d2d00d24dcab3c03723"
+    },
+    {
+      "path": "output/day2-b51146c-english-acceptance-evidence.json",
+      "sha256": "b04346b3b33de03e46769f5c25a77433773454896c9206564e831f5d24aadc6f"
+    },
+    {
+      "path": "output/day2-b51146c-final-voice-cohort.json",
+      "sha256": "5bc133b810c2a946136d081b7a3b696c6d5cd27f2543d01984d5fdf7a04bcd54"
+    },
+    {
+      "path": "output/day2-checks-left.md",
+      "sha256": "9a22bf4fc568d30b8480750a42c0581c0f7d15a300b2523c09de798f20b0502b"
+    },
+    {
+      "path": "output/day2-completion-20261108.md",
+      "sha256": "be8ad45a617cbf8a052b19812a3586c56f1d8504447099b6190e0763f8f05992"
+    },
+    {
+      "path": "output/day2-t02-ordering-evidence.json",
+      "sha256": "70189498e32f65f6d516eb3f82ce94237c3d96b628a3b20a6d1030d2f2ee067e"
+    },
+    {
+      "path": "output/day13-closeout/owner-audit-0e188e39a202.json",
+      "sha256": "0e188e39a2026acd7ddef6713a46ca1f5cafec288b8853931c53283b3f51d7c5"
+    }
+  ],
+  "recovered_analysis": "recovered-evidence-analysis.json",
+  "recovered_report": "recovered-evidence-report.md",
+  "targeted_timing_check": {
+    "owner_approved": true,
+    "text_samples": 10,
+    "voice_samples": 6,
+    "plan": "timing-plan.approved.json",
+    "plan_sha256": "6fb6b83f04f925012fb6692e095de83da38f4b793ffac12adc9d29686c985f7d",
+    "guide": "timing-check.approved.md",
+    "actor_suffix": "2614",
+    "phase": "low_baseline_stopped_for_authorized_effort_comparison",
+    "live_samples_recorded": 2,
+    "start_wrapper": "../day13-timing-start.sh",
+    "readiness": "timing-preflight-owner.json",
+    "window_start_utc": "2026-11-11T18:51:55.834069+00:00",
+    "text_observed": 2,
+    "voice_observed": 0,
+    "measured_primary_latencies": 1,
+    "progress": "timing-progress.json",
+    "next_sample": "T03",
+    "extra_resends_observed": 1,
+    "failed_first_attempts": 1,
+    "diagnostic": "t02-diagnostic-owner.json",
+    "baseline_analysis": "low-baseline-analysis.json"
+  },
+  "minimal_effort_trial": {
+    "owner_approved_for_trial": true,
+    "permanent_adoption": false,
+    "phase": "comparison_complete_low_restored",
+    "live_samples_observed": 2,
+    "candidate_config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+    "plan_sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+    "runbook": "minimal-trial-runbook.md",
+    "original_low_results_preserved": true,
+    "remote_switch_observed": true,
+    "readiness_receipt": "minimal-trial-ready-owner.json",
+    "window_start_utc": "2026-11-11T19:34:20.530416+00:00",
+    "next_sample": null,
+    "progress": "minimal-timing-progress.json",
+    "measured_primary_latencies": 2,
+    "ordering_observation": "Screenshot shows purchase assumption notice, then #3 coverless card, summary, then #1 and #2 photo cards",
+    "comparison_analysis": "minimal-comparison-analysis.json",
+    "diagnostic": "minimal-diagnostic-owner.json",
+    "accidental_input_excluded_by_owner": true,
+    "comparison_complete": true,
+    "target_met": false,
+    "send_review": "minimal-send-review-owner.json",
+    "restore_low_recommended": true,
+    "restore_low_observed": true,
+    "fixed_ten_text_p90_lower_bound_ms": 7161.561,
+    "restore_receipt": "minimal-trial-restored-low-owner.json",
+    "restored_at": "2026-11-11T19:53:16.277923+00:00"
+  },
+  "remaining_decisions_draft": "remaining-decisions.md",
+  "owner_closeout_direction": "2026-11-12: keep Day13 open; address its gaps later; prioritize independent audit of the built system"
+}

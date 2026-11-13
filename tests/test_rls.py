@@ -250,7 +250,7 @@ def test_role_and_table_hardening(rls_db):
         "media_sent", "pending_clarification", "lead", "lead_property", "handoff",
     }
     media = {"inbound_media"}
-    turns = {"conversation_turn"}
+    turns = {"conversation_turn", "ai_recovery"}
     audio = {"inbound_audio"}
     segments = {"staff_segment", "staff_segment_item"}
     cards = {"staff_card"}  # migration 017 (Task 9.2)

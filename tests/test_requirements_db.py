@@ -630,14 +630,18 @@ def test_two_worker_threads_run_one_conversation_s_turns_one_at_a_time(st):
     release.set()
     first.join(20)
     for _ in range(100):
-        if st.query("SELECT count(*) FROM conversation_turn WHERE status = 'replied'") == [(2,)]:
+        if st.query("SELECT count(*) FROM conversation_turn WHERE status = 'replied'") == [(1,)]:
             break
         time.sleep(0.1)
     done.set()
     second.join(10)
     other.close()
-    assert st.nodes() == fix(st, "dha-ph6", "dha-ph8")     # the 2nd turn saw the 1st's state
+    assert st.nodes() == fix(st, "dha-ph6", "dha-ph8")  # replan retains the first patch
     assert [row[0] for row in st.patches()] == [1, 2]
+    # Day 12: the first worker absorbs the input received while planning. The
+    # second worker never runs that conversation concurrently or sends a stale plan.
+    assert st.query("SELECT status, message_count, replan_count FROM conversation_turn") == [
+        ("replied", 2, 1)]
 
 
 # --- stale state ------------------------------------------------------------------------------

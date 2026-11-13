@@ -37,7 +37,11 @@ case "$1" in
           [[ -z ${ALWAYS_FAIL_UP:-} ]] || exit 1
           [[ -n ${UP_STICK:-} ]] && exit 0
           cat "$S/tags/manzil-ai_latest" | tee "$S/containers/deploy-web-1" > "$S/containers/deploy-worker-1" ;;
-      exec) cat > /dev/null; [[ -z ${FAIL_HASH:-} ]] || exit 1 ;;
+      exec) if [[ " $* " == *"/health"* ]]; then   # the internal health check
+              [[ -z ${INTERNAL_HEALTH_FAIL:-} || $(cat "$S/tags/manzil-ai_latest") != "$NEW_ID" ]]
+              exit
+            fi
+            cat > /dev/null; [[ -z ${FAIL_HASH:-} ]] || exit 1 ;;
       logs) [[ -n ${NO_WORKER:-} ]] || echo "Worker started: x" ;;
     esac ;;
 esac
@@ -126,7 +130,7 @@ def test_a_missing_release_image_or_record_stops(tmp_path):
 
 @pytest.mark.parametrize("failure", [
     {"FAIL_UP": "1"}, {"FAIL_HASH": "1"}, {"HEALTH_FAIL": "1"}, {"WEBHOOK_CODE": "200"},
-    {"NO_WORKER": "1"}, {"UP_STICK": "1"},
+    {"NO_WORKER": "1"}, {"UP_STICK": "1"}, {"INTERNAL_HEALTH_FAIL": "1"},
 ])
 def test_a_failure_after_the_switch_rolls_back_by_the_recorded_id(tmp_path, failure):
     done, read = run(tmp_path, "switch", "abc1234", BREAK_PRE_FRESH="1", **failure)

@@ -126,7 +126,28 @@ def test_workers_never_overlap_within_a_conversation(queue_db):
     assert {queue_db["row"](a, job_id)[0] for job_id in job_ids} == {"succeeded"}
 
 
-def test_failing_job_dead_letters_after_max_attempts(queue_db):
+def test_a_stop_during_a_job_finishes_that_job_and_claims_no_other(queue_db):
+    # Audit MA-011 / OH-01: SIGTERM only sets the stop flag (app.worker.run); the running
+    # job completes and is recorded, the next one stays pending for the next start.
+    a = queue_db["a"]
+    first = queue_db["enqueue"](a, "first", CUSTOMER_X)
+    second = queue_db["enqueue"](a, "second", CUSTOMER_Y)
+    stop = threading.Event()
+
+    def handler(conn, job):
+        stop.set()          # the signal arrives while this job runs
+        time.sleep(0.3)
+
+    worker = Worker(queue_db["url"], [a], {"turn": handler}, stop, poll_seconds=0.02)
+    thread = threading.Thread(target=worker.run)
+    thread.start()
+    thread.join(10)
+    assert not thread.is_alive()
+    assert queue_db["row"](a, first)[0] == "succeeded"
+    assert queue_db["row"](a, second)[:2] == ("pending", 0)
+
+
+def test_failing_job_dead_letters_after_max_attempts(queue_db, caplog):
     a = queue_db["a"]
     job_id = queue_db["enqueue"](a, "boom", CUSTOMER_X)
     calls = []
@@ -148,6 +169,10 @@ def test_failing_job_dead_letters_after_max_attempts(queue_db):
     status, attempts, code, completed_at, _, locked_by = queue_db["row"](a, job_id)
     assert (status, attempts, code, locked_by) == ("dead", 3, "RuntimeError", None)
     assert completed_at is not None
+    alerts = [r for r in caplog.records if getattr(r, "event", None) == "dead_letter"]
+    assert len(alerts) == 1
+    assert alerts[0].attempts == 3
+    assert "fictional failure" not in alerts[0].getMessage()
     # The conversation lock was released with the final status.
     other = queue_db["connect"]()
     assert queue.try_lock_conversation(other, a, CUSTOMER_X)
@@ -237,7 +262,7 @@ def test_reaper_requeues_only_when_owner_is_gone(queue_db):
     assert claim(reaper, a, "w2").id == job_id
 
 
-def test_reaper_dead_letters_exhausted_job(queue_db):
+def test_reaper_dead_letters_exhausted_job(queue_db, caplog):
     a = queue_db["a"]
     job_id = queue_db["enqueue"](a, "last-try", CUSTOMER_X)
     with tenant_transaction(queue_db["connect"](), a) as conn:
@@ -250,6 +275,9 @@ def test_reaper_dead_letters_exhausted_job(queue_db):
 
     assert queue.reap_expired(reaper, a) == 1
     assert queue_db["row"](a, job_id)[:3] == ("dead", 1, "lease_expired")
+    assert queue.reap_expired(reaper, a) == 0
+    alerts = [r for r in caplog.records if getattr(r, "event", None) == "dead_letter"]
+    assert len(alerts) == 1 and alerts[0].reason == "lease_expired"
 
 
 def test_finish_after_lost_lease_does_not_overwrite(queue_db):
@@ -306,3 +334,72 @@ def test_backoff_doubles_and_caps(attempts, expected):
 def test_error_code_never_carries_the_message():
     assert queue.error_code(ValueError("Customer said: DHA Phase 6")) == "ValueError"
     assert queue.error_code(queue.PermanentJobError("bad_payload")) == "bad_payload"
+
+
+# --- audit MA-004: a busy conversation must not hide other conversations' jobs ----------
+
+def _advisory_locks(conn):
+    return conn.execute(
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND pid = "
+        "pg_backend_pid()").fetchone()[0]
+
+
+def test_jobs_of_a_busy_conversation_do_not_hide_another_conversations_job(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)    # a turn in progress
+    for n in range(queue.CLAIM_BATCH):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    other = queue_db["enqueue"](a, "other", conversation_key=CUSTOMER_Y)
+    worker = queue_db["connect"]()
+    job = claim(worker, a)
+    assert job is not None and job.id == other
+    queue.finish_job(worker, job, "w1")
+    assert _advisory_locks(worker) == 0
+
+
+def test_the_free_job_is_found_behind_three_busy_conversations(queue_db):
+    a = queue_db["a"]
+    busy = ["923000000011", "923000000012", "923000000013"]
+    holder = queue_db["connect"]()
+    for key in busy:
+        assert queue.try_lock_conversation(holder, a, key)
+    for n in range(25):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=busy[n % 3])
+    free = queue_db["enqueue"](a, "free", conversation_key=CUSTOMER_Y)
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == free
+
+
+def test_a_job_without_a_key_is_claimed_while_every_conversation_is_busy(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH + 2):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    keyless = queue_db["enqueue"](a, "keyless")
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == keyless
+
+
+def test_nothing_claimable_returns_none_and_leaves_no_lock(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH + 3):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    worker = queue_db["connect"]()
+    assert claim(worker, a) is None
+    assert _advisory_locks(worker) == 0
+
+
+def test_among_free_conversations_the_oldest_due_job_wins(queue_db):
+    a = queue_db["a"]
+    holder = queue_db["connect"]()
+    assert queue.try_lock_conversation(holder, a, CUSTOMER_X)
+    for n in range(queue.CLAIM_BATCH):
+        queue_db["enqueue"](a, f"busy-{n}", conversation_key=CUSTOMER_X)
+    older = queue_db["enqueue"](a, "older", conversation_key=CUSTOMER_Y)
+    queue_db["enqueue"](a, "newer", conversation_key="923000000003")
+    job = claim(queue_db["connect"](), a)
+    assert job is not None and job.id == older

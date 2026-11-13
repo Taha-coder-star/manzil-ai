@@ -22,7 +22,7 @@ Never log message text, codes of the customer's choice or phone numbers.
 import logging
 import re
 
-from app import cards, media, outbound, search
+from app import cards, freshness, media, outbound, search
 from app.db import tenant_transaction
 
 logger = logging.getLogger(__name__)
@@ -31,13 +31,13 @@ STATEMENT_TIMEOUT = "5s"
 SHOWN = "manzil_shown"
 IMAGE = "manzil_property_image"
 SYSTEM = "manzil_system"
-INTERNAL = frozenset({SHOWN, IMAGE, SYSTEM})
+INTERNAL = frozenset({SHOWN, IMAGE, SYSTEM, freshness.GUARD})
 _CARD_ID = re.compile(r"(?:photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
 
 
-def shown_entry(search_run_id, shown):
+def shown_entry(search_run_id, shown, prices=None):
     """shown: render.RenderPlan.shown, [(position, property_id, code)] in position order."""
-    return {"type": SHOWN, "search_run_id": str(search_run_id),
+    return {"type": SHOWN, "search_run_id": str(search_run_id), "prices": prices or {},
             "items": [[position, str(property_id), code] for position, property_id, code
                       in sorted(shown)]}
 
@@ -57,8 +57,9 @@ def is_internal(payload):
 
 def visible(payloads):
     """The payloads a customer sees (SHOWN / IMAGE entries left out)."""
-    return [payload for payload in payloads
-            if not is_internal(payload) or payload["type"] == SYSTEM]
+    return [payload["payload"] if payload["type"] == freshness.GUARD else payload
+            for payload in payloads
+            if not is_internal(payload) or payload["type"] in (SYSTEM, freshness.GUARD)]
 
 
 def delivered(payloads):
@@ -66,7 +67,7 @@ def delivered(payloads):
     entries). A reply of photos alone is an answer; the "tell me your area" fallback is not
     added to it (live 2026-10-18: "Property 1 ki aur pictures")."""
     return [payload for payload in payloads
-            if not is_internal(payload) or payload["type"] in (SYSTEM, IMAGE)]
+            if not is_internal(payload) or payload["type"] in (SYSTEM, IMAGE, freshness.GUARD)]
 
 
 def _set_timeout(conn):
@@ -77,13 +78,16 @@ def send(conn, client, storage, turn, payloads):
     """Send a customer plan in order under turn:{id}:{seq}; stop at the first payload that
     is not 'sent' (gate, window, ambiguous), as cards.send_plan does. Returns that status,
     or 'sent'."""
-    prefix = f"turn:{turn.id}"
+    prefix = getattr(turn, "outbound_prefix", None) or f"turn:{turn.id}"
     for seq, payload in enumerate(payloads):
         key = f"{prefix}:{seq}"
         if payload["type"] == SHOWN:
             _record_shown(conn, turn, payloads[:seq], prefix, payload)
             continue
-        if payload["type"] == IMAGE:
+        if payload["type"] == freshness.GUARD:
+            status = freshness.send(conn, client, turn, payload, key,
+                image_sender=lambda entry, image_key=key: _send_image(conn, client, storage, turn, entry, image_key))
+        elif payload["type"] == IMAGE:
             status = _send_image(conn, client, storage, turn, payload, key)
         elif payload["type"] == SYSTEM:
             status = outbound.send_message(
@@ -135,7 +139,8 @@ def _record_shown(conn, turn, before, prefix, entry):
     message_ids = [next((sent[k] for k in keys.get(code, ()) if k in sent), None)
                    for _, _, code in entry["items"]]
     search.record_shown(conn, turn.agency_id, turn.conversation_id, entry["search_run_id"],
-                        [property_id for _, property_id, _ in entry["items"]], message_ids)
+                        [property_id for _, property_id, _ in entry["items"]], message_ids,
+                        [entry.get("prices", {}).get(code) for _, _, code in entry["items"]])
 
 
 def _send_image(conn, client, storage, turn, entry, key):

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 import psycopg
 import pytest
 
-from app import audio, bench_manifest, webhook, whatsapp
+from app import audio, bench_manifest, queue, webhook, whatsapp
 from app.db import tenant_transaction
 from app.handlers import make_handlers
 from app.ingest import store_event
@@ -255,11 +255,24 @@ def test_transient_errors_retry_then_store(ad):
 
 
 def test_exhausted_retries_mark_the_audio_failed(ad):
-    ad.channel.media_errors = [whatsapp.RetryableMediaError("download_http_503")] * 3
+    ad.channel.media_errors = [whatsapp.RetryableMediaError("download_http_503")] * 5
     ad.deliver(voice_message("wamid.V1", "555"))
     ad.drain()
     assert [r[:2] for r in audio_rows(ad)] == [("failed", "download_http_503")]
     assert audio_jobs(ad) == [("dead", "RetryableMediaError")]
+
+
+def test_final_attempt_crash_reaper_closes_pending_audio(ad, caplog):
+    ad.deliver(voice_message("wamid.CRASH", "555"))
+    assert ad.worker.run_once()  # stages audio
+    ad.query("UPDATE job SET attempts = max_attempts - 1 WHERE job_type = 'fetch_audio' RETURNING id")
+    owner = psycopg.connect(ad.worker.database_url, autocommit=True)
+    claimed = queue.claim_job(owner, ad.agency, [audio.JOB_TYPE], "crashed", lease_seconds=0)
+    assert claimed is not None
+    owner.close()
+    assert queue.reap_expired(ad.conn, ad.agency) == 1
+    assert audio_rows(ad)[0][:2] == ("failed", "job_dead")
+    assert any(getattr(r, "event", None) == "dead_letter" for r in caplog.records)
 
 
 def test_without_a_bucket_fetch_audio_is_not_registered():

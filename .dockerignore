@@ -10,3 +10,6 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .local
+bench/voice_manifest.csv
+bench/voice_gold_verified.json
+bench/audio

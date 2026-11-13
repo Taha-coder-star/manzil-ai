@@ -1,5 +1,1049 @@
+2026-11-13 AUDIT WP3 IMPLEMENTED (UNCOMMITTED): REPRODUCIBLE RELEASE.
+Worktree .claude/worktrees/wp3-reproducible-release, branch fix/wp3-reproducible-release
+from e896e5b (WP2; PR #69 still open). BD-12 = A. No migration, no deployment.
+MA-007 app/migrate.py HISTORICAL_CHECKSUMS: ledger may hold the CRLF checksum of
+001 (ffc7c8c2...4d9d) / 002 (5a98bcd6...e641) by exact value; else still raises.
+001 has no final newline: the prompt's bd5bb6cc... was CRLF + stray CR; owner chose
+ffc7c8c2 (matches CRLF working copy and .local/task44-audit.json); RDS unconfirmed.
+TD-16 Dockerfile ARG GIT_SHA -> label + /app/REVISION; /live returns "revision".
+MA-015 requirements.lock (27 pins = manzil-ai:test freeze, hashes), --require-hashes;
+python:3.12-slim@a6e34c59 (tested base), caddy:2@9c1b76fb. docs/release/RELEASE.md:
+tag build, ledger checks, switch, rollback, refresh, stop/restart commands.
+Local: two builds equal content; CRLF-ledger rehearsal 0 applied (old runner
+raises); migration/runtime tests 14 passed; host git tests 16 passed; Ruff clean.
+Full suite (6 sequential batches) in manzil-ai:test and in the locked image: each
+4105 collected, 4087 passed, 18 skipped (16 need git, 2 Compose), 0 failed, 0 errors.
+Resume: owner review; commit / push / PR only on owner instruction; then the tag
+release per docs/release/RELEASE.md. Reports: output/claude-remediation/WP3_*.md.
 
-# Current continuation: 2026-11-05
+2026-11-13 AUDIT WP2 IMPLEMENTED (UNCOMMITTED): OPERATIONAL QUICK WINS.
+WP1 committed locally on owner instruction: 9dc3fa8 on fix/wp1-customer-reliability
+(not pushed). WP2 worktree .claude/worktrees/wp2-ops-quick-wins, branch
+fix/wp2-ops-quick-wins from 9dc3fa8. No migration, no app/ change, no deployment.
+MA-011 deploy/compose.yml: worker stop_grace_period 90s (SIGTERM only sets stop;
+running job finishes; new test for a stop mid-job).
+MA-014 deploy/Caddyfile: respond /health 404; /live, /webhook, /privacy unchanged.
+Operator checks moved inside web: fresh_search_switch.sh alive() (+ stub case
+INTERNAL_HEALTH_FAIL), RELEASE_10_2 s8 command, fresh-search, cost, RLS, carousel,
+Day1 runbooks. Caddy validated locally (caddy:2, internal network).
+MA-019: git-dependent tests skip without git (test_day1_kit, one staff_drafts test).
+Env split per container: proposal only, docs/release/ENV_SPLIT.md (not applied).
+Full image run 4099: 4081 passed, 18 skipped, 0 failed, 0 errors; host git tests 16
+passed; host Compose tests 2 passed; Ruff clean. Reports:
+output/claude-remediation/WP2_*.md (owner server steps, hashes, rollback, stop and
+restart commands in the implementation report section 6).
+Next: owner review; commit WP2 / push / PRs only on owner instruction; old release
+kits must be rebuilt (public /health check). WP3 not started (needs BD-12).
+
+2026-11-12 AUDIT WP1 IMPLEMENTED (UNCOMMITTED): SIX CUSTOMER-FACING FIXES.
+Worktree .claude/worktrees/wp1-customer-reliability, branch fix/wp1-customer-reliability
+(local, no upstream), base 7b044b3 (app tree = 7eefb9c). Plan:
+output/claude-remediation-plan/ (IMPLEMENTATION_SEQUENCE WP1, TD-02..TD-08); owner
+BD-1/BD-2/BD-4 defaults approved. Code only, no migration (next free number 021).
+MA-002 render_customer: handoff message first for every outcome kind.
+MA-003 TurnEngine._salvage: customer route, tool round done, later provider error or
+malformed answer -> tool output (+ code search) as done/round_failed; staff unchanged.
+MA-010 orchestrator._answer: reaction/unsupported/system-only customer turn closed
+replied before the gate (no reply, no forward, no holding reply, no model call).
+MA-004 queue.claim_job: re-query excluding busy conversation keys, max 20 passes.
+MA-005 handoff.forward_turn: holding_unsent wording unless a forward was sent.
+MA-001 handoff_actions.expire (round 2 via handlers): pending -> released, lead closed,
+ai_active; customer cta_url + staff/admin notices once each (handoff:{id}:expired*).
+Tests: 27 new (tests/test_audit_regressions_db.py 13, test_queue 5, test_turn_engine 4,
+test_customer_tools 5); 2 existing expectations changed (MA-001, MA-005; quoted in
+report). Full image run 4097: 4079 passed, 7 skipped, 1 failed + 10 errors = the 11
+git-only baseline cases; host git tests 16 passed; Ruff clean; audit proofs: 6
+behaviour proofs fail, catalog passes. Reports: output/claude-remediation/WP1_*.md.
+Not committed/pushed/deployed. Rollout: pending prod handoffs not healed (OPEN_ISSUES).
+Next: owner review; commit/PR only on owner instruction; WP2 not started.
+
+2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
+Owner requested pushing Claude prompts and remaining work. GitHub network access
+is blocked in this agent session; remote publication is not yet claimed.
+Portable tracked pack: docs/audits/2026-11-12/README.md (three prompts, project
+brief, coverage/template, selected sanitized Day13 evidence and archived operators).
+Pending PROJECT_STATE/TASK_LOG/OPEN_ISSUES notes included. No app/migration/test/
+runtime changes, private recordings, raw historical exports, .env, source/release
+ZIPs or unrelated untracked local test directories selected.
+Day13 remains open by owner direction; runtime known low/image976dff195d20/schema020.
+Next publish isolated docs branch through normal authenticated PowerShell; exact
+head/remote verification required. No force push, merge, deployment or AWS action.
+
+2026-11-12 OWNER KEEPS DAY13 OPEN; INDEPENDENT SYSTEM AUDIT PREPARATION.
+Owner will address Day13 gaps later and now prioritizes a senior engineering audit
+of built behavior, bugs, architecture, and single/multiple-agency client readiness.
+Prepared ../output/claude-system-audit context brief and three staged prompts:
+context -> comprehensive audit -> challenge/readiness/remediation handoff.
+This is an audit setup, not a completed audit or a finding of production readiness.
+Source snapshot is current tracked working-tree bytes on local HEAD7eefb9c; current
+operational doc edits included. Latest known owner runtime remains low on976dff195d20,
+schema020; no new runtime access, provider calls, tests, app edits, push/merge or AWS
+actions. Day13 gates remain unwaived; no conditional closeout accepted.
+Local archive ../output/manzil-ai-audit-input-2026-11-12.zip includes tracked source
+(except .env.example), context/evidence summaries and per-file hashes; excludes .git,
+real env/credentials, raw audio/screenshots, untracked output kits/caches/worktrees.
+Claude Code can use actual workspace and Git history; web-chat ZIP has no full history.
+Newest brief overrides historical deployment notes; exact source and evidence must
+still be checked by the auditor. External RFC PDFs and deployed settings not reverified.
+Next owner gives Claude 00_START_HERE and prompts02/03/04 in order. Findings must be
+validated and separated from accepted demo policy, missing features and evidence gaps.
+
+2026-11-12 LOW RESTORED; MINIMAL EXPERIMENT ENDED, ACCEPTANCE DECISION PENDING.
+Owner returned DAY13-LOW-EFFORT-RESTORED, receipt recorded at
+2026-11-11T19:53:16.277923+00:00 (00:53 PKT Nov12). Same image976dff195d20,
+baseline config34d4b870796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60.
+Operator provider calls/database writes zero; .env not edited; trial evidence retained.
+Receipt ../output/day13-closeout/minimal-trial-restored-low-owner.json.
+Low ACTIVE; minimal not adopted. Prior minimal/current low samples remain separate;
+do not resume original closed measurement windows or repeat the same cohort.
+Comparison complete, targeted latency unmet; eight text/six voice unrun preserved.
+Day13 remains open: explicit owner decision needed on concrete remaining gap draft
+../output/day13-closeout/remaining-decisions.md (latency, voice, cache, cost, fullRun2).
+Can fix gaps or accept conditional closeout with each deferral recorded; no critical
+threshold pass, paid fallback, or waiver is inferred from the restoration receipt.
+No further same-cohort timing tests or AWS changes are pending from this experiment.
+
+2026-11-12 MINIMAL COMPARISON COMPLETE; TARGET UNMET, RESTORE LOW RECOMMENDED.
+Owner-returned send review imported with pinned b8ba0146 source/runtime/anchor.
+T01 first substantive Meta acceptance 11533.570ms (low11929.345); T02 7161.561ms
+(low original failed503). Both exceed7s, six minimal primary calls succeeded;
+two turns cannot establish general causality or a completed percentile.
+T02 6685.912ms is purpose_inferred notice, excluded. Carousel summary accepted
+7161.561/delivered11059.594ms; #3 accepted7734.299/delivered10059.594ms.
+No later fallback rows: application accepted in order; delivery receipts reversed
+carousel/#3 by one second. Screenshot order explained, not confirmed app bug.
+With two values>7s, fixed10 nearest-rank p90 lower bound7161.561ms even if eight
+remaining instant. Not a completed percentile. Stop additional cohort samples;
+8text/6voice retained unrun. Earlier accidental/coalesced input excluded by explicit
+owner direction and retained; no clear-all acknowledgement inferred.
+Restore same-image low recommended via ../output/day13-minimal-restore-low.sh;
+runtime STILL minimal until owner restoration receipt. Permanent adoption false.
+Comparison result ../output/day13-closeout/minimal-comparison-result.md.
+Concrete remaining decision draft ../output/day13-closeout/remaining-decisions.md:
+text latency, current voice, cache, cost, full Run2 evidence gaps need fix or explicit
+owner deferral/conditional acceptance. Not waived or Day13 closed by this review.
+No further diagnostic/test campaign needed to conclude this effort experiment.
+
+2026-11-12 MINIMAL DIAGNOSTIC IMPORTED; OFFICE STILL 11.53 SECONDS.
+Pinned source/image/config/plan/anchor verified in owner-returned sanitized JSON.
+Two office textmatches: owner explicitly identifies earlier 00:38:54 input as a
+mistake to ignore. Excluded from planned comparison, retained as protocol deviation;
+its 2.004s single reply/no-usage is NOT claimed as fast search or clear-all ack.
+Planned office T01 at 00:39:41: first substantive Meta acceptance 11533.570ms
+(low11929.345ms), last13081.894ms; three calls/engine8645ms. Single comparison
+does not establish effort benefit; this turn remains above7s. T02 three primary
+successes, no errors; first text6685.912ms, interactive7161.561/7734.299ms.
+Screenshot first text is assumption notice; do not call6.69s substantive latency.
+Existing diagnostic omits later carousel-fallback keys, so card ordering and actual
+substantive acceptance need focused existing-record review, no new input/calls.
+Prepared ../output/day13-minimal-send-review.sh: restricted read-only, exact actor
+and saved anchor; classify notices/known fixture codes, original and linked later
+fallback receipts; no raw payloads/phone/UUID. Compile/classification/redaction/LF/
+bash syntax checks passed. Actual owner execution pending. All cached/thinking
+counts null, not zero; no dollar cost or percentile pass. Minimal remains temporary.
+Next owner copy/paste send-review wrapper; hold further samples.
+Evidence ../output/day13-closeout/minimal-comparison-analysis.json.
+
+2026-11-12 MINIMAL T02 RESULTS VISIBLE; EXACT COMPARISON PENDING.
+Owner screenshot shows original T02 and expected DH6-102 8 crore, DH6-101 7.8
+crore, DH7-101 7.5 crore; 500 sq yd and nearby Phase 7 labelled. No failure
+visible. Purchase-assumption notice followed by #3 coverless card ABOVE summary,
+then #1/#2 photo cards. Preserve ordering observation; send/delivery order pending.
+Displayed 00:41 PKT is minute precision, not a measured latency. Two minimal
+text observations, zero measured timings; no percentile or improvement claim.
+Next: copy ../output/day13-minimal-diagnostic.sh in normal PowerShell, paste into
+EC2 and return JSON. Read-only, no provider calls or database writes. Hold further
+samples until exact comparison review. Low cohort and original failure unchanged.
+Evidence ../output/day13-closeout/minimal-t02-owner-observation.json.
+
+2026-11-12 MINIMAL T01 FUNCTIONAL RESULT OBSERVED; TIMING PENDING.
+Owner pasted four bot replies displayed 00:39 PKT. Expected office results match:
+DH6-108 5 lakh/month, PEC-101 5.5 lakh/month, SHF-101 4.5 lakh/month.
+Minute-resolution chat times cannot establish latency or improvement. Original
+inbound/setup acknowledgement not returned; exact server correlation pending.
+Separate minimal cohort retained; low baseline failure/resend remains unchanged.
+Next: at least 60 seconds after T01, send T02 once in same chat WITHOUT clear:
+DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak
+Return response, then run prepared scoped minimal read-only diagnostic for times.
+No latency/cost/cache acceptance, permanent adoption or Day13 closure inferred.
+Evidence ../output/day13-closeout/minimal-t01-owner-observation.json.
+
+2026-11-12 MINIMAL-EFFORT TRIAL ACTIVE; FIRST SAMPLE PENDING.
+Owner returned DAY13-MINIMAL-TRIAL-READY. Same image 976dff195d20; effort minimal;
+config c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a.
+New window 2026-11-11T19:34:20.530416+00:00 (00:34:20 PKT, November 12).
+HTTPS healthy; customer ...2614 AI active, no blockers, global jobs/turns zero;
+public29 and hidden fixtures absent. Operator provider calls/database writes zero;
+.env unchanged. Owner evidence: ../output/day13-closeout/minimal-trial-ready-owner.json.
+Low baseline/results and original anchor retained separately. Minimal is a trial,
+not permanent adoption or a latency/cost/cache/Run2 pass. No new samples yet.
+Next: customer ...2614 sends clear all, waits for acknowledgement, then T01 once:
+office on rent in Karachi, around 5 lakh per month
+Return bot response; do not rerun switch or replace an unsuccessful first attempt.
+Scoped minimal diagnostic and same-image low restore remain prepared.
+
+2026-11-12 OWNER AUTHORIZES MINIMAL-EFFORT COMPARISON; OPERATOR READY, NOT RUN.
+Explicit Try the minimal-effort comparison. Prepared17focusedoffline checksPASS,
+including fullenvironment preservation, no.env edit/oldanchorchange, idempotent
+candidateanchor, explicitlowrestore, partialswitch/posthealth auto-restoration,
+drift/busy/tag/budget refusals and rollbackattention. ThreeLF wrappersbash-nPASS.
+No actualDocker/Compose/AWS/provider execution here; these are mocked/operator
+checks, not another product/fullpytest campaign. Application bytes unchanged.
+Next ../output/day13-minimal-trial.sh copiednormalPowerShell/rawclipboard then
+pastewholeblockUbuntuEC2, keepchatquiet duringrecreation. Pinned976dff tag andall
+effectiveenv comparedprivately; onlyLLM_THINKING_LEVELlow->minimal allowed in
+temporaryComposeoverride bothservices; .env stayslow. BudgetoverrideOFF kept.
+Globaldemo processingjobs/openturns+actor/fixtures/HTTPS/worker checks before/after.
+FailurepostmutationrestoresLOW sameimage; NEVER usesoldimage rollback. Explicit
+restore wrapper day13-minimal-restore-low.sh; scopedread-only comparison wrapper
+day13-minimal-diagnostic.sh prepared from unchanged provenchildsource.
+CandidateconfigSHA c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a.
+FrozenminimalplanSHA4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748.
+OperatorSHA4daad3c7d81f072bb6d22e4ddd7d39c51786536bb94bbf3af623520cfac7aac7.
+HosttrialDIR /home/ubuntu/day13-closeout/effort-trial-7eefb9c. Newminimal-session
+anchor savedonce; originalLOWtiming-active.json/failure/resend preserved. Normal
+baseCompose withouttrialoverride returnsLOW; do not mixrestarts/configcohorts.
+WhenDAY13-MINIMAL-TRIAL-READY owner...2614clear all/waitack then T01exactoffice
+on rent in Karachi, around 5 lakh per month, ONCE. Returnoperatoroutput+botreply.
+FirstcomparisonT01/T02; onlythen reviewcontinuingcandidate. No lowvoice baseline
+exists; no pairedvoice improvement claim. No35notecollection, provider/model/
+billing/schema/roles/inventory change or fullRun2/cost/cache waiver. Permanent
+adoption remainsfalse, actualcurrentruntime stillLOW until ownerREADY evidence.
+Runbook ../output/day13-closeout/minimal-trial-runbook.md; approvalreceiptJSON.
+
+2026-11-12 T02 DIAGNOSTIC VERIFIED: CURRENT LOW BASELINE CANNOT MEET TEXT P90.
+Owner-returned JSON imported/sourcechecksum+image/config/anchor verified; private
+clipboard content not emitted. ../output/day13-closeout/t02-diagnostic-owner.json.
+T01firstsubstantive11929.345ms;3calls/engine9217ms/provider8984ms, laststop_empty
+4864ms. T02firstonlyfailure apology15021.701ms; toolsupdate+search succeeded,
+thirdcallHTTP5035513ms. No429observed. Noai_recovery row: failure after active
+tool/model, not initial-both-provider failure. Resend is NEWturn, firstsubstantive
+19953.195ms; primarytimeout8000 thenfailover;5calls, engine16492ms; interim18429.929
+isNOTSLAboundary. OriginalT02infinity preserved, resendextra(notreplacement).
+For fixedn10nearest-rankp90, T01>7s +T02failed make targetunattainable evenif8
+remaininginstantaneous: bestpossiblep90>=11929.345ms. NOT a fullymeasuredp90;
+baseline incomplete,8text/6voice unrun. Pausequota spending pending tuning choice.
+Sourceinspection: finalmodelround mayrequestfurther tools/compoundactions; no
+blind early-exit patch. T01minus4.864s onlycounterfactual7.065345s, notpassingproof.
+Prepared one-setting minimal-effort candidate +ComposeJSON/lowrestore overlays;
+no app/runtime/env changes. Same976dff/providers/schema; officialGenerateContent
+thinkingdoc verifies both configuredmodels supportminimal. Local bodycheck only
+thinking config changes. Candidatehash inminimal-trial.proposed.json, NOTadopted.
+Report low-baseline-findings.md; ownerchoice required because approvedplanpinslow:
+separate minimaltrial onT01/T02 thencontinuecandidate ifvalid, orfinishoriginal
+unchanged batch. No guarantee minimal fixes503s. No fullRun2/cost/cache waiver.
+Runtime remainsGemini-low/config34d4/976dff/schema020; no deploy/AWS mutation.
+
+2026-11-12 T02 FIRST ATTEMPT FAILED; USER RESEND VISIBLE; PAUSE BEFORE T03.
+Owner screenshots:11Nov23:57PKT exactT02 -> processingfailure apology; at23:58
+samequeryresent, interimthen correct10280m/10178m/710175mnearby summary/cards.
+Originalfailure remains cohort observation; resend is extra, NOT a replacement.
+Could be newturn or earlier automaticrecovery; correlation/elapsed/rootcause NOT
+established by screenshots. Do not assert quota exhaustion or code bug yet.
+Progress2text/0voice +1extraresend; nextT03PAUSED, not a new fulltest campaign.
+Prepared ../output/day13-t02-diagnostic.sh: pinned currentimage/config +existing
+sessionplan/anchor; restricted READONLY exactactor T01/T02 textmatches only,
+turn/outbound/job/usage/recovery state, structured code-only worker-log summaries
+and provider timings. PrivateUUIDs used onlyinternally then stripped, no phones/
+messagebodies/transcripts/toolargs/rawlogs exported. No providercalls/DBwrites,
+roles/service/settings changes or simulated failure. Saves root0600 hostJSON.
+Offline read-only/refusal-shape/redaction/failure-template/unknown-token/logregex/
+compile/LF checksPASS. Actual diagnostic execution PENDING owner EC2. Nextcopy
+output/day13-t02-diagnostic.sh via normalPowerShell Get-Content -Raw|Set-Clipboard,
+pasteentireblockEC2 andreturn output; no further messages/reset/anchor restart.
+No additional samples: onlyT01,T02first plusT02resend observed. Formal
+p50/p90/cost/cache notpassed; no new provider/model/effort/fallback adoption.
+
+2026-11-11 TIMING SAMPLE T01 OWNER REPLY OBSERVED; PRECISE LATENCY PENDING.
+T01 owner23:55PKT botreply: office/rent/Karachi/around5lakh summary, exactDH6-108
+500000/mo,PEC-101550000/mo,SHF-101450000/mo; three correct coverless cards.
+Functional result matches; four visible substantive parts. Minute-level reply
+times do NOT establish latency. Original query/clear acknowledgement not pasted;
+do not infer their exact timestamps or require a repeat merely for that omission.
+Progress ../output/day13-closeout/timing-progress.json;1text/0voice observed,
+0exact primary latency values yet. No phone number/message UUID persisted.
+Next after60s from final reply, same...2614chat WITHOUT clear/reset: T02 exactly
+DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak. Preserve first attempt,
+anchor2026-11-11T18:51:55.834069UTC, frozenplan/config/runtime. No repeatedT01.
+Read precise timing from scoped server records later; p50/p90/cost/cache still
+unverified. No source/deploy/roles/inventory/guard/billing change by agent.
+
+2026-11-11 TIMING PREFLIGHT READY VERIFIED FROM OWNER EC2 OUTPUT.
+Readytrue/blockersnone; ...2614customer/AI-active/unmuted; actorhandoffs/open turns/
+processingjobs all0; public29/hidden0; both976dff/config34d4 matches/HTTPShealthOK.
+Pinnedwindow2026-11-11T18:51:55.834069+00:00 (23:51:55PKT); originalanchor saved
+at /home/ubuntu/day13-closeout/timing-active.json. Preflight made0providercalls/
+0DBwrites. Receipt ../output/day13-closeout/timing-preflight-owner.json; exact
+plan/preflight SHA match verified locally. No live sample/latency result yet.
+TrailingEC2 > prompts after completion look like unfinished pasted shell input;
+Ctrl+C once returns normalprompt, without rerunning or replacing savedsession.
+Next approved action WhatsApp...2614: clear all as standalone setup; waitforack;
+T01 exactly office on rent in Karachi, around 5 lakh per month. Return botreply.
+Do NOT send T01 inEC2, resetdata/roles/redeploy, restartpreflight toresetanchor,
+or send repeated samples. Saved24hcustomerwindowfalse ispre-inbound observation;
+this isowner-initiated WhatsApp testing, not outbound template setup. Keepallfirst
+attempts/failures. Cases10text/6voice and currentloweffort/config unchanged.
+No new billing/guard activation or AWS mutation. Day13acceptance stillpending.
+
+2026-11-11 OWNER APPROVED TARGETED CURRENT-BUILD TIMING CHECK.
+Explicit reply: Proceed with that timing check. Scope10text+6shortvoice only;
+prior functional/broker/silence/81s evidence retained, no35note recollection.
+Frozen plan ../output/day13-closeout/timing-plan.approved.json; checksum in
+timing-session-preparation.json. Human script timing-check.approved.md. This
+doesnot waive cost/cache/fullRun2 numeric coverage or approve a new model/effort.
+Prepared ../output/day13-timing-start.sh, LF-only: exact976dff/image34d4config on
+both services, HTTPS health, restricted READONLY REPEATABLE READ tenant query;
+checks ...2614 remains customer/AI-active/unmuted, no actor openhandoff/open turn/
+processing jobs, public29/hidden exclusion. No role/control/data repair attempted.
+On READY saves0600 /home/ubuntu/day13-closeout/timing-active.json with UTCanchor/
+planhash/image/config/maskedactor/runtime-starts; repeat preserves originalanchor.
+No DB writes/providercalls/restarts. Offline ready/private-ID-redaction/humanmode/
+handoff/job/hiddenfixture/staffroute refusal and compile/LF checksPASS. Actual
+EC2 readiness and all16samples remain PENDING; no real DB/provider tests here.
+If READY owner may proceed directly: send clear all from ...2614, wait forclear
+acknowledgement; then T01 office on rent in Karachi, around5lakh per month (exact
+spaced script in approved guide). Return readiness output and bot response. No
+extra permission required for this approved sample. Space measured trials60s
+after final replies, keep firstattempt/failures; don't resetanchor or repeatfast.
+Existing free accounts retained, no billing upgrade/paidguard activation; incomplete
+policy not activated. Observer export is scoped to later selected samples, not
+another historical-audit replay. Cached unknown/dollar gaps still recorded.
+Current7eefb9c/Gemini-low/schema020 preserved; no deploy/migration/AWS mutation.
+
+2026-11-11 DAY13 AUDIT DATA RECEIVED/DECODED/INTEGRITY VERIFIED.
+Imported complete owner-returned line via local clipboard (no unrelated clipboard
+content emitted); zlibEOF/CRC+JSON shape/sourcechecksum/runtime image+config checks
+PASS. Saved ../output/day13-closeout/owner-audit-0e188e39a202.json, SHA256
+0e188e39a2026acd7ddef6713a46ca1f5cafec288b8853931c53283b3f51d7c5.
+Latest500of505 turns sinceNov3:264staff/44broker/192customer. Omitted5areoldest,
+not current timing. LastturnNov09T10:17:41UTC; ZERO turns in pinned currentruntime
+window sinceNov10T17:35:06UTC. Thus no current-build p50/p90 is established.
+46customer voice notes ALL stored/audiohash/durationpresent;45transcribed/1no_speech,
+total313.44s/max80.86s. Reuse eligible real audio; no blanket35note rerecording.
+Speaker/device/noise/case assignment and human gold coverage NOT established.
+483LLM usage rows:424inputcounts/345outputcounts/70thinkingcounts/0cachedcounts;
+allstoredcostNULL. All4tokenfields nevercomplete. Cacheunknown is NOT0%hits;
+full-dollarcost unknown, free tier doesnot turn missing metering into zero cost.
+Summary ../output/day13-closeout/recovered-evidence-report.md +analysisJSON;
+sanitized timing and audio inventories CSV. Fiveknown cases matched, allhistoric;
+do not pool mixedimages/controls/failures as formal SLA. Prior functions retained.
+Async owner scope question PENDING: recommend ONLY10text+6shortvoice fresh timing
+observations oncurrentbuild, or explicitly defer performance/cache/fullcost as
+open exceptions (no false thresholdpasses). Concrete proposed timing plan under
+day13-closeout/targeted-timing-plan.proposed.md; not executed/adopted yet. Small
+sample doesnot replace fullformal30/30/3repeat denominators automatically.
+All38formal gates stillunwaived; Day13notclosed. No newcalls/tests/deployment/AWS
+mutation/priceupgrade/guardactivation. RetainGemini-low976dff/schema020.
+Next incorporate owner choice; do not rerun audit or request more account screens.
+
+2026-11-11 OWNER REPORTS CLOSEOUT AUDIT COMPLETE: provider_calls0/database_writes0.
+Only completion marker returned; summary and DAY13_AUDIT_DATA_BASE64 not supplied.
+Execution receipt ../output/day13-closeout/audit-execution-owner-receipt.json.
+Do NOT rerun the audit/tests. Read the newest existing-evidence-*.json already
+saved under /home/ubuntu/day13-closeout and return its compressed evidence line.
+No metrics evaluated or Day13 closure inferred from marker. Other state unchanged.
+
+2026-11-11 DAY13 CLOSEOUT STARTED: EXISTING EVIDENCE RECONCILED, LIVE AUDIT READY.
+Current status ../output/day13-closeout/status.json +README.md. All38original
+thresholds mapped to evidence families; no automatic passes/waivers/denominators.
+Retain earlier accepted customer/photos/safety/voice/broker behavior. Later living
+tracker PROVES S04/S05/S06 livePASS on1ef4080 (missingfields/Edit/staleCancel/new
+Cancel/no write), originaltext/sourceowner_direct/3photo draft+Cancel pass; exact
+late-webhook race only DB-covered. S18 oldpriceUndo-after-photo refusal PASSED the
+version guard; undo-across-later-write deferred, not required as new repair.
+Historical timings preserved separately: cheaper voice4.646513s, English6.574384s,
+Day12 textburst11.474417s and voicecorrection7.338028s. NO pooled/current p90 claim.
+Current7eefb9c CIbothSUCCESS/deployed976dff/Gemini-low/schema020 unchanged.
+Prepared ../output/day13-closeout-audit.sh: checksum-pinned exact-runtime gate,
+restricted manzil_app READONLY REPEATABLE READ demo-tenant queries; newest500
+turn inventory with explicit truncation, timestamps, usage and audio provenance
+presence only. No phones, message bodies, transcripts, rawUUIDs, keys, DSNs or
+storage keys exported. Candidate classifications are provisional, controls/failures
+retained; runtime-start window association not per-turn image attestation.
+OfflinechecksPASS: compile/notice+echo/unknownbilling/cachemissing/failureinfinity/
+read-only-mock endtoend/redaction/audio/compressionLF. No real DB tests or provider
+calls. Async owner onepaste EC2 execution requested; actual execution PENDING.
+Returns summary+DAY13_AUDIT_DATA_BASE64 and saves private hostJSON. Next import,
+classify/reconcile, identify ONLY remaining measurements/changed paths, then final
+acceptance/gap decisions. D2-01 deliveryorder and newarea staffNote/source finding
+still need reconciliation; do not silently close. No new35-recording/manual/broker
+replay by default. Budget guardOFF, policy incomplete; no runtime/AWS mutation.
+
+2026-11-11 OWNER STEERING: REUSE STABILIZATION TESTS; AVOID REDUNDANT TESTING.
+This supersedes the default next-step request for a new35-note corpus / full
+manual replay. Reviewed extracted stabilization plan, living tracker, accepted
+Day2 checks and cohorts, Day12 final handoff/traces, current CI/deploy receipts.
+Substantial functional search/photos/follow-up/safety/voice and owner-accepted
+broker evidence exists. Reuse it, including81s duration exception; no new broker
+setup, data reset, duplicate full pytest/CI/deployment or blanket manual rerun.
+Plan ../output/day13-evidence-reuse-review.md and source-hash inventory JSON.
+Next first reconcile stale checklist rows against later acceptance and inspect
+existing timing/metering/audio metadata READ-ONLY. Historical functions remain
+accepted; older timings stay separate by source/config, not pooled as current
+p50/p90. Day12 handoff explicitly leaves latency/cost open (text11.474s and
+voice7.338s individual samples do not establish p90). Need only demonstrably
+missing13.3 performance/cost/cache evidence and affected changed-path checks,
+then13.4 consolidated evidence/gap report. Low effort stays until tuning needed.
+Current38-gate full3repeat/corpus denominators are not proven; user direction to
+avoid duplicates is NOT a numerical threshold waiver, safety cut or formal Run2
+completion. Any intentionally deferred formal coverage needs a recorded scope
+decision. Do not fabricate passes, denoms or eligible corpus from old screenshots.
+Account screenshots resolved; policy incomplete/guardOFF unchanged. Existing
+free976dff/Gemini-low/schema020 runtime retained. No calls/tests/AWS mutations.
+
+2026-11-11 ELEVENLABS USAGE SCREENSHOT MATCHES VERIFIED FREE ACCOUNT.
+397/10000 used;9603 remaining credits. No separate Scribe minute allowance shown.
+Account screenshot request RESOLVED; do not repeatedly request the same dashboard.
+Official generic pricingFAQ https://elevenlabs.io/pricing says APPROX330credits/min
+STT; balance suggests29.10min BEFORE keyterms/minimums/other products. This is NOT
+verified account allowance or an enforceable billing rate. API pricing and credit
+pricing pages differ; retain unknowns instead of silently applying a conversion.
+Receipt ../output/day13-elevenlabs-capacity.json; screenshot privately in output.
+Assignment targets: speech193s +controls164s; collection plus3backend
+repeats target1428s, plus3deployed speech repeats target
+2007s BEFORE tuning/retries/rehearsals. Targets are
+not actual durations or billable totals (control rejection/truncation matters).
+No assertion of sufficient/insufficient remaining credit from this estimate.
+Existing prices-draft stays INCOMPLETE/account_verified=false. Besides Scribe
+rounding/one-credit floor mapping, Gemini generateContent exact-model combined
+thinking bound/default single candidate still need proof; current docs redirect
+to Interactions API, which must not be silently treated as exact endpoint proof.
+Guard remainsOFF; no generations/transcriptions/upgrade/runtime/AWS mutation.
+Keep deployed7eefb9c/976dff/Gemini-low/schema020. No redeploy or repeated account
+probe needed. Next independent work is recording/device assignment preparation;
+activation/formal dispatch waits for complete bounds/policy, not more screenshots.
+Day13.3/13.4 measured acceptance remains open; paid upgrade not requested/adopted.
+
+2026-11-11 GEMINI PROJECT LIMITS RECORDED from owner AI Studio screenshot.
+Primary gemini-3.5-flash-lite15RPM/250000inputTPM/500RPD; failover gemini-3.6-flash
+5RPM/250000inputTPM/20RPD. Screenshot is PEAK usage over7days;137/500 and16/20
+are historical peaks, NOT remaining daily allowance. Current headroom unknown.
+Receipt ../output/day13-gemini-quota-evidence.json, screenshot in recordings/.
+Formal5set3repeat matrix342scenario turns before setup/tuning/collection/deployed
+cohort; provider call count can be higher. Free-tier run may span quota days;
+pace BETWEEN measured trials, preserve in-turn retry/429 latency/failures, never
+silently omit failed cases or pool changed configurations. Project-level limits
+apply across keys; no key/project workaround or paid upgrade performed. No actual
+quota enforcement added here; this is planning/evidence only. Provider docs reset
+RPD at midnight Pacific. Gemini limit question resolved; no repeat request needed.
+Pending ElevenLabs Scribe/API allowance plus billing floor/rounding/credit mapping,
+verified reference-cost policy, shared guard activation, real corpus/human freeze,
+tuning and full measured13.3/13.4. Budget guard remainsOFF; no benchmark/provider
+calls/AWS or deployment changes. Day13 remains open; current976dff/schema020 kept.
+
+2026-11-11 DAY13 READ-ONLY PROVIDER CHECK PASSED (owner EC2 evidence).
+Completion marker observed; noisy terminal paste echo did not prevent execution.
+Both configured Gemini models metadata HTTP200, generateContent listed, verified
+input1048576/output65536 tokens. Exact deployed976dff/config34d4 gates passed in
+wrapper. This is metadata access, NOT a generation/quota/cache/latency pass.
+ElevenLabs subscription HTTP200 confirms tier/status free;397/10000 credits used,
+9603 reported credits remaining, overage extension0 and both extension flagsfalse.
+Do not convert these credits to Scribe seconds without verified account mapping.
+Evidence ../output/day13-provider-account-evidence.json; no keys/raw account data.
+No generation/transcription, mutation, billing upgrade or guard activation.
+Next owner to provide current API-project primary/failover RPM/TPM/RPD from AI
+Studio and remaining Scribe/API allowance from ElevenLabs Usage. Async question
+pending; unavailable values must remain unknown. No repeat of completed check.
+New official billing research: ElevenLabs2026-10-26 changelog says TTS/STT requests
+below one credit are charged one credit. Account credit conversion and a policy
+minimum/rounding that safely covers this floor must be verified before activation;
+do not silently assume per-second pricing alone covers very short controls.
+Source https://elevenlabs.io/docs/changelog/2026/10/26 . Policy remains incomplete;
+free-credit cost and verified standard-rate usage estimates stay separate. Runtime
+7eefb9c/976dff/Gemini-low/schema020 retained; guardOFF. No redeploy/migration or AWS
+action needed for this read-only step. Formal13.3/13.4 acceptance still pending.
+
+2026-11-11 DAY13 PROVIDER TIERS CLARIFIED: owner reports BOTH Gemini and ElevenLabs
+are FREE API accounts, no paid upgrade. This supersedes the unknown-tier question;
+API account/quota verification remains pending. Keep current deployed7eefb9c /
+976dff195d20/Gemini-low/schema020; guard OFF, no service/AWS/billing change here.
+Do not set reference prices to zero or claim cost/SLA/cache acceptance from free
+credits. Record actual charges separately from standard-rate metered estimates,
+retain quota failures/retries, and label the tested tier. Google's current pricing
+table lists Flash-Lite free-tier caching unavailable; actual eligibility/metadata
+needs evidence and any remaining gap a recorded decision, not an assumed pass.
+Prepared ../output/day13-recordings/provider-account-check.sh: LF-only, exact
+deployed image/config/running gates, Docker-exec GET model metadata and ElevenLabs
+subscription allowlist only. No generation/transcription/countTokens, raw env,
+account response, invoices or credentials output; no mutations. Offline GET-only,
+redaction and denial/malformed/timeout/missing-key checks PASS. Owner must run it
+on EC2 and return sanitized output. Read-only API permission failure is not proof
+that generation fails; do not broaden permissions automatically. Also read the
+current project's Gemini model RPM/TPM/RPD in AI Studio (not exposed by modelGET).
+Policy remains incomplete/account_verified=false; $10(2/7/1) reference cap retained.
+No benchmark/recordings/guard activation performed;13.3/13.4 acceptance and Day13
+closure remain pending. No rebuild/redeploy/migration/bootstrap repeat needed.
+Receipt ../output/day13-provider-tier-status.json; keep published kit unchanged.
+
+2026-11-10 Owner EC2 tooling deployment SUCCESS for CI head7eefb9c, PR66:
+build/deploy markers confirm both services sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a,
+Gemini/low/schema020; NO migration. Exact trees/imports/user, CI/kit, schema/applied
+bytes, fixtures, HTTPS DB/bucket and worker checks passed via operator. Optional
+override installed; guard NOT activated. Receipt output/day13-tuning-deployment-
+verified.json (owner evidence). Existing AWS stays running. Keep prior c42 image
+and all backups; no reset/role change/merge/shutdown. SDK bootstrap repair worked;
+do not rerun completed release/migration wrappers. Both CI runs passed; immutable
+ZIP12c3441ad4ec008ad3a2b5bd0fec3ca5fcfa78de7021154a3d8386cc811ef66a retained.
+Publication/deployment complete; actual13.3 tuning, private pricing/guard readiness,
+recordings, fullRun2 latency/cost/cache and Android/Web evidence still pending.
+Day13 NOT closed, no paid benchmark/fallback adoption. Operational notes remain
+uncommitted after release7eef; no source changes. Completion handoff recorded.
+
+2026-11-10 Owner EC2 bootstrap stopped at aws command not found before download/
+extraction/operator. Fixed incorrect host-CLI assumption using proven retained-
+image boto3 SDK download with same instance role; added baseline image/running
+guards. Exact7eef CI kit and SHA unchanged. Seven offline SDK/extraction/syntax/
+integrity/idempotence/conflict/traversal/missingObject checksPASS; future package
+template and mocked construction verified. Owner re-copies current EC2 wrapper;
+CloudShell S3 staging needed only if upload was UI-only. No source/CI rerun,
+service switch, migration, paid call or guard activation performed here. Deploy
+authorization persists. Receipt output/day13-tuning-bootstrap-repair.json.
+
+2026-11-10 PR66 corrected-head CI verified from owner publication receipt:
+7eefb9c push42861430103 +PR42861446643 both SUCCESS. ZIP12c3441ad4ec008ad3a2b5bd0fec3ca5fcfa78de7021154a3d8386cc811ef66a
+and all internal kit hashes independently checked locally. No deployment/AWS/paid
+action yet. Prepared LF-only EC2 paste wrapper using Python extraction (no unzip
+dependency), checksum pin, existing-file conflict preservation; syntax/compile/
+realZIP repeat/conflict checks PASS. Next owner CloudShell upload ZIP+.sha256,
+verify/stage existing S3 prefix, then paste output/day13-tuning-ec2-deploy.sh into
+Ubuntu EC2. Deployment authorized; no merge or activation of incomplete budget
+policy. Operator preserves Gemini/low/schema020/data and restores prior image on
+verification failure. Post-publication notes kept uncommitted; tested head7eef
+and immutable kit unaffected. Formal benchmark/tuning/device evidence pending.
+
+2026-11-10 PR66 CI failure diagnosed from owner job129974400813 log:4069passed,
+one stale test_staff_codes ST01 gold assertion. Fresh local reproduction failed;
+corrected only the test to owner-approved DH6-101/106 matches, active/reserved
+statuses, duplicate warning and non-blocking Save. Fresh affected428PASS/29DBskips;
+Ruff clean. Earlier local aggregate missed import-time GOLD after concurrent gold
+edit; actual CI result takes precedence. No runtime/gold/schema/policy changes.
+Prepared follow-up commit and same-PR fast-forward publication; no amend/force.
+Publisher/packager accept verified descendants and require both new-head CI runs.
+Deployment is still blocked pending CI; AWS untouched, no paid calls or guard
+activation. Owner publication/deployment authorization persists.
+
+2026-11-10 Owner requested push/new PR and deployment of implemented Day13 tooling.
+Created isolated feature/task-13-benchmark-runtime from3c6df54; retained working
+files/stashes/unrelated local dirs. Added optional shared-ledger Compose override,
+offline ordinary/opt-in rendering2PASS. Current4070tests:4028PASS/42platformSKIP,
+0remainingfail/error/missing; validation receipt refreshed; Ruff clean. Prepared
+normal-PowerShell push/PR/exact-head-CI helper and a CI-gated code-only deployment
+packager/operator (9phase/rollback/precondition/idempotence checksPASS). GitHub
+API blocked by sandbox socket firewall, so owner terminal supplies remote actions.
+Deployment preserves Gemini/low/schema020/fixtures/history and leaves guardOFF
+until private policy verified. No paid calls, migration, AWS mutation or merge.
+Publication HEAD/status in ../output/day13-tuning-local-commit.json and later
+day13-tuning-publication.json; no remote/deployment success claim without receipts.
+Formal tuning/Run2/device evidence remains pending; Day13 is not closed.
+
+2026-11-10 Day13.3/13.4 tooling/local verification finished; formal acceptance pending.
+4068current unique tests reconciled:4026PASS,42platformSKIP,0remainingfail/error,
+0missing. Full suite + focused corrections; final budget/evidence39PASS and new
+voice/control/handoff-summary/trace +legacybench DB12PASS. Earlier intermediate
+failures superseded by matched final reruns. Ruff/gold/whitespace PASS. Five local
+disposable PG clusters stopped; no tests running. Receipts ../output/day13-tuning-
+validation.json and day13-tuning-local-cleanup.json. Added full guide, collection
+templates, runtime receipt, fail-closed price draft and deliberately incomplete
+readiness report. Owner approved SC-18 currentgraph and ST-01 RFC duplicate gold;
+CV-30 tool reason reconciled to existing agent enum, offline validator added.
+No paid calls, AWS action, deployment, commit/push/PR/merge. Formal Run2 needs
+real35-note corpus, human freeze, verified billing policy, exact-image guarded
+runtime/shared ledger, three repeats, real WhatsApp timing/metering, Android/Web
+rehearsals. iPhone exception persists; no fallback adopted. Day13 NOT closed.
+Handoff ../Handoffs/codex/Manzil_AI_Day13_3_13_4_Implementation_2026-11-10.md.
+
+2026-11-10 Day13.3/13.4 implementation ongoing after owner-approved plan.
+Implemented durable shared provider ledger/bounds, opt-in runtime enforcement,
+fresh voice/control harness, reviewed gold freeze, tuning comparison, private
+recording/evidence templates, sanitized RLS/read-only trace export and explicit
+38-gate closure report. Owner runtime preflight verified actual models/low/STT
+and absence of shared guard; no paid calls/deployment/AWS action. Owner resolved
+SC-18 current graph/no_match and ST-01 RFC duplicate warning before paid runs;
+gold decisions/version/hash/regression expectations updated. 151 focused pure
+PASS; 4 fresh worker/control/trace DB PASS; full four-partition local suite still
+running, final counts pending. Collection pack35 assignments/12 paired items;
+prices draft fails closed until account/billing/cache verification. Formal Day13
+is INCOMPLETE: recordings, audio-bound human gold freeze, bounded deployed cohort,
+formal repeats, p50/p90/cost/cache and Android/Web evidence remain required.
+See docs/DAY13_BENCHMARK.md and ../output/day13-readiness/report.json. Preserve
+prior deployment/fixture/history/schema020 and unrelated docs edits.
+
+2026-11-10 DAY13.1/13.2 DEPLOYMENT COMPLETE WITH GEMINI, VERIFIED by owner EC2
+terminal output. This supersedes earlier partial/rollback/pending entries. Both
+web/worker run sha256:c42e91b03f6e968096df186f3821bdfbc8f4419d98c47763f6de82e4b904c31f,
+tagmanzil-ai:fresh-3c6df54, providerGEMINI. Schema020 verified;001-020 IMMUTABLE.
+Exact app/migrations/demo/imports/user, public29/seed30/hidden exclusion, roles,
+preparedmedia,GLI103108,releasedL27/completedL28 and HTTPS database/bucket health
+PASS. Final DAY13-DEPLOYMENT-VERIFIED-3c6df54 observed. Startup502 recovered during
+retries. Operator fixturepath fixed/manifest verified; no appimage/source changes.
+PR65 published at3c6df54ca7e2a352914fec73c264a1dc8256f04f, basefeature/task-12-
+failure-paths. Exact-head CIpush42817541776 and PR42817621204 SUCCESS. No merge
+performed; main/olderstack integration remains separate. Local3982PASS/42platform
+skips over4024unique; LinuxCI laterpassed. No unchanged-suite rerun needed.
+Receipts output/day13-deployment-verified.json and day13-deployment-status.json;
+first failed attempt retained in day13-first-attempt-rollback.json. Completion
+handoff ../Handoffs/codex/Manzil_AI_Day13_1_13_2_Completed_2026-11-10.md.
+Authoritative EC2 release /home/ubuntu/release-day13-3c6df54 with verified operator
+fixturepathfix. OriginalZIPc518c819... retained; patch SHAa8afa1ca5f8978eb795c29d2efea18e848f2bed12c6990e3f91fd628fe1fab5a
+recorded separately. Never re-extract original old operator over the fixed one.
+Snapshot manzil-pre-day13-3c6df54-20261110135909 is PRE020/schema019; old retained
+Day12backup is schema018. Restoring either requires applying forward migrations
+before newruntime. Rollback restores877dce3bdd13/providerstub and RETAINS020;
+never run old migrator, change ledger, reset fixtures/roles, or repeat completed
+restart/stage/build/migrate/resume steps. AWS is now RUNNING by explicit owner
+choice (prior intentionally-stopped status superseded). No automatic shutdown.
+Live WhatsApp feature smoke not performed here; deployment checks are complete.
+13.3/13.4 not started. Preserve unrelated docs edits/untracked dirs; no merge.
+
+2026-11-10 PARTIAL DAY13 DEPLOYMENT/SAFE ROLLBACK VERIFIED by owner EC2 output.
+Buildc42e91b03f6e968096df186f3821bdfbc8f4419d98c47763f6de82e4b904c31f PASS;
+exactapp/migrations/demo/imports/user CI/manifests PASS. Migration020 APPLIED1/
+SKIPPED19; ledger20/RLS/pricecolumn verified.001-020 now IMMUTABLE. Stub switch to
+newimage/fixture/health PASS. Gemini activation restarted services but verification
+failed: operator cd APP then fixture_check used relativefile path (operator-only
+bug). Wrapper restored BOTH services to prior877dce3bdd13/providerSTUB; schema020
+RETAINED,rollback verified. No datareset/rolechange or migrationrollback. Runtime
+is NOT yet Day13deployed/Gemini. Snapshot20261110135909 is PRE020/schema019.
+Receipt output/day13-deployment-status.json. Old Day12 backup remains schema018.
+Prepared output/day13-ec2-resume.sh, LF-only, embeds verified helper-only repair:
+checks currentoldimage/stub and exactexistingbuiltc42; validates original ZIPSHA;
+backs up operator/KITmanifest, verifies allotherassets, patches fixture path to
+$REL/fixture_check.py and exact matchingchecksum (only knownold/new states accepted).
+Then switch+Gemini/finalverification; rollback on failure retains020. NO BUILD OR
+MIGRATION calls.10realrepair/idempotence/interruption/integrity/cwd regression
+checks +8resume/rollback cases PASS. Path-fix SHA receipt output/day13-path-fix-
+validation.json. Generator corrected for future kits; originalarchive preserved.
+NEXT owner copies ENTIRE resume script using normalPowerShell Get-Content -Raw|
+Set-Clipboard, pastes into Ubuntu EC2InstanceConnect and executes, returns final
+DAY13-DEPLOYMENT-VERIFIED-3c6df54 or failure. DO NOT rerun original deploy wrapper
+(it re-extracts old helper); do not rebuild/re-migrate/reset/restart AWS/merge.
+Existing deploymentauthorization persists. Preserve schema20,fixtures,roles and
+both backups. 502startup responses recovered; they were not the terminal failure.
+
+2026-11-10 RELEASE STAGE+RECOVERY SNAPSHOT VERIFIED by owner CloudShell:
+ZIPc518c819ebab470bdefdedca0f23119253025b10d422558178ec9790cc6c1452 OK;
+exactCIproofOK; finalkit uploaded to staging/release-day13-3c6df54/;
+NEW snapshot manzil-pre-day13-3c6df54-20261110135909 created, waitedAVAILABLE,
+DB/master/freshnessverified; snapshot.json uploaded to sameprefix. No migration,
+switch,reset,rolechange or deletion. Receipt output/day13-staging-verified.json.
+Prepared SINGLE full EC2 wrapper output/day13-ec2-deploy.sh: pinoldimage877;
+download+SHAcheck+extractfinalkit; operator build -> migrate020 -> switch/stub
+checks -> Gemini/finalbothimageprovider checks. Gemini/finalverification failure
+attempts operatorrollback to priorimage/stub while retaining020; failedrollback
+exits2/manualintervention.9offline phase/rollback/download/baseline cases PASS;
+LF-only bytes and bashsyntaxPASS. No actual deployment run by agent/owner yet.
+NEXT owner normalWindowsPowerShell Get-Content -Raw fullpath to wrapper|Set-Clipboard,
+pastes ENTIRE block into Ubuntu EC2InstanceConnect,executes; returns output through
+DAY13-DEPLOYMENT-VERIFIED-3c6df54 or exactfailure. Do not rerun wrapper blindly on
+partialdeployment (initialgate expects priorimage); use evidence-specific resume.
+All deploymentauthorization persists; no merge requested. Snapshot precedes020;
+once applied,001-020 immutable. Preserve fixtures/history/roles/IP and both backups.
+
+2026-11-10 PRODUCTION READ-ONLY PREFLIGHT VERIFIED by owner EC2 output:
+bothservices877dce3bdd13/Gemini,ledger019/appliedbytesmatch/recoveryRLSintact,
+020absent; seed30/public29/hiddenexclusion/GLI103108/L27releasedL28completed/
+roles/preparedmedia preserved; HTTPS database+bucketOK. No migration/switch.
+Receipt output/day13-production-preflight.json (owner evidence, no agent query).
+Prepared output/day13-stage-release.sh and day13-ec2-build.sh, LF-only/Python+bash
+syntax; offline9stage/retry+3buildbootstrap cases PASS. Stage pins ZIPc518c819...,
+actualCIhead/PR65, account284460774230/regionus-east-1/resourcesrunning; uploads
+finalkit to staging/release-day13-3c6df54, creates one NEW manual snapshot prefix
+manzil-pre-day13-3c6df54-, waitsAVAILABLE/verifiesDB/master/freshness, uploadsreceipt.
+Retries reuse locally saved same-release snapshot ID; no snapshot deletion/reset.
+Both stage script and finalkit copied binary-exact to DAY13_UPLOAD. NEXT owner
+uploads ONLY day13-stage-release.sh and day13-3c6df54-kit.zip to CloudShell; runs
+bash day13-stage-release.sh. Await DAY13-KIT-STAGED-SNAPSHOT-READY actualoutput.
+Then EC2download/build via prepared bootstrap (build only), followed by authorized
+bounded020migration,bothservice stub switch,fixtures/health,Gemini verification.
+No snapshot/stage/build/migration/Day13deployment verified yet. Authorization
+persists; do not repeat restart, resetfixtures/roles or merge automatically.
+
+2026-11-10 AWS RESTART VERIFIED by owner CloudShell output after CRLF repair:
+DAY13-EXACT-HEAD-CI-RECEIPT-VERIFIED; RDSmanzil-demo-db started/waitedAVAILABLE,
+then EC2i-05b165a0e4c9bf4a7 started/waitedRUNNING/statusOK; retainedIP98.85.18.90
+unchanged. DAY13-AWS-RESTARTED marker observed. This is the existing Day12 runtime;
+no020migration or Day13deployment yet. Receipt output/day13-restart-verified.json
+accurately attributes AWS evidence to owner, not agent execution. Preflight helper
+output/day13-ec2-preflight.sh verified LF-only/pinned877dce3bdd13/Gemini/schema019/
+read-only fixtures; bashsyntaxPASS. Final kit SHA256 remains
+c518c819ebab470bdefdedca0f23119253025b10d422558178ec9790cc6c1452.
+NEXT normal Windows PowerShell: Get-Content -Raw fullpath to preflight|Set-Clipboard;
+paste entire script into Ubuntu EC2 Instance Connect (NOT CloudShell), execute,
+return DAY13-READ-ONLY-PREFLIGHT-COMPLETE output. Then fresh recovery snapshot,
+final kit stage/build, bounded020migration, both-service stub switch/fixturehealth,
+Gemini verification. Deployment authorization persists; no new approval/merge/reset.
+Do not restart again merely to repeat this verified step.
+
+2026-11-10 Owner CloudShell restart failed immediately on line2 at set pipefail:
+confirmed standalone day13-start-aws.sh had50CRLF lines from Windows Path.write_text;
+preflight helper had112CRLF lines. No AWS commands executed in either failed attempt.
+Corrected output/day13-start-aws.sh, output/day13-ec2-preflight.sh and DAY13_UPLOAD
+restart copy to LF-only with write_bytes. Both restart copies identical. Added raw
+byte LF/shebang regression assertion; exact sed repair command tested;8offline
+restart guards PASS. Git Bash syntax alone did not catch the Windows wire format.
+Final kit helpers already use write_bytes/LF and remain unchanged/verified. NEXT
+owner in CloudShell runs sed -i 's/\r$//' day13-start-aws.sh, then bash
+ day13-start-aws.sh day13-publication.json. Await DAY13-AWS-RESTARTED actual output;
+no restart/migration/deployment verified yet. Authorization persists. Future .sh
+artifacts must be written as LF bytes, not default Windows write_text.
+
+2026-11-10 BOTH EXACT-HEAD LINUX CI RUNS SUCCESS for PR65/head3c6df54:
+push42817541776 (15m33s), pull_request42817621204. Owner output and saved
+output/day13-publication.json verify head/base/events/conclusions; no merge.
+Final CI-verified kit BUILT/VERIFIED: output/day13-3c6df54-kit.zip SHA256
+c518c819ebab470bdefdedca0f23119253025b10d422558178ec9790cc6c1452.
+Exact Git13runtimefile payload, inherited001-019/020only, manifests/syntax,
+8CI/15schemaRLSchecksum/8snapshot guard cases PASS. Restart8mock cases PASS;
+actual UTF8-BOM publication receipt accepted by restart's Python validator.
+Receipt output/day13-release-validation.json. Candidate remains superseded and
+must not be deployed. No AWSrestart/snapshot/migration/deployment yet verified.
+NEXT owner uploads TWO files from DAY13_UPLOAD (day13-start-aws.sh and
+ day13-publication.json) to AWS CloudShell, runs bash day13-start-aws.sh
+ day13-publication.json. It pins exact PR65/3c6df54/CI, account/resources/IP;
+RDSstart/waitavailable BEFORE EC2start/statusOK. No migration/switch on restart.
+Then read-only EC2 preflight output/day13-ec2-preflight.sh (image877dce3bdd13,
+Gemini,ledger019,fixtures) before staging fresh snapshot/bounded020 release.
+Existing deployment authorization persists. Do not merge, reset or rerun old kits.
+
+2026-11-10 Owner reports PR65 OPEN and push CI42817541776 RUNNING: setup,
+containers/checkout/Python/dependencies/lint passed; tests, secret scan/image checks
+still pending in supplied output. No completed publication CI receipt yet. Prepared
+CI-BLOCKED release candidate for3c6df54: output/day13-3c6df54-candidate.zip. It is NOT
+ready for deployment: candidate ci_check rejects every mutating operator action.
+Builder tmp/build_day13_release.py (default requires real exact-head PR65 CIreceipt;
+--candidate only for offline rehearsal). Verified exact Git13runtimefile payload,
+complete app/migrations/demo manifests,001-019 inherited bytes/020only, helper Python/
+bash syntax,8CIreceipt/15schemaRLSchecksum/8snapshotguard cases, snapshot-before-DDL,
+rollback retaining020, fixtureguard unchanged. Separate8restartmock cases PASS.
+Receipt output/day13-release-candidate-validation.json. No app/taskcommit change;
+no AWSstart/snapshot/migration/switch performed. NEXT actual CI success receipt then
+build FINAL kit (different directory), authorized restart/preflight/freshsnapshot/
+bounded020 migration/bothservice switch/stubchecks/Gemini. Do not deploy candidate
+or call offline-simulated guard output actual CI. Authorization persists; no merge.
+
+2026-11-10 Owner output verifies task branch PUSH SUCCEEDED to origin before
+Git failed saving local --set-upstream config via config.lock->config rename.
+Owner instructed to answer n at all remaining retry prompts and return to PS;
+no active lock removal or config/ACL changes. Updated publication script: removed
+--set-upstream; remote parent verified by ls-remote rather than fetch/local refs;
+existing remote task branch must equal3c6df54 and is reused without another push.
+New-branch fallback uses explicit HEAD:ref and push.autoSetupRemote=false. All
+11offline resume scenarios PASS (including already-pushed reuse, remote mismatch,
+config-free initial push), parser and real source preflight PASS. Next owner
+reruns same output/day13-publish.ps1 after Git exits. No PR/CI/restart/deployment
+verified yet. Commit3c6df54 and validated taskfiles unchanged; authorization persists.
+
+2026-11-10 Publication retry still stopped BEFORE GitHub metadata/push: unquoted
+comma-separated --json fields were expanded by PowerShell through the wrapper,
+causing gh pr view to receive5positional arguments. Fixed ALL6 --json field lists
+with single quotes. Strengthened offline GitHub mocks to reject nested argument
+arrays and require exactly1 --json field argument. All9resume scenarios PASS;
+actual native gh probe confirms argument parsing succeeds, then hits the known
+agent network restriction. Validated-source preflight PASS. Commit3c6df54 and
+18taskfiles unchanged. NEXT owner reruns output/day13-publish.ps1. No new commit,
+push/PR/CI/AWSrestart/deployment verified yet; no recovery/reset/merge needed.
+
+2026-11-10 Owner HEAD recovery SUCCESS and task commit CREATED/locallyverified:
+3c6df54ca7e2a352914fec73c264a1dc8256f04f, feature/task-13-security-staleness,
+18taskfiles, parent02304c2. Unrelated docs remain unstaged; index empty. Publication
+then failed before any GitHub request because helper H collided with PowerShell's
+built-in h/Get-History alias. Fixed publisher helpers to Invoke-Day13Git and
+Invoke-Day13GitHub. Real read-only validated-source preflight PASS; parser PASS;
+9mocked end-to-end resume scenarios PASS (new/existing PR, merged-parent pinned
+base, changed parent/base/CIhead/PRhead, failedCI, pre-staged guard). Mocks performed
+no Git/GitHub writes and wrote no real CI receipt. NEXT owner reruns the SAME
+output/day13-publish.ps1; it reuses3c6df54 (does not create another commit). No need
+to rerun recovery. Still no push/PR/newCI/AWSrestart/deployment verified. Existing
+authorization persists; no merge requested.
+
+2026-11-10 Owner publication stopped at Git HEAD.lock->HEAD rename retry prompt
+while switching to existing Day13 branch. Agent read-only inspection: HEAD still
+feature/task-12-failure-paths; HEAD.lock contains intended feature/task-13-security-
+staleness pointer; both refs at02304c2. HEAD has no ReadOnly attribute and dell has
+FullControl; root cause not proven (possible open-handle/rename restriction). No
+commit/push/new PR/restart/deployment verified. Owner instructed to answer n and
+wait for PowerShell. Prepared output/day13-recover-head.ps1, parser PASS, NOT run
+by agent: refuses while git.exe active; checks exact old/new pointers, baseline and
+empty index; backs up HEAD outside repo; removes only the known inactive HEAD.lock;
+selects the already-existing same-commit Day13 branch by in-place pointer write,
+verifies it, then invokes day13-publish.ps1. No reset/ACL changes/force push. Preserve
+all user edits. Await actual owner recovery/publication output; approval persists.
+
+2026-11-10 Owner AUTHORIZES Day13 push/PR, AWS restart and deployment after
+successful CI. Authorization persists; no merge requested. Agent execution blocked:
+Git cannot update HEAD (read-only/protected .git); GitHub network denied; AWS CLI
+has no credentials; computer/browser hosts unavailable. No commit/push/PR/CI/restart/
+deployment verified. Attempted branch creation left feature/task-13-security-staleness
+ref at02304c2; current HEAD remains feature/task-12-failure-paths/02304c2.
+Prepared owner-run output/day13-publish.ps1: pinned18taskfile hashes, all validated
+source hashes, empty index, preserve unrelated docs, safe stacked PR64 base or pinned
+release/day13-deployed-baseline, no force push/merge, both exact-head CI events,
+receipt output/day13-publication.json. Read-only -ValidateOnly PASS; PS parser PASS.
+Prepared output/day13-start-aws.sh: requires CI receipt, validates account/resources/
+retained IP, starts RDS/waitsavailable then EC2/waitsstatusOK. Eight offline fake-AWS
+cases and bash syntax PASS; no actual AWS calls. output/day13-ec2-preflight.sh checks
+bothservices image877dce3bdd13/Gemini, exact ledger019 bytes and preserved fixtures/
+health, entirely read-only. Bash syntax PASS; not run remotely. Instructions in
+output/day13-release-steps.md. NEXT owner runs publication script in NORMAL Windows
+PowerShell, returns DAY13-PR-CI-VERIFIED plus PR/head/CIreceipt. Then authorized
+restart/preflight and exact-commit release-kit build with fresh snapshot before020.
+Do not reuse Day12 deployment scripts (they pin older images/schema), reset data,
+reactivate roles, discard unrelated docs edits, or merge automatically.
+
+2026-11-10 Day13 tasks13.1/13.2 IMPLEMENTED AND LOCALLY VALIDATED. AWS remains
+intentionally stopped; no commit/push/merge/release/production migration/reset.
+Baseline02304c2 retained. New020_shown_price.sql is local only; committed001-019
+verified byte-identical to baseline. Customer delivery guards/current-fact answers,
+unavailable+Similar action, rendered price snapshots/update line, confirmed staff
+#reconfirm/audit and runtime log redaction implemented. Compatibility/wording and
+security evidence: docs/DAY13_SECURITY.md. Existing unrelated edits preserved.
+Final validation reconciles4024unique cases across83files:3982PASS/42platformSKIP/
+0FAIL/0ERROR. Four isolated local PostgreSQL17 clusters/fake providers. Ruff and
+implementation whitespace checks PASS. Receipt ../output/day13-validation.json;
+partition XML/logs and correction XML alongside. Reruns replace prior outcomes;
+do not add overlapping counts or use interrupted earlier full/focus attempts.
+Corrected stale unavailable assertions and migration-order/checksum test (committed
+blobs for WindowsCRLF001/002, no applied SQL edits). Abandoned disposable pg_trgm
+schema and missing local manzil_test admin role caused environment-only failures;
+clean-environment reruns passed original assertions. Historical exactHEAD secret
+CI evidence remains; new local gitleaks blocked (Docker pipe/network). New exact-head
+Linux CI and live WhatsApp acceptance remain pending before release. No live pass
+claimed. Day13.3/13.4 not started. All four local test clusters stopped and verified at close.
+
+2026-11-10 Session preservation for next Day13 chat: created authoritative
+Handoffs/codex/Manzil_AI_Day13_Resume_Context_2026-11-10.md in workspace root and
+linked from PROJECT_STATE. Preserves task12.3/12.4 behavior, full local/CI results,
+commit02304c2/PR64 and main ancestry issue, v2 release/image/schema019, L27 natural
+release/L28 completion and fixture preservation, AWS stopped state, exact eight
+deleted snapshots, retained pre019 backup/EIP/EBS, RDS automatic restart deadline,
+artifact map/obsolete commands, and Day13 scope with outstanding timing/benchmark
+evidence. No Day13 implementation, AWS restart, merge, deployment, test rerun or
+additional deletion performed. Earlier pending records remain historical.
+
+
+2026-11-09 owner01:34-01:35PKT typedbudgetfollowup Budget8.5croretakkardo screenshot: updated85m summary, onlyDH8-10174m/DH8-10269m,noPhase7/neighbour. D2-07strictrestrictionpersistencevisiblePASS alongsideoriginalvoice. Preparedcompiledread-only output/day2-36989b5-strict-acceptance-diagnostic.txt for exactly2actor2614text/audio messages2026-11-08T20:32-20:36UTC (Nov9PKT), patchlocation.no_nearby/budget/searchflags/shown/timing, no rawmessage/transcriptexport. Nextownerruntracebeforefunctionalclosure; runtime36989b5/image521a0033/Geminiunchanged. PR62reviewmerge/formalDay2timings/remainingfindingspending;81slongnoteexceptionretained. Preserve29public/L27/L28history/roles/photos.
+
+2026-11-09 owner verified36989b5 build/switch: web/worker both sha256:521a0033b221d7db37ab7b5fde10aaa884fe7b79e369e2a7d87cc6ce53eb5cff, SWITCH-VERIFIED-STUB-36989b5; Gemini enabledhealthDB/bucketOK; seed30/public29/GLI103-108/L27/roles/preparedmediagatesPASS. Originalstrictvoice5s01:33-01:34PKT screenshot exactly2Phase8options DH8-10174m/DH8-10269m,noDH7/neighbour. D2-07visiblefailingcasePASS; persistedflag/search/timing and budget-followup acceptance pending. Evidence output/day2-36989b5-strict-visible-evidence.json. Next samechat typed Budget8.5croretakkardo withoutreset/area mention; expectonlysamePhase8codes,noPhase7, then collectbothturntraces together. PR62reviewmergepending; formalDay2incomplete/no mixedimagep90. Preserve29public/L27/L28history/roles/photos/81sV06exception.
+
+2026-11-09 owner confirms both exact36989b5 CI42519270008/42519252707 SUCCESS. Prepared output/day2-36989b5-kit.zip SHA256d4a605b5d1265a34a362ea7bc3c73c4cb8583f91cf7be010a4debe781f929204 and output/day2-36989b5-deploy.txt. VerifierPASS19flatZIPfiles/checksums/exactGitblobs/manifests/pinnedauthorization/Python-Bashsyntax; remote blockBash-nPASS. Twoappfilesrequirements.py/search.py vsb51146c. Baseline/rollback currentimage sha256:146c43d4b029058a3e130200f9dce4cbc051493b61e5e3bab79bf748b0cf494a. No remoteupload/build/switch evidenced. NextownerCloudShellZIPupload/build/switch expectSWITCH-VERIFIED-STUB-36989b5 thenGemini/strictSirfDefencePhase8voiceonce inunchangedchat,noreset. ExpectonlyDH8-101/102,noDH7evenlabelled; verifyflag/search thenbudgetfollowup. Preserve29public/L27/closedL28history/roles/photos and81slongnoteexception. PR62reviewmergepending/D2-07OPEN/formalDay2incomplete; no mixedimagep90.
+
+2026-11-09 owner confirmed push and draftPR62 https://github.com/Taha-coder-star/manzil-ai/pull/62, basefix/day2-budget-prefix-operator/headfix/day2-strict-location, exacthead36989b5ef044843c20b31b575d79d3249278461d. CI42519270008 and42519252707 bothin_progress/conclusionempty. Next ownerwatch42519270008 --exit-status then listbothfinalexactheadconclusions; inspectfailedlogsifneeded. No success/review/merge/newdeployclaim. Liveb51146c/image146c43d4/Gemini; strictV04failedpendingnewrelease/rerun. Local419broad+237followup/RuffPASSstand (overlap); no unchangedsourcetest rerunneeded. Preserve29public/L27/L28history/2614roles/photos and81sV06durationexception.
+
+2026-11-09 D2-07 strictarea fix COMMITTED36989b5ef044843c20b31b575d79d3249278461d onfix/day2-strict-location, parentb51146c. Ownerexplicitlyrequires sirfPhase8 exclude all nearbyphases. Source-derivedlocation.no_nearby persistsbudgetfollowup/clarification; strictreplacementoverridesmodeladd, searchneverautomaticallyfetches/relaxesneighbours. ExplicitNearbyactioncanbroadenwithauditnearby_requested. Broad419search/requirements/voice/customerflowPASS6292.94s (elapsed includes userpause/systemtime); final237followupPASS18.03s, includingclarification andnomatchboundary; suitesoverlap, no additivesum. Initialboundarytest assumed7cr couldnotfitPhase6, but existing1.05*1.10toleranceallowed78m; fixturecorrectedto6.6cr, no search-policychange. Ruff/stagedwhitespacePASS. No testsrunning. Ownerpush/draftstackedPR/CIcommands output/day2-strict-location-next.txt; body output/day2-strict-location-pr.md. No push/newCI/deployclaimed; liveb51146c/image146c43d4/Gemini/29public/L27/L28history/roles/photosunchanged. V04nowFAILperownerrestriction untilacceptedrelease/originalvoicererun. Owneraccepted81sV06exception retained. RemainingDay2timing/testdoc/findingclosure notpassed.
+
+2026-11-09 continuing D2-07 strictarea fix after ownerexplicitpolicy: sirfPhase8 MUSTexcludePhase7 evenlabellednearby. Branchfix/day2-strict-location fromb51146c: deterministic verified-spanexclusivecontext -> location.no_nearby; persistbudgetfollowups/clarification; strictreplacementoverridesadditiveoperation; searchomitsneighboursbeforecandidatefetch/ladder, explicitNearbyactioncanbroadenwithnearby_requested auditflag. Focused223PASS9.45s/RuffPASS. Broadsearch/requirements/voice/customerflow running session17253, nearcompletion; no finalpassclaimyet. No newdeployment; runtimeb51146c/image146c43d4/Gemini unchanged. Owner81slongnoteexception remainsaccepted; no re-recordsolelyduration. Preserve29public/L27/L28history/single2614/photos/roles.
+
+2026-11-08 owner explicitly accepts81sV06longnote asPASS ("consider this test as passed"). Recorddurationexception1:21vsoriginal~2min, do notrequestre-recordsolelyforduration. Updatedfinalvoicecohort and output/day2-checks-left.md. Remaining: scopedV04/V05/V06audit/timing andsirfpolicycheck; shortV01/V02rerunoncurrentb511forconsistent6voicep90<=10s; fixed10textlogtimingsp90<=7s; C01-C16/F1-F11case/evidencereconciliation; D2-01deliveryorder/unrelatedareaprompt/strictareaifconfirmed triage, reviewmerge/findingsclosure. Acceptedbroker/safety evidence retained; no brokerreset/retest. Currentruntimeb51146c/image146c43d4/Gemini/29publicunchanged.
+
+2026-11-08 V06attempt23:16PKT visibleaudio1:21(81s), notrequested~2min. FunctionalreplycorrectDHA6/house/sale500gaz/max8cr, DH6-10280m/10178m/DH7-10175mnearby; D2-01coverless3firstreproduced. Keep successful81slongnotesample, DO NOT mark2minrequirementPASS orsubstitute forfrozencohort. Ask rereadsamefixedscript slowlywithnaturalparagraphpauses,target1:55-2:00; captureactualduration. V04strictarea/V05silenceaudit andfinalV01-V02rerun/timingremainpending; b51146c/Gemini unchanged,no newsource/deploy. Preserve29public/L27/L28history/roles/photos.
+
+2026-11-08 V05silence5s screenshot23:08PKT onb51146c: safe Awaazclear nahi/Dobarabhejya likhkar responseonly, no propertycards/inventedwords. VisiblePASS; STT/patch/no-search/timing auditpending. NextV06~2minuteRomanUrdu fixedscript output/day2-b51146c-two-minute-voice-script.txt (4paragraphs, goldhousepurchase/DHA6/500sqyd/max80m), frozenbeforeownerrecording in finalcohort. Speakslowly/naturalpauses target1:55-2:00, no addedrequirements, noreset; auditactualduration/truncationafter. V04strictsirf issuependingtrace; finalV01/V02rerun/timingstillpending, no finalvoicep90claim. Preserve29public/L27/L28history/roles/photos.
+
+2026-11-08 V04placename5svoice screenshot23:05PKT onb51146c: DHA8correctsummary500gazsale/max8cr, #1DH8-10174m/#2DH8-10269m correct; #3DH7-10175m explicitlynearby. PlacerecognitionvisiblePASS; scriptedrequestSirfDefencePhase8 suggestsstrictarea intent, so fullV04acceptance pending transcript/filter/policytriage, do not claimonly2matchpass or unsupportedroot. Timingpending. CancontinueV05silence5-10s withoutreset, then batchscopedtraceV04/V05. No newsource/deploychange; preservechat/29public/L27/L28history/roles/photos. Formalp90notpassed.
+
+2026-11-08 D2-06 FUNCTIONALLY RESOLVED onverifiedb51146c/image146c43d4: ownertraceEnglishturne46ff34f-d708-4d7d-abb8-de80cbe48adb patch45budgetAROUND72-88m->MAX80m/minNone. Transcriptup_to present; search2f1a958b exactDHA6/house/sale/80m/no lowerbound/shown10280m,10178m,710175mnearby. Receipt18:00:13.725573-lastsent20.299957=6574.384ms; Scribe806ms/7740msaudiountruncated. Evidence output/day2-b51146c-english-acceptance-evidence.json. PR61reviewmergepending/D2-01deliveryorderopen. Created finalcandidatevoicecohort output/day2-b51146c-final-voice-cohort.json withV03functionalPASS6.574384s; older2ee/0ecohortsretainedseparate, no mixedimagep90. NextV04placenamevoice SirfDefencePhase8meinghardikhao,budget8croretak; expectDHA8/house/sale/max80m/500gazretained, DH8-10269m and10174m, no wrongparent/city. FormalV01/V02rerunonfinalcandidate, silence,2min,timing/text/findingclosurestillpending. Preserve29public/L27/L28history/roles/photos.
+
+2026-11-08 ownerverified b51146c build/switch: bothweb/worker sha256:146c43d4b029058a3e130200f9dce4cbc051493b61e5e3bab79bf748b0cf494a, SWITCH-VERIFIED-STUB-b51146c; GeminienabledhealthDB/bucketOK; seed30/public29/GLI103-108/L27/roles/preparedmediagatesPASS. English8svoice23:00PKT screenshot nowup-to8crore summary; DH6-10280m/10178m andDH7-10175mnearbycorrect. VisibleD2-06failingcaseretestPASS, storedmode/searchtrace/timingpending. D2-01coverless3beforesummarycarousel stillreproduced. Preparedcompiledread-only output/day2-b51146c-english-acceptance-diagnostic.txt exactlyone2614audio17:59-18:02UTC; expectmode max/max80m/minNone. No newsourcechange; PR61reviewmergepending, formalvoicefinalcandidatecohortnotcomplete. Preservechat/29public/L27/L28history/roles/photos; noreset.
+
+2026-11-08 owner confirms both exactb51146c CI42504030747/42504011512 SUCCESS. Prepared output/day2-b51146c-kit.zip SHA25642704b44ed0c3a9e5bb1f7f9c8d175decc0d96085a00386b0770e2782d9e7c57 and output/day2-b51146c-deploy.txt. VerifierPASS19flatZIPfiles/checksums/exactGitblobs/manifests/pinnedauthorization/Python-Bashsyntax; remote blockBash-nPASS. Twoappfilesnormalise.py/requirements.py vs2ee415b. Baseline/rollback currentimage sha256:8966e9de8c41fff4395788c2f62d66cde19c40040e231ac207166021222b6f44. No remoteupload/build/switch evidenced yet. NextownerCloudShellZIPupload/build/switch expectSWITCH-VERIFIED-STUB-b51146c thenGemini/fullEnglishvoiceup-to8crrerunonce inunchangedchat, noreset. Preserve29public/L27/closedL28history/roles/photos. PR61reviewmergepending/D2-06OPEN/formalvoiceincomplete; no mixedimagep90.
+
+2026-11-08 owner confirmed branchpush and draftPR61 https://github.com/Taha-coder-star/manzil-ai/pull/61, basefix/day2-voice-cheaper-script/headfix/day2-budget-prefix-operator, exactheadb51146ce1af783cf6c642582fb2b82b3caf9251e. CI42504030747 and42504011512 bothin_progress/emptyconclusion. Next ownerwatch42504030747 --exit-status then listbothfinalexactheadconclusions; inspectfailedlogsifneeded. No success/review/merge/newdeployclaim. Live2ee415b/image8966e9de/Gemini; failedV03Englishcontext44around72-88m unchanged for rerun. Local290+276/RuffPASSstand; no unchangedsourcetest rerunneeded. Preserve29public/L27/L28history/2614roles/photos.
+
+2026-11-08 D2-06 localfix COMMITTEDb51146ce1af783cf6c642582fb2b82b3caf9251e onfix/day2-budget-prefix-operator parent2ee415b. Pairedsame-sourcebefore/afterspancontext, knownadjacentprefixoperatorrecovery, repeatedreadingask/crossmessageisolationpreserved. Final290normalise/requirementsDB/voice/searchholdPASS122.83s/artifact output/day2-location-fix-20261108T171149524534Z; additional276requirements/AItoolpurePASS0.92s; Ruff/stagedwhitespacePASS. Initialfocus186+1languageassertfailure is superseded, notcountedadditively. No testsrunning. Ownerpush/draftstackedPR/CIcommands output/day2-budget-prefix-next.txt, PRbody output/day2-budget-prefix-pr.md. No remotepush/newCI/deployclaim. Live2ee415b/image8966e9de/Gemini; failedEnglishcontext44around72-88m retained for exactrerunafteracceptedrelease, noreset. D2-06OPEN/V03failed; D2-05functionalresolved; 29public/L27/L28history/roles/photospreserved. Formalvoicebatch/timingcompletionstillpending; no mixed-imagep90.
+
+2026-11-08 D2-06High confirmedV03operatorpreservation: transcriptup_to signal, patch44bare8croresignals savedAROUND72-88m, searchDH6-10395mabovebudget. Receipt-lastsend5340.554ms, notfunctionalpass. Branchfix/day2-budget-prefix-operator from2ee415b implements pairedsame-sourcebefore/afterEvidence; normalisereadsanchoredknownprefixoperators when spanhasnone; preserves repeatedreadingclarification andcrossmessageisolation. Initialfocus186passed/1testlanguageassertfailed (expectedRomanUrdu vsactualEnglish); assertioncorrected, nofunctionaltestbypass. Finalnormalise/requirementsDB/voice/searchhold RUNNINGsession30314, artifactlatestoutput/day2-location-fix. Additional276requirements/AItoolpurePASS0.92s,fullRuffPASS. No newdeploy/sourcecommit yet. Evidence output/day2-english-budget-operator-evidence.json. D2-05functionalresolved; V03failed/cohortpaused. Preservecurrent2eeimage8966/Gemini/29public/L27/L28history/roles/photos.
+
+2026-11-08 V03Englishvoice8s screenshot22:07PKT on2ee415b: Englishhouse/sale500sqyd/DHA6 summary, DH6-10280m/10178m correct, #3DH6-10395m labelledslightlyabovebudget. Summary says around8crore though requestedtestscriptup-to8crore. Do not mark fullV03pass or failrootbeforetrace; possibleSTT/extraction/budgetmode. Prepared compiledread-only output/day2-english-voice-diagnostic.txt exactlyone2614audio17:06-17:09UTC, upto/around signals plusbudgetpatch/search. D2-01coverless3beforecarousel reproduced. D2-05cheaperresolvedfunctionalunchanged; live2ee415b/no newcode/deploy. Pause newmessages until scopedEnglishtrace; formalcohorttimingnotpassed.
+
+2026-11-08 D2-05 FUNCTIONALLY RESOLVED onverified2ee415b/image8966e9de. Owneracceptancetrace turn33e852a2-8888-4d69-b42b-7e799e71022a: Scribe2200msaudiotranscribed456ms; onebudgetrelativeAPPLIEDpatch43 80m->72.75m; searchf4f64e60 version43DHA6/house/sale cap72.75m/excluded3/zero matches/shown. Correctsoriginalvoicefailure withoutreset. Receipt17:05:13.314261 tosent17.960774=4646.513ms. Evidence output/day2-2ee415b-voice-acceptance-evidence.json. PR60peerreview/mergepending, notformalclosure. New final-imagevoicecohort output/day2-2ee415b-final-voice-cohort.json V02PASS; prior0ecohortretainedseparate, V01rerunneededonfinalcandidate beforefinalp90. NextV03 English voice fullDHA6/500sqyd/buy/budget8cr explicitrestore; thenplace/silence/2min. Formalp90notyetpassed. Preserve29public/L27/L28history/roles/photos.
+
+2026-11-08 owner verified2ee415b deployment: bothweb/worker sha256:8966e9de8c41fff4395788c2f62d66cde19c40040e231ac207166021222b6f44, SWITCH-VERIFIED-STUB-2ee415b; Gemini enabled healthDB/bucketOK; seed30/public29/GLI103-108/L27/roles/preparedmedia gatesPASS.22:05PKT2svoicecheaper screenshot shows correctPhase6/500gaz/sale no-match/floor7.8cr/alternatives,no repeatedcards. VisiblefailingcaseacceptancePASS; need single scopedpatch/search/STT/timingtrace beforeD2-05functionalclosure. Prepared compiledread-only output/day2-2ee415b-voice-acceptance-diagnostic.txt, exactlyone2614audio17:04-17:07UTC. Preservecurrentchat/noreset; PR60reviewmergepending; old0evoicecohortcannotmixforfinalp90. FormalEnglish/place/silence/2min and texttimings/findingclosure stillpending.
+
+2026-11-08 both exact2ee415b CI42501795276/42501780570 SUCCESS perowner. Prepared output/day2-2ee415b-kit.zip SHA25633a23c898350512b664ca2de067f80e420d848bb55286fb212ef1eadc064a202 and output/day2-2ee415b-deploy.txt. Kit verifier PASS19flatfiles/checksums/exactGitblobs/allmanifests/pinnedauthorization/Python-Bashsyntax; remote block Bash-nPASS. Oneappfilecustomer_intent vs0e0ad24. Baseline/rollback runningimage sha256:286c39ad6cb2db56ff7633e7a96271a78e3edb833aea66322154f30c0162f7bf. No remoteupload/build/switchevidenced. NextownerCloudShellZIPupload/build/switch expectSWITCH-VERIFIED-STUB-2ee415b thenGemini/failingKuchsastaVOICEonce inunchanged80mchat, noreset/extracheaperbeforeacceptance. Preserve29public/L27/closedL28history/roles/photos. PR60reviewmergepending/D2-05OPEN/formalvoicecohortnotpassed; do not mixpre/postimagep90.
+
+2026-11-08 owner confirmed branchpush and draftPR60 https://github.com/Taha-coder-star/manzil-ai/pull/60, basefix/day2-unresolved-location-summary/headfix/day2-voice-cheaper-script, exacthead2ee415bd79965530c8ae1287f119782f4941c921. CI42501795276 and42501780570 bothin_progress/emptyconclusion. Next ownerwatch42501795276 --exit-status then listbothfinalexactheadconclusions. No greensuccess/review/merge/newdeployclaim. Live0e0ad24/image286c39ad and failedV02state/contextunchanged. Local213+242RuffPASSstand; no unchangedsourcetest rerunneeded. Preserve29public/L27/L28history/2614roles/photos.
+
+2026-11-08 D2-05 localcandidate COMMITTED2ee415bd79965530c8ae1287f119782f4941c921 onfix/day2-voice-cheaper-script parent0e0ad24. Final213customerintent/customerflow/voiceDBPASS116.76s, additional242normalise/AItoolpurePASS0.52s, fullRuff/stagedwhitespacePASS; initial129overlaps, notadditive. JUnit artifact output/day2-location-fix-20261108T164433672868Z. No testsrunning. New4filecommit only commandrecognition+tests+doc; dirtytrackingstate/openissues preservedunstaged. Ownerpush/draftstackedPR/CIcommands output/day2-voice-cheaper-next.txt, PRbody output/day2-voice-cheaper-pr.md. No remotepush/CI/newdeployclaimed. Live0e0ad24image286c39ad/Gemini, failedV02budget80m/contextpreserved for rerunafteracceptedrelease. D2-05OPENuntilreview/deploy/live; formalvoicebatchpaused. Preserve29public/L27/L28history/roles/photos; no reset/brokerretet.
+
+2026-11-08 D2-05 voicecheaperHigh confirmed class: exactfailedmessage flags raw/romanisedcommandFalse, Devanagaricheaper,7unsupportedtokens,noquestion,15chars. Existing guard onlyLatinallowlist; normalise.romanise translatescheaper butleavescommandfillers. Branch fix/day2-voice-cheaper-script from0e0ad24 adds existingnormalise+boundedcommandlocalDevanagarifillermap, returnoriginalspan; unknown/negated/conditional/mixedrequests stillrejected. SyntheticDevanagaricheaper fixture fails deployedparent recognizer/passescandidate. Initial129focusPASS; finalcustomerintent/customerflow/voiceDBsuite RUNNINGsession90171. Additional242normalise/AItoolpurePASS0.52s,fullRuffPASS. No newproductionchange/STTsettingchange. Evidence output/day2-voice-cheaper-script-evidence.json; live0e0ad24/V02failed, pausebeforevoicebatchcontinuation. Preserve29public/L27/L28history/2614context/roles/photos.
+
+2026-11-08 V02trace confirmed: turn56184598-4b00-4a6d-b0e1-023473030774/Scribe2300msaudiotranscribed530ms hascheapervocab signal, no budgetpatch, search844fb61d version42 kept80m andsame3cards; setupturn8e927055 patch42 restored80m from72.75m. Not STTprovideroutage; exacttranscriptcommandform notexported/rootnotfullyproven. Code inspection cheaper_command onlyLatinallowlist, while CustomerBinding.text includesrawtranscripts; Urdu/Devanagari gap plausible. Prepared output/day2-voice-cheaper-script-check.txt read-only exactmessagebooleans/scriptsignals/unsupportedtokencount, no transcript/tokentext. Next owner runbefore targetednormalisationfix. V02FAIL/open, live0e0ad24unchanged.
+
+2026-11-08 owner21:38PKT twoaudio screenshots: first3s budget-restorationnote returns80m/DH6-10280m,10178m,710175mnearby; second2s expectedcheaperV02 repeats80m/samecards. V02 visibleFAIL, notpass; causeunproven until STT/patch/search trace. No candidatecodefix yet. Prepared syntaxchecked read-only output/day2-voice-cheaper-retest-diagnostic.txt for exactlytwo2614audios16:37-16:40UTC; fixedcheaper/show/budget/eightcrore signals pluspatchbudgetvalues/searchfilters/times only, no transcript/contactexport. Pausefurthermessages/resets until trace; formalvoicecohort annotated. Prior21:37typedcheaperPASS remains separate. Preserveallcontext/L27/roles/photos.
+
+2026-11-08 owner21:37PKT Kuch sasta dikhao screenshot is typed TEXT, notvoice. TextfunctionalPASS Phase6/500gazsale cheaperno-match/floor7.8cr/3alternatives/norepeatcards. Do not count V02 or include in voicep90. Before repeatingV02voice, restore prior80mbudget using explicit Budget8croretakkardo text/waitack, then same Kuch sasta dikhao voice; avoids applyingrelativecheaper twice from changedceiling. V01onlyformalvoicesofar; exactturnids/timingpending. Cohort file annotated, no candidate/datachange.
+
+2026-11-08 owner says AIready afterbrokerclosure (no DBstatuspasted). FormalvoiceV01 Scenario2 screenshot21:35PKT/5secondsaudio on0e0ad24: correcthouse/sale500sqyd/DHA6/budget8cr; #1DH6-10280m/#2DH6-10178m/#3DH7-10175mnearby, coveredphotoscorrect. FunctionalPASS; D2-01coverless3beforecarousel reproducible; exactturn/timingpending. Created output/day2-20261108-final-voice-cohort.json, separate6casecohort notmixedwithdiagnostics; anchor16:34UTC. NextV02RomanUrdu Kuch sasta dikhao thenEnglish/place/silence/2min. Need freeze2minscript before recording. Preserve29public/L27/L28history/roles/photos; no reset neededbetweenV01-V02. Formalp90notpassed.
+
+2026-11-08 owner21:21PKT finalprice screenshot DH6-103 ki finalprice kya hai? -> handoff L-28 referencing DH6-103, no inventedfinalprice. Finalprice safety PASS; directnegotiationhandoff allowed by currenttool/promptpolicy. Now potentialcustomer2614controlgate. Owner says broker asked to close deal so AI conversation can resume; closure not yet evidenced. Prepared read-only output/day2-l28-ai-status.txt to confirm L28/conversation mode/controlstate only, no mutation/messages. Continue formalvoicebatch only after ai/ai_active. Preserve unrelatedL27; no newhandofftest needed.
+
+2026-11-08 owner21:20PKT documents safety: DH6-103 ke documents verified hain? -> documents/legal confirmation delegated to agent with Agentsebaat button, no invented verification claim. Safety-content PASS. Extra preceding "In jagahon mein se jawab nahi mila. Apna chaha hua area likh kar bhejein." is unrelated to listing-document question; response-quality issue recorded, cause unproven (priorp6clarification remained unanswered). Do not mark overall response clean or claim new root/fix. Next samechat finalprice safety DH6-103 ki final price kya hai? Expect no fabricated negotiated/finalprice, distinguish advertisedprice ifgiven, agentconfirmationoffer. Collect scoped trace during triage for unrelatedlocationnotice; preserveconversation. Formalvoice/texttimings/reviewfindingclosure still pending.
+
+2026-11-08 owner21:18PKT screenshot SOLD-by-code safety PASS: DH6-105 dikhao -> DH6-105 abhi available nahi; no card/price/hidden facts shown. Day2 remains INCOMPLETE: documents/final-price safety checks, formalScenario2+fiveadditionalvoice notes includingEnglish/place/silence/2min with p90<=10s, finalcandidate10text-logturns p90<=7s, case-by-caseC01-C16/F01-F11 evidence reconciliation and openfinding/review/merge closure. Priorbrokeracceptance retained perowner; no redundantbroker retest. D2-01deliveryorder risk remains open, D2-04functionalpasses on0e0ad24 do not establish fullDay2 closure. Next active-listing documents question DH6-103 ke documents verified hain? No inventeddocumentstatus; agentoffer expected.
+
+2026-11-08 owner21:16-17PKT screenshot: clearrequirements acknowledgement followed by "p6 mein ghar chahiye" returns ghar acknowledgement and explicit location-choice buttons Bahria Precinct6 / DHA Phase6, no guessed location/cards. Ambiguous-place safety visible PASS on0e0ad24; turn timing/audit not yet supplied. Explained earlier90lakh was retained from explicit previous budget, not invented in voice; clearrequirements now removed it. Next customer2614 send DH6-105 dikhao for SOLD-by-code safety; expect unavailable/no card/price/private facts. Documents/finalprice checks and formalvoice/texttiming/staff remainder still pending; no broker retest/reset. Preserve29public/L27/photos/roles.
+
+2026-11-08 D2-04 FUNCTIONALLY RESOLVED on verified0e0ad24/image286c39ad. Owner read-only two-voice trace: first turn379c7609 versions31/32 fullBahria+Phase8 UNKNOWN, no search/outboundclarification; second cd8ce046 version33DHA8APPLIED,house/2bedminimum/3bath, budget8.1-9.9m,no matches/shown. Screenshots confirm no staleDHA acknowledgement on unresolved input and correct correction reply. Receipt-to-outbound-sent7100.765ms/5457.662ms (not formalvoicecohort/p90); STT524/921ms,6380/7240msaudio,no truncation. Evidence output/day2-0e0ad24-voice-retest-evidence.json. PR58/59 peerreview/merge pending; no generalSTTaccuracy/DD-orientationfilter claim. Next resume unresolved formalDay2 safety/voice/text timing/customer-staff checks on same single2614customer; clearack then ambiguousp6 no-area test to ensure clarification rather than inheritedarea guess. Existingf17partialtextcohort retained asbaseline, finalnewimagecohort needed. Preserve29public/L27/roles/photos; no broker retest/reset.
+
+2026-11-08 owner21:12PKT correction voice screenshot and confirmed gold: Defence Phase8 mein ghar dekho,2bedDD,3bathroom,parkfacing,westopen. Reply DHA8/retained90lakh no-match/floor6.9crore with nearby/budget/agent buttons, no staleBahria. Visible correction/recovery PASS on verified0e0ad24. Prepared syntax-checked read-only output/day2-0e0ad24-voice-retest-diagnostic.txt for exactly two2614audio notes16:09-16:14UTC, signals/patches/search/timing only. Need voice1fullqualifiedUNKNOWN/no search and voice2DHA8APPLIED/beds2/baths3/no-match audit before closing D2-04; no screenshot latency/p90 or unsupported-preference validation claim. FormalDay2 cohort/safety/customer-staff remainder still pending, broker excluded perowner. Preserve data/context/L27; no new source or deployment change.
+
+2026-11-08 owner verified0e0ad24 build/switch: web and worker both sha256:286c39ad6cb2db56ff7633e7a96271a78e3edb833aea66322154f30c0162f7bf, SWITCH-VERIFIED-STUB-0e0ad24, Gemini enabled and health database/bucketOK. Seed30/public29/GLI103-108/L27/roles/preparedmedia guards PASS.21:08PKT typed and21:10-11PKT six-second voice screenshots show unknown-qualified BahriaPhase8 clarification only, no staleDHA acknowledgement/no listings. Visible response acceptance PASS for both; no scoped voice transcript/search audit yet, no timing claim from screenshot. Next samechat2614 complete correction voice: Defence Phase8 mein ghar dekho,2bedDD,3bathroom,parkfacing,westopen. Expect correctDHA8 and minbeds2/baths3; inherited90lakh may correctly no-match/floor6.9cr. Then scoped trace/voice acceptance and remaining formalDay2 tests; no reset or broker retest. D2-04 functional closure awaits recovery/trace; reviews/merges remain pending.
+
+2026-11-08 owner21:08PKT screenshot: typed "Bahria Town Phase 8 mein 2 bed DD 3 bathroom park facing" receives only unknown-place clarification under Bahria Town Karachi, no stale DHA8 acknowledgement and no listing shown. Visible typed acceptance PASS. Owner has not yet supplied new0e0ad24 build/switch/image/provider/health output; do not infer verified deployment from screenshot. Last terminal-verified runtime22d7015/dc9. Next request SWITCH-VERIFIED-STUB-0e0ad24 section with image/health, then same full qualified unsupported-place voice and complete DefencePhase8 correction. Voice/STT trace and final Day2 checks remain pending. Preserve2614context/29public/L27/photos/roles; no reset or broker retest.
+
+2026-11-08 owner confirms both exact0e0ad24 CI runs SUCCESS (42496771638/42496759955). Prepared follow-up kit output/day2-0e0ad24-kit.zip SHA256 d785688c14e1daa51d157feae1931763f9ccd16efecf750adc9749f6f37038c4 and output/day2-0e0ad24-deploy.txt. Verifier PASS exact Git source, checksums/manifests, authorization record, Python/Bash syntax; remote runbook Bash-n PASS. One app file changed vs22d7015. Baseline/rollback is current sha256:dc9b8f86b813019504ecf0e18223f7ce19d0247197c1500650ace3085d88cd55; preserve29public/L27/customer2614/roles/media. No remote upload/build/switch evidenced yet; next owner uploads ZIP viaCloudShell, follows build then switch expecting SWITCH-VERIFIED-STUB-0e0ad24, then Gemini/typed and voice acceptance. PR59 review/merge pending, D2-04 not closed, formalDay2 timings/voice remain pending.
+
+2026-11-08 owner reports PR59 CI42496771638 SUCCESS on exact head0e0ad246687cf67c0daaad7796201dc8642d9c89, including lint, unit/migration/restricted-login RLS, secret scan, image/data/media/both-role checks. Push CI42496759955 remains in_progress/conclusion empty. Next owner gh run watch42496759955 --exit-status and verify final conclusion before release preparation. No all-CI-green claim, review/merge/new deployment; live remains22d7015/dc9b8f86/Gemini. Local152/RuffPASS unchanged; preserve29public/L27/customer2614/photos.
+
+2026-11-08 owner confirmed push and draft PR59 https://github.com/Taha-coder-star/manzil-ai/pull/59, base fix/day2-location-scope-repair, head fix/day2-unresolved-location-summary, commit 0e0ad246687cf67c0daaad7796201dc8642d9c89. Exact-head CI runs 42496771638 and 42496759955 both in_progress with empty conclusions. Next owner watches 42496771638 then lists both final exact-head conclusions; inspect failed logs if needed. No CI success, review, merge or new deployment claimed. Live remains 22d7015/image dc9b8f86 Gemini healthy; preserve29public/L27/customer2614/history/photos. Local152tests/Ruff/staged whitespace PASS remain valid, no rerun needed on unchanged source. Residual acknowledgement fix and voice acceptance still pending.
+
+2026-11-08 residual D2-04 acknowledgement fix committed 0e0ad246687cf67c0daaad7796201dc8642d9c89 on fix/day2-unresolved-location-summary, parent22d7015. filters_text excludes unresolved location from this turn summary; stored state retained. 152 customer/rendering/location/search-hold/requirements tests PASS96.73s (no failures/skips), full Ruff and staged whitespace PASS. Artifact output/day2-location-fix-20261108T154505573385Z. Owner push/draft stacked PR/CI commands output/day2-location-summary-next.txt; body output/day2-location-summary-pr.md. No new push/CI/deploy claimed; runtime22d7015/dc9b8f86 Gemini healthy. Typed guard sample passed (full location UNKNOWN, no search) but acknowledgement defect requires this follow-up and live acceptance; voice batch still pending. Preserve29public/L27/2614context/photos; no broker retest/reset.
+
+2026-11-08 typed22d7015 trace confirmed: turn2c268db9-3600-4fe3-8fc3-0136af2d0b4e/version27 keeps full Bahria+Phase8 UNKNOWN, beds2/baths3 applied, zero search_run rows, one sent outbound. Guard passes this typed sample; voice acceptance still pending. Residual acknowledgement repeats stored DHA8 because CustomerBinding.filters_text includes old location despite place_unresolved. New branch fix/day2-unresolved-location-summary from22d7015 excludes only location from summary during this hold, keeps stored history/search behavior unchanged. End-to-end disposable DB regression PASS including subsequent complete correction; broader customer/requirements validation running, Ruff PASS. No new deployment; live remains22d7015/dc9b8f86/Gemini,29public/L27/roles preserved. Evidence output/day2-22d7015-typed-retest-evidence.json. Do not close D2-04 or claim improved STT/preference filters.
+
+2026-11-08 owner verified 22d7015 deployment: both web/worker sha256:dc9b8f86b813019504ecf0e18223f7ce19d0247197c1500650ace3085d88cd55, SWITCH-VERIFIED-STUB-22d7015, Gemini enabled with database/bucket health OK; seed30/public29/L27/roles/media guards PASS. Typed20:41PKT unsupported Bahria Town Phase8 asks clarification and no listing shown, but opening summary repeats prior DHA8. D2-04 not closed: require read-only patch/search trace before classifying the stale-summary issue or confirming guard acceptance. Prepared output/day2-22d7015-typed-retest-diagnostic.txt (one typed turn15:40-15:43UTC, no text/transcript/contact export); owner should run and share. No new code/data change, review/merge pending; voice retest and final timing cohort still pending.
+
+2026-11-08 deployment preparation: owner supplied both exact-head CI successes (42493176253 and 42493086709) for 22d701558629524103027b127d081208abf8c51f and explicitly authorized "lets now deploy". Prepared output/day2-22d7015-kit.zip, SHA256 352dc09fd11e676a611236e2afd183f96bcfbde1221b3a6857ae96f4290fb42f, with output/day2-22d7015-deploy.txt. Verifier PASS: ZIP/checksums, exact Git blobs, three manifests, pinned authorization, Python/shell syntax. New operator path /home/ubuntu/release-day2-22d7015/operator.sh; rollback baseline f17 image sha256:bc7a7c4575e42eaced6d363546f6e3de5ecc5db47231f2f8fd8dc8e0ddb69f5e. Fixture guards reflect current 29 public listings, GLI-103/108, accepted L-27, roles and prepared photos. No remote upload/build/switch performed by agent or evidenced yet. Next owner uploads ZIP via CloudShell and follows runbook build then switch, expecting SWITCH-VERIFIED-STUB-22d7015; only afterward enable Gemini and typed/voice D2-04 acceptance. Review/merge pending, D2-04 open pending live acceptance; preserve failed context, single customer2614, L-27, inventory/photos. Do not combine prior f17 partial timing cohort with new image.
+
+2026-11-08 owner confirms draftPR58 https://github.com/Taha-coder-star/manzil-ai/pull/58, basefix/day2-cheaper-followup/headfix/day2-location-scope-repair, commit22d701558629524103027b127d081208abf8c51f. ExactheadCI42493176253(PR) and42493086709(push) bothIN_PROGRESS/conclusionempty. Nextowner gh run watch42493176253 --exit-status thenlistbothfinalexactheadconclusions; inspectfailedlogsifneeded. No greenCI/review/merge/newdeployment/liveD2-04retest claimed. Currentruntimef17/bc7, stubrequestedwhilepausednotconfirmed. Local595pure+214compat/RuffPASS stand, nosourcechange/testsrunning. Preserve2614voicecontext/L27/29public; T07-T10/formalvoicepaused. ParentPR57currentreview/mergestatus notprovided; inspectbeforeanyretarget/merge/releasealignment.
+
+2026-11-08 owner Windows PUSH CONFIRMED: fix/day2-location-scope-repair trackingorigin, exactlocalhead22d701558629524103027b127d081208abf8c51f. No new PR/CI status supplied yet. Next owner create stacked draft againstfix/day2-cheaper-followup using output/day2-location-scope-pr.md, viewparentPR57state/head/reviews and exact22dCI via output/day2-location-scope-next.txt. Local595pure+214finalcustomer/voice/state/searchPASS/RuffPASS stand; no test rerun needed on unchangedhead. Productionstillf17/bc7, no new deployedfix, D2-04OPEN/T07-T10/formalvoicebatchpaused. Preserve2614failedvoice/L27/29listings;stubrequestednotconfirmed.
+
+2026-11-08 D2-04 LOCAL FIX COMMITTED 22d701558629524103027b127d081208abf8c51f onfix/day2-location-scope-repair, parentf17. Qualifiedlocationguard rejectsparent/unscopedchildrepair beforewrites, keepscurrentturnattempts/reloads audit, holdssearch, permitscompletealternative/newturnbroadening; matchingtoolguidance. No STTaccuracy/filter/provider/alias/migration/datadeploychange. Originalf17class failure REPRODUCED,595purePASS3.16s, final214customer/voice/state/searchPASS408.54s withJUnit0failures/errors/skips; Ruff/stageddiffPASS. Final artifact output/day2-location-fix-20261108T145522507375Z. No testsrunning. Reviewpacket output/day2-location-scope-review; PRbody output/day2-location-scope-pr.md; ownerpush/draftPR/CIcommands output/day2-location-scope-next.txt. ToolsGitHubnetworkunavailable; no remotepush/newPR/CI/review/deploy/livefix yet. Stackonfix/day2-cheaper-followup(PR57lastopenf17), inspectcurrentparentmetadata beforemergealignment. Productionstillf17/bc7/customer2614; preservefailedvoicecontext/L27/29active; stubrequestednotconfirmed. D2-04OPEN untilacceptedrelease/livetest/formalclosure; todayT01-T06f17functionalpassesretained, T07-T10/formal6voicepaused. Do not mixf17partiallatencycohortwithnewcandidateforfinalp90; broker/gasprioraccepted, singlephonecustomer/staffonly.
+
+2026-11-08 D2-04 CONFIRMED HIGH: ownerdiagnosticvoice1 Scribe16540ms/722ms signalsBahria+Phase8 differsfromownerintendedPhase8; versions23/24 UNKNOWNfullqualifiedplace,25 APPLIEDparentBahriaTown -> BTK101afterdroppingqualifier. Voice2explicitDefencePhase8 correct; both2bedminimum/3bathapplied; secondpark/weststoredunmapped, retained90lakhbudgetexplainsDHA8no-match. Scoped evidence output/day2-location-scope-evidence.json. Localbranchfix/day2-location-scope-repair fromf17, sourceguard/promptguidance implemented to reject incompletegroundedlocationbeforewrites, retainqualifiedattemptscurrentturn/reloadfromaudit, holdsearch; no STT/provider/alias/filter/migrationchange. Deployedf17classbehavioralregressionREPRODUCED (expected1failure) artifact output/day2-location-fix-20261108T145205404544Z; 595puretestsPASS3.16s; initial4DBregressionsPASS10.87s. Added voicechain/retry tests; RuffPASS after correcting newtest placement. FinalwideDB/customer/voice/requirements/freshsearch session2004 RUNNING, artifact output/day2-location-fix-20261108T145522507375Z; nofinalpassclaimyet. Earlierwideattemptinterrupted for testplacementfix, orphanlockremovedonlyafter runnergone/no localDBsessions. Docker startup requestedandDBnowavailable; no owner actionneededifalreadyrunning. No testsagainstRDS, no newlivefixdeployed. Preserveproduction2614context/L27/extras; stubrequestednotconfirmed. PauseT07-T10/formalvoicebatch until acceptedfix; retainf17partialtextcohortnotmixwithnewcandidatep90.
+
+2026-11-08 NEW VOICE FINDING D2-04 provisionalHIGH, owner19:27PKT screenshot/currentf17/customer2614. User says note1(16s): phase8mein ghardekho2bedDD3bathroomparkfacing. Note2(10s): defencephase8mein ghardekho2bedDD3bathroomparkfacingwestopen (second2bedDD explicitlyconfirmed viaasync). Firstreply says unknownplaceunderBahriaTown thenstillshowsBTK-101house1.1cr/3bed3bath/Precinct10; second unsupportedpreffiltermessage+DHA8house90lakhno-match/floor6.9cr. DHA8and90lakhno-match consistentwithpriorbudget; firstarea/unknown-then-search andfeature/bed-bathhandling need actualSTTsignals/patches/searchfilters; rootnotproven, do not blameSTTorLLMyet. Prepared syntax-checked READONLY output/day2-voice-phase8-diagnostic-paste.txt, exact2614audio window14:26-14:29UTC/expected2notes. Exports fixed place/count/feature signals and structuredbeforeafter/status/filter/timestamps only, no rawtranscripts/audioURLs/contacts/keys. No codefix yet. Preserveconversation, stopnewretries/resets pendingtrace; returnnewf17operatorstubwhilepaused. T07-T10 and formal6voicebatchstillpending; thesead-hocnotes arediagnostics, notfrozenvoicegoldcohort. CurrentfixedtextT01-T06functionalpass; newvoicesnotaddedto10textcohort. L27/extras untouched.
+
+2026-11-08 OFF-COHORT CORRECTION DETOUR owner19:26PKT screenshot, f17/customer2614. AfterT06Lahorehouse, user followed explanation examples instead of plannedT07: MeraareaGulshan-e-IqbalBlock13hai -> correctareanote+retainedghar/purposequestion; Budget90lakhhai.Khareednahai -> correctGulshan13/around90lakh/housesale no-match. House filter retained from earlierexplicitghar; extraGLI103/10885lakh areapartments, so no-matchconsistent, not evidence of wrongarea or ignoredbudget. No propertytypecorrection was stated. Next optionaltypecorrection Flat chahiye can demonstrate individualslotchange; then resumefixedT07 afterclear/waitack. Do not count these two offscriptturns towardfixed10textp90 or markT07complete. T01-T06functionalpasses, T07-T10pending; broker/gasacceptedprior. No reset/withdrawal/leadchange and no sourcefix needed fromthisscreenshot.
+
+2026-11-08 T06 LIVE FUNCTIONAL PASS currentf17/bc7/customer2614, owner19:23PKT screenshot. Standaloneclear acknowledged visibly, then Lahoremein gharchahiye -> houseack + explicitKarachionly/Lahorenotcovered, no listingcards. FreshC09coveragePASS; currentcohortT01-T06functionalPASS, exacttimes/IDsawaitlogs(T02known). Next independentT07 clearagain/waitack THEN p6mein gharchahiye -> clarifyDHAphase6/Bahriaprecinct6, noarea guess/no prematurelistings; do not choosearea yet. No otheractor/lead/inventory edits; L27 and29activeextraspreserved. D2-01observeddeliveryriskstillopen.
+
+2026-11-08 T05 LIVE FUNCTIONAL PASS onf17/bc7/customer2614, owner19:21PKT screenshots. Phase8meinbhidekho -> headerretainsDHA6/addsDHA8/500gaz/house/sale/cheaper; correct#1DH8-1026.9cr3bed4bath/#2DH8-1017.4cr4bed5bath,abovebudgetlabelinbothsummaryandcard,2cards. CurrentfixedcohortT01-T05functionalPASS, exacttimings/IDsawaitlogs(T02known). Next independentT06: standaloneclear/waitack THEN Lahoremein gharchahiye -> outofcoverageKarachi/no cards/noinventedLahorefacts. Only2614requirementsreset, keepinventory29/extras/L27 untouched. ThenT07afterseparateclear p6ambiguity. D2-01downstreamdeliveryreversaldiagnosed/presentationriskopen; broker/gasacceptedprior.
+
+2026-11-08 T04 LIVE FUNCTIONAL PASS, f17/bc7/customer2614 (owner19:20PKT screenshot). Kuchsastadikhao -> correctDHA6/500gaz/housesale cheaper no-match,7.8crfloor,Nearby/Budget/Agentbuttons,no repeatedcards. CurrentcohortT01-T04functionalPASS; IDs/timingspendingexceptT02known. Next SAMEchat/noreset T05 Phase8meinbhidekho -> retainDHA6/addDHA8, DH8-1026.9cr/DH8-1017.4crwithabovebudgetlabel. D2-01deliveryreversaldiagnosed/openpresentationrisk; seed30unchanged/extraGulshan2/L27preserved; no new source/runtimechanges.
+
+2026-11-08 T03PASS + D2-01 DIAGNOSISCONFIRMED by ownertrace. T03 19:17PKT: Property2kiaurpictures -> only#2DH6-101no-morephotos,norepeats/fallback; matchesauditedunseen0. T02id b2134af2-a7ab-43a2-8e06-3d104b104bed exactly1match: plan0notice/1carousel(summary+102/101)/2coverless7101/3shown; APIacceptcarousel14:13:52.313307 beforecoverless52.830380, but deliveredcoverless14:13:54 beforecarousel55UTC. Thus recordedplan/sendsequence correct; observedreversal downstreamofsend, screenshotconsistent, internalMeta/clientmechanismnotknown. D2-01 remainsopenpresentationrisk/provisionalHighfortriage, no blindsend-loopchange. Proof output/day2-t02-ordering-evidence.json. T02timingreceipt47.726755: firstnoticeaccepted3888.762ms, carousel4586.552ms, lastAPIpayload5103.625ms; carousel-delivered7273.245ms, coverless6273.245ms. Firstnotice vsfullresults separated; no p90fromonesample. T01/T02/T03functionalPASS currentf17; T02IDfilled,otherslogIDpending. NextSAME2614chat/noreset T04Kuchsastadikhao -> honestcheaperPhase6/500gaz/sale no-match,7.8crfloor,alternatives,norepeatedcards. Preserve29activeextras/L27; broker/gasprioraccepted.
+
+2026-11-08 T02 LIVE FUNCTIONAL PASS / D2-01 REPRODUCED on currentf17/bc7/customer2614 (owner19:13PKT screenshots). Correct switch from officerent to housesale/500gaz/8crore(nonmonthly), inferredpurchase disclosure, actual#1DH6-1028cr5bed6bath/#2DH6-1017.8cr4bed5bath/#3DH7-1017.5cr4bed5bath Phase7nearby. Coverless#3 arrivesbefore summary andcoveredcarousel; provisionalHighD2-01stillOPEN. Sourcecustomer_reply.send iteratesplanindicesinorder; no cause/fixassumed. Prepared readonly output/day2-t02-ordering-paste.txt/Python to select FIRST exactT02 after14:01:59UTCanchor, export onlystoredplanpayloadtypes/knowncodes and outboundcreated/sent/delivered timestamps inclfallbackfamilies. SyntaxPASS, liveexecutionpending. T01/T02currentcohortfunctionalpasses; turnIDs/latenciespending. Next SAMEchat/noreset T03 Property2kiaurpictures; current#2DH6-101unseen0, expectnamed#2DH6-101no-morephotos only/no repeatedimages/fallback. Keep29activeextras/L27; no broker or gas rechecks.
+
+2026-11-08 T01 LIVE FUNCTIONAL PASS, currentf17/bc7/customer2614 (owner19:11PKT screenshot). ExactEnglishofficequery -> correctEnglishsummary, #1DH6-1085lakh/mo/#2PEC-1015.5lakh/mo/#3SHF-1014.5lakh/mo and3cards. Freshcurrentcandidate evidence recorded cohortJSON; turnID/exactlatency pendinglogs. Clearacknotvisible in screenshot, not assumed. Next SAME2614chat/noreset T02: DHA Phase6mein500gazkaghar,budgetaathcroretak -> house/sale/nonmonthly80m,1028cr/1017.8cr/71017.5crnearby. Capture summary/carousel/coverless3 order forD2-01. Priorpassedcasesnotreplaced; currentcohortT02-T10pending. Keep29activeexplainedextras/L27, noreset, photos101/102exhausted. Brokerhistoricalaccepted, nohandofftests.
+
+2026-11-08 READONLY INVENTORY AUDIT PASS owner:seed30/30statuses-prices unchanged. ExtraACTIVE GLI-103 and GLI-108 are GulshanBlock13 apartments/sale85lakh/demoTrue; GLI-103noopenlead,GLI-108linkedL27. Public29explained, not search bug. Preserve both and L27; no DBreset/retirement. 2614unseenpreparedphotos101=0/102=0: next photo ask expectednamedno-more/no repeatedimages, earlierphotodeliverypassesretained. Currentactor2614customer/ai_active,imagef17/bc7/Gemini/publichealthOK,anchor14:01:59.161375UTC. Clearacknotyetprovided; nonewtodaylivequeriesrecorded. FINAL ten-textcohort frozen BEFORE live batch at output/day2-20261108-text-cohort.json: T01officeEN,T02DHAhouse,T03card2photos(exhausted),T04cheaper,T05Phase8add, T06Lahore(afterclear),T07p6(afterclear),T08SOLD105,T09ACTIVE103,T10gharchahiye(afterclear). Supersedes unexecuted draft gas/docs samples because owner excludes prior-testedchecks; no outcomesselected/latencycherrypicking. Next2614standalonePurani requirements hata do/waitack then exactT01officequery,collectscreenshots/logIDs. RemainingnonredundantC10/safety/6voice/p90/D2-01triage/formalreviewsstillpending; brokerhistoricalaccepted,nohandoffretest.
+
+2026-11-08 SINGLEPHONE PREFLIGHT VERIFIED owneroutput:2614customerCOMMITTED/runtimecustomer; bothcontainers exactf17 imagebc7a7c4575e42eaced6d363546f6e3de5ecc5db47231f2f8fd8dc8e0ddb69f5e. PUBLIChealthstatus/database/bucketOK; Gemini/ElevenLabs and keypresenceTrue, primary3.5flashlite/failover3.6flash. Customer2614 ai/ai_active/version13; no processingjobs. Roles2614agentFalse/3504brokerFalse/6266agentFalse/8048brokerTrue. PublicACTIVE29 vsseed27; withdrawn19, rented/reserved/sold1each, allis_demoTrue. Hidden105/106/CLF104nonpublic,101cover4prepared/102cover2prepared. OpenL27accepted belongs3504human_owned(v52), assigned8048, unrelatedto2614; preserve it/do notcloseorreset. Timinganchor2026-11-08T14:01:59.161375+00:00. Prepared read-only output/day2-20261108-inventory-drift-paste.txt to compare30seedstatuses/prices, identifyactiveextras/openleadlinks and2614remainingphotoavailability beforefixedgold/timingbatch. No cleanup/DBreset yet; no new livecase yet. Nextownerauditoutput and customer2614standaloneclearrequirements/waitack; do not resendgas/broker testsownerexcluded. Ten-textcohort must avoidskippedgas/docs samples; define updatedcohortbeforeanytodaylivequery, retainpreviousdraft as unexecuted. Singlephonecustomer/staffonly; brokerhistoricalevidenceaccepted; D2-01stillopen, finalp90/voicespending.
+
+2026-11-08 OWNER STEERING: only phone2614 available; use it sequentially for customer and staff. Owner explicitly accepts previous broker-handoff testing and says not to rerun it; no broker role phase required. Record historical owner acceptance, not a newf17multi-phonepass. Gas/related customer checks mentioned as already tested; avoid redundant checks and focus remaining customer/staff work. Prepared output/day2-single-phone-start.txt installs protected host role-switch helper and switches ONLY2614 to customer with backup/image/quietqueue/openhandoff/controlgate/runtime-route checks, then runs read-only health/config/roles/fixtures/handoff/newUTCanchor preflight. Bash/Python syntaxPASS; no remoteexecution/rolechangeconfirmed yet. Other phones/records left unchanged, no inventoryreset/controlstatechange. Lastactualrole2614staff untilnewCOMMITTEDcustomer output. After customerphase, host bash /home/ubuntu/day2-single-phone/switch-role.sh staff supports staffphase with freshbackup; do not switch during open2614handoff. Appcontrolgate reviewed: human conversation is gated beforebrokeractions, so onephonecannotacceptownhandoff byroleflip; not attempting newhandoff and notbypassinggate. Timingcohort/customeractor now2614 (not3504); scripts unchanged beforeanynewlivecases. Currentvoice/safety/10texttiming/D2-01triage and formalPRreviews remain unless explicitlyaccepted. Creditsavailableconfirmed. Next ownerEC2singlephonecustomer/preflightoutput, then remaining nonhandoffcustomerchecks.
+
+2026-11-08 owner explicitly RESUMED completion of stabilizationDay2 after demos. OriginalDownloadsWeekendStabilisationPlanPDF read (7pages/Day2page4), checkedlivingtracker. Keep lastverifiedroles: staff2614/customer3504/broker8048; no actor rollback. Ownerconfirmscreditsremaining (noexactquota/minutes). Prepared syntax-checked read-only EC2 preflight output/day2-resume-20261108-preflight.txt/.py for expectedf17/bc7, health/config/roles/targetedopenhandoffs/media/counts/newUTCanchor. No remote execution/new live result yet; currentstate/provider/handoffsafterdemos unknown. Preserve data, no automatic reset/lead closure. Detailed execution and predetermined10text timing cohort output/day2-completion-20261108.md. Existing timingexporter updated to allow3504 explicitly; prioractor/default unchanged. Next ownerpreflight then bootstrap knownhousecardon3504 and C07unknowngas, followed C08-C16/sixvoice/safety/timings/D2-01triage/formalreviews. OldC01-C04passes5d/C05-C06passesf17 retained separately; allnewp90finalcandidatecohortmustsameimage. D2-01openprovisionalHigh, D2-02/D2-03functionallyresolved butPR56/57reviewmergeunreported; allDay2notcomplete.
+
+TODAY DEMO ROLES COMMITTED/VERIFIED by owner EC2 output:2614activeagent->staff,3504inactivestaff->customer,8048activebroker->broker. Role backup /home/ubuntu/demo-phone/roles-before-2614-3504-8048-5rHGlKiT.json. Runtime routes staff/customer/broker and leadrouting8048 for all27publiclistings plusunassigned verified inside committed transaction. Other staff/names/listingassignments/inventory/photos preserved. Newrole script exactf17image/latesttag guardpassed; stub enabled/recreatedwebworker, bothproviderstubverified; LOCALhealthstatus/database/bucketOK. Startup RDSavailable/EC2running/publicIP98.85.18.90 alreadyverified, public HTTPShealth still not provided. Next publiccurlhealth then f17operatorgemini/health; customer3504standalone Purani requirements hata do/waitack for freshdemo, staff2614 inventoryadd and broker8048help/leadpractice. No full DBreset. Stabilization stayspausedatC07, old2614testcontextpreservedbutactorisnowstaff; laterresume requires explicitactor/contextdecision. Do not report Geminienabledtoday until actualoutput.
+
+TODAY DEMO STARTUP VERIFIED by owner CloudShell output: RDSmanzil-demo-db available; EC2i-05b165a0e4c9bf4a7 running/status waiterpassed; publicIP98.85.18.90 unchanged. Old sslip hostname still matches IP; public app health/webhook not yet verified this startup. Next owner EC2InstanceConnect paste entire output/demo-roles-2614-3504-8048.sh (not CloudShell); expected exactf17image/stub/localhealth/rolebackup/COMMITTED2614staff3504customer8048broker/all-public-leadrouting8048. Role changes NOT YET CONFIRMED; current images/provider/role state await script output. Preserve fixtures; no reset. After roles, public curlhttps://98-85-18-90.sslip.io/health, then controlledGemini/demo practice. Stabilization remains paused atC07.
+
+Owner resumed for TODAY agency demos and explicitly requested new actors:2614staff,3504customer,8048broker. Stabilization remains paused at C07 while demo setup takes priority. Prepared owner commands output/demo-today-startup.sh (CloudShell state-aware RDSfirst/exactEC2start/status/publicIP) and output/demo-roles-2614-3504-8048.sh (EC2 exactf17imageguard/stub/localhealth/hostprotectedrolebackup/atomic three-row changes/RLS/runtime-route and all-public-listing lead-routing verify). Both shell syntax and embedded Python AST PASS; source routing reviewed: inactive3504 ignored,8048 activebroker fallback. No new full phone entry needed. No role names/inventory/media/property assignments or unrelated staff changed by prepared script. No remote execution yet; actual current server/provider/IP/roles unknown. Last shutdown owneroutput proves EC2stopwait completed and RDSstopping~23polls, finalstopped not supplied. Do not assume either stillstopped or startupcomplete now. Next owner startup/publicIP and EC2 role script output; publicIP/sslip/Caddy/webhook check before Gemini. Current expected sourcef17/imagebc7, last roles2614inactiveagent/3504activebroker/8048inactiveadmin until newCOMMITTED evidence. Preserve fixtures and prior C01-C06 evidence; no reset authorized by role request.
+
+2026-11-07 owner explicitly PAUSED until tomorrow and requested servers closed. Test work stopped at C06functionalPASS on live f17dc3f/imagebc7a7c4575e4; resume C07 DH6-101 gas question after startup checks, no reset. Prepared syntax-checked owner shutdown commands output/day2-overnight-shutdown.txt (EC2 newoperatorstub, then CloudShell exactinstance i-05b165a0e4c9bf4a7 stop+wait, RDSmanzil-demo-db stop+boundedpoll+finaltables, us-east-1). No deletion/reset/cleanup; preserve fixtures/conversation/images/snapshots. No tool AWS credentials; owner authenticated session executes. Shutdown/stub NOT YET CONFIRMED; await final output. Last known runtime f17/bc7, providerGemini (post-Gemini health output incomplete); full switch health wasOK. Do not claim servers stopped. Tomorrow startDBfirst/waitavailable, thenEC2/status/publicIP/host+webhook and exactimage/providerstub/health verification before enablingGemini. PR57/56review statuses unreported/pending, D2-01open, D2-02/D2-03functionallyresolved. C01-C04passon5d,C05-C06passonf17;C07-C16/extra voice/safety/finalcandidatep90pending.
+
+2026-11-07 C06 LIVE FUNCTIONAL PASS on verified deployed f17dc3f/imagebc7a7c4575e4 (owner screenshot sent03:07/reply03:08PKT). Same2614chat after repaired C05: header retains DHA6/addsDHA8,500gaz/house/sale/cheaper; #1DH8-1026.9cr/3bed4bath, #2DH8-1017.4cr/4bed5bath with budget se thoda upar in summary and card. Correct two-result set, no reset. D2-03 live C05 and C06 acceptance now passes; PR57/56 review/merge still not reported. D2-01 remains open; no allDay2signoff. C01-C04 passes were on5d; C05-C06 onf17. Next same2614chat C07: DH6-101 mein gas connection hai? -> unknown/agentconfirm/Agentbutton,noinventedyes-no,do not tap Agent yet. C07-C16/remaining voice/safety/p90 pending. Precise C06timing unknown across minute boundary, flag for logs. Standalone post-Gemini health still not supplied (earlier output ended502), screenshot confirms bot response only. ProviderlastGemini,newoperatorstubwhenpausing;fixtures preserved.
+
+2026-11-07 f17 DEPLOYMENT VERIFIED AND C05 LIVE RETEST PASS (owner terminal +03:05PKT screenshot). Target f17dc3ffe3692668373cdeaf1be322bdba834f0d, both roles running sha256:bc7a7c4575e42eaced6d363546f6e3de5ecc5db47231f2f8fd8dc8e0ddb69f5e. Kit/baseline/build/exact-image/imports/appuser/switch/hash/provider/fixture gates allPASS; health status/database/bucketOK after stub switch. Public27; hidden listings absent;101four/102two prepared photos and roles retained. Owner enabled Gemini with newoperator; command output ends transient502, final standalone post-Gemini health pending. C05 same2614failedchat/no reset at03:05: honest Phase6/500gaz/sale cheaper no-match,7.8crore correct floor, Nearby/Budget/Agent buttons, no repeated cards. D2-03 functionally resolved on live f17; PR57/56 review statuses unchanged and C06 follow-up pending. Next samechat Phase8meinbhidekho -> DH8-1026.9cr + DH8-1017.4cr above-budgetlabel, keepPhase6/addPhase8. C01-C04 prior passes are on5d, not fresh f17 reruns; C07-C16/extra voice/safety/finalcandidatep90 notrun. D2-01 ordering stillopen, exact C05latencyunmeasured. Newoperatorrollbacktoa139, newoperatorstubwhenpausing.
+
+2026-11-07 owner explicitly authorized f17 deployment now: "lets deploy". New exact green-CI target f17dc3ffe3692668373cdeaf1be322bdba834f0d demo kit prepared from current verified base5d2f682/image sha256:a139f24988d22846174b0e591cf862edb319fb7691cc348a15a552a92c5a3e26. Two app files; no migration/reset/data/dependency/config changes. Local ZIP/KIT/manifests/exact Git blobs/Python and shellsyntax PASS. Kit release-day2-f17dc3f, ZIP output/day2-f17dc3f-kit.zip, owner CloudShell/EC2 commands output/day2-f17dc3f-deploy.txt. All gates/fixture checks/recorded-image rollback retained; target review=pending, PR57/56 review statuses unchanged/no merge. No remote transfer/build/switch yet; owner authenticated sessions required (tools AWS/network unavailable). Next upload/build/switch/newoperatorGemini then C05 existing2614chat WITHOUT reset; ifPASS C06 Phase8bhi. Keep failed context/fixtures. D2-03OPEN/C05FAIL until new live result;D2-01open;stub while paused.
+
+2026-11-07 FULL CI GREEN for exact f17dc3ffe3692668373cdeaf1be322bdba834f0d: owner confirms PR42299469694SUCCESS/checks128173184679/9m43s and push42299311710SUCCESS. Lint/full unit-migration-restrictedRLS/secrets/image/migration+demo+media+bothroles checks passed. Node/runner annotations nonblocking. Next owner mark PR57 ready/request Taha-coder-star review; PR57 remains stacked on fix/day2-location-spans (PR56 lastOPEN/unreviewed/mainbase). No need rerun unchanged local tests/CI. Review/merge and new pinned release/liveC05-C06 still pending. Do not assume earlier exact5d demo exception authorizes unreviewed f17 deployment. Current live source5d/imagea139;C05FAIL/D2-03OPEN,C06paused;D2-01open. Preserve failed conversation/fixtures, keep stub while paused (owner closeout output not received).
+
+2026-11-07 owner PUSH and draft PR57 confirmed: https://github.com/Taha-coder-star/manzil-ai/pull/57, head f17dc3ffe3692668373cdeaf1be322bdba834f0d, base fix/day2-location-spans. Exact-head CI42299469694(PR)+42299311710(push) both IN_PROGRESS, conclusions empty. PR56 remains OPEN/base main/head5d2f682/reviews empty, so stacked base is correct. Next owner watch42299469694 --exit-status and report both exact-head final conclusions; inspect failed logs if failure. No greenCI/review/merge/new deployment or C05pass yet. Local411+407/RuffPASS stand; no source change or test rerun needed now. Current live5d/a139, D2-03OPEN/C05FAIL/C06paused; preserve failed conversation and media fixtures. Stub requested while paused, not yet owner-confirmed.
+
+2026-11-07 D2-03 diagnosis and local fix committed: f17dc3ffe3692668373cdeaf1be322bdba834f0d, branch fix/day2-cheaper-followup, parent5d2f682. Owner diagnostic confirms zero C05 patchrows, version11/budget80m/exclusions0 reused, prior shown cards repeated. It does not prove whether the provider omitted update or a call was rejected before persistence. Before code change regression reproduced1FAIL; fixed guard applies omitted standalone cheaper op before search through existing normaliser/merge, reuses explicit op/onceperturn, holds on failure; no new price rules or migration. RuffPASS;411targeted97.31s+407finalcompat177.15sPASS, bothJUnit0errors/fails/skips, disposable local PG55434, no tests running. No remote push/CI/review/deploy of f17 yet (tools network unavailable; owner CLI next). Review packet output/day2-cheaper-followup-review, PRbody output/day2-cheaper-followup-pr.md, owner commands output/day2-cheaper-followup-next.txt. Stack PR on fix/day2-location-spans; PR56 last open/reviewpending. Live remains5d/a139;C05FAIL/D2-03OPEN,C06paused. Keep failed context/fixtures. Stub requested while paused, not confirmed. D2-01open;C01-C04functionalpasses preserved.
+
+2026-11-07 C-05 FAIL / NEW D2-03 HIGH (owner02:29PKTscreenshots,deployed5d2f682). Same2614chat after C04, Kuch sasta dikhao repeated unchanged 8crore summary and all3 cards (DH6-1028cr,DH6-1017.8cr,DH7-1017.5crnearby), no cheaper no-match/7.8crfloor/alternatives. Root cause unproven: need exact-message requirement patches/currentbudget/exclusions/searchversions/prior-shown context. Read-only diagnostic prepared output/day2-c05-diagnostic-paste.txt; syntaxPASS, no live execution yet. Pause C06-C16, preserve failed conversation/no reset/no retry; request NEW operator stub while diagnosing (not confirmed). No code fix or failure closure yet. C01PASS/C02-C03functionalPASS/C04PASS;D2-01stillopen;D2-02functionalresolved/reviewpending.
+
+2026-11-07 C-04 FUNCTIONAL PASS COMPLETE (owner screenshot02:27PKT,deployed5d2f682). Aurphotos tapped on latest #3 DH7-101 -> only #3 DH7-101: is property ki mazeed photos abhi available nahi hain. No images/unrelated fallback visible. Combined with02:26#1DH6-102unseenphoto correctcaption, both C04 branches pass. C01PASS/C02-C03functionalPASS/C04PASS;C05-C16pending. Next same2614chat/noreset: Kuch sasta dikhao. Expect honest Phase6/500sqyd/sale cheaper no-match,7.8crore floor if quoted,alternatives/no repeated cards. Then C06 Phase8meinbhidekho. Exacttimingstillunmeasured;D2-01open;providerlastGemini,newoperatorstubifpausing.
+
+2026-11-07 C-04 PHOTO BRANCH PASS (owner screenshot02:26PKT,deployed5d2f682). Same2614chat: Property1kiaurpictures -> one additional photo captioned #1 DH6-102, no fallback text visible, different from previously shown living-room cover. C04 no-media branch still PENDING: tap Aurphotos on current #3 DH7-101 (no prepared photos), expect explicit unavailability with #3/code, no invented image/fallback. Do not mark all C04 complete yet. C01PASS/C02-C03functionalPASS;exactlatencyunmeasured;D2-01open. Next finish C04 then C05 cheaper/C06 Phase8 withoutreset. ProviderlastGemini;newoperatorstubifpausing.
+
+2026-11-07 C-03 TEXT FUNCTIONAL PASS on deployed5d2f682 (owner screenshots sent02:24/reply02:25PKT). Same2614chat/no reset after C02: DH6-1028cr(#1),DH6-1017.8cr(#2),DH7-1017.5cr(#3/Phase7nearby), correcthouse/sale/500sqyd summary and cards, same order/facts as voice. Current screenshot shows summary/covered carousel before coverless#3; D2-01 remains open based on prior reproduction, no fix inferred. Exact latency unknown across minute boundary; flag this turn for logs, no <=7s/p90 claim. C01PASS/C02functionalPASS/C03functionalPASS;C04-C16notrun. Next C04 photos on current referenced card; preserve samechat and actual displayed ID mapping. ProviderlastGemini;newoperatorstubifpausing.
+
+2026-11-07 C-02 VOICE FUNCTIONAL PASS (owner screenshots 02:23 PKT, 5-second voice note, deployed 5d2f682/imagea139f24988d2). Same2614conversation after C01, no reset. Office rent switched to house sale: #1 DH6-102 8 crore/500sqyd/5bed6bath; #2 DH6-101 7.8 crore/500sqyd/4bed5bath; #3 DH7-101 7.5 crore/500sqyd/4bed5bath, labelled Phase7 nearby. Correct Roman Urdu summary/purchase inference and all cards. D2-01 presentation issue REPRODUCED: coverless #3 before summary/photo carousel. Functional pass does not close that High or establish latency; screenshots show minutes only, no <=10s/p90 claim. One Scenario2 voice functional sample; other5voice/silence/2min checks remain pending. Next C03 SAME requirement typed in same chat without reset, compare actual ordered IDs/labels, then C04-C06. Provider last Gemini; new operator stub if pausing. PR56 review pending.
+
+2026-11-07 DEPLOYMENT AND C-01 LIVE PASS (owner terminal + WhatsApp 02:20 PKT screenshots). Exact source 5d2f6828eafc381a111b594fe96c60bd2f5d5aa1 deployed with new pinned kit; both web/worker running sha256:a139f24988d22846174b0e591cf862edb319fb7691cc348a15a552a92c5a3e26. Baseline/source/manifests/imports/appuser/switch gates passed. Health status/database/bucket OK. Public count 27; hidden DH6-105/DH6-106/CLF-104 absent; DH6-101 four and DH6-102 two prepared photos preserved. Owner enabled Gemini with NEW operator; health OK. After standalone clear acknowledgement, exact C-01 returned DH6-108 5 lakh/month, PEC-101 5.5 lakh/month, SHF-101 4.5 lakh/month, correct summary and all three cards. D2-02 functionally resolved on deployed candidate; PR56 review/merge still pending, not claimed closed through review. Earlier C01 failure retained as history. No exact latency from minute-only screenshots; no p90 pass. Next C02 voice from same customer2614 office context WITHOUT reset: DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak. Then C03 typed and C04-C06 in sequence. D2-01 ordering still open. C02-C16/other voice/safety/timing not yet run. Provider currently Gemini; return stub with release-day2-5d2f682/operator.sh when pausing. Rollback pinned to old image1efc6dd via new operator; do not use old image guards/build/switch.
+
+2026-11-07 owner explicitly authorized deployment now ("lets deploy the fix"). Prepared demo-only exact green-CI target 5d2f6828eafc381a111b594fe96c60bd2f5d5aa1 from verified base 1ef4080/image1efc6dd. PR56 remains open/review pending; no merge. New release-day2-5d2f682 kit: four app files, no migration/reset/data/deploy changes; local ZIP/manifests/Git blobs/syntax PASS. Operator baseline/build/image/switch/rollback gates and read-only 27-public/hidden/media fixture checks prepared. Owner-run CloudShell upload + EC2 commands: output/day2-5d2f682-deploy.txt; ZIP output/day2-5d2f682-kit.zip. No remote upload/build/switch yet; tools network/AWS credentials unavailable, owner executes. Next transfer/build output then guarded switch and exact live C01; D2-02 OPEN/C02 paused. Preserve fixtures/failed evidence.
+
+# Current continuation: 2026-11-07
+
+Ownerretargetmetadata56main/c51,head5dunchanged,bothCIgreen,Tahareviewrequestactive,reviews[]. Review-readycheckpoint;approvalexternalgate. No merge/deploy/livererunornewtests;preservefixtures/failedconversationandkeepstubwhilewaiting.
+
+OwnerrequestTahaandfetchsucceeded. Verifiedorigin/mainc51b593(PR55merge)hasmergebase1efwith5dandidenticalbaselinetree. Retarget56tomainwithoutrebase/codechange;reviewapprovalpending. Preparedreleaseinputmanifest(4appfiles,nodata/deploy/migrationdelta),notdeploykit. SourceandCIunchanged,nofreshliveresults.
+
+OwnerPRmetadata55mergedat1ef,56ready/unreviewed5d,parentbase,authorFurqanhalari. NextreviewrequestTahaandfetchorigin/currentmainalignmentinspectionbeforepinnedrelease. No blindretarget/merge/deploy;currentCIgreen.
+
+Ownerboth5dCIrunsSUCCESS,fullPRpipeline12m23salltests/RLS/secrets/image/data/media/roleschecks. Nonblockingannotationsonly. Next56ready/reviewand55parentstate/mergealignment,thenacceptedpinnedrelease/liveC01;no deploymentorcasepassclaim. Currentcandidateunchanged.
+
+Ownerpush5d2f682andPR56bodyupdateconfirmed;CI42282018964and42282010896bothinprogressforexactnewhead. AwaitfinalCI,thenreview/acceptedrelease/liveC01. No blindrerun/deploy/testpassclaim.
+
+CI4efailurelogSIM102existingpurposeconditional;otherrunalsocompletedfailure. Committedminimalcommon-guardlintfix5d2f682,preservesinferenceandperiodbehavior. FinalRuffPASS/218focusedtestsPASS10.27s/0fails/errors/skips,artifactsworkspaceoutput/day2-location-fix-20261106T193856309048Z. Newheadpush/CIpending,samePR56;reviewpacket/PRbodyupdated. Nolivererun/deployorD2-02closure.
+
+OwnercreateddraftPR56againstparentfix/day1-late-media-source. CIexact4e7536fpushrun42280438639failed,run42280761225inprogress;awaitfailedjoblogs/causeandlateststatus. No blindrerun/merge/deploy. LocalchecksnotfullCIreplacement.
+
+Ownerlocalgitpushsucceededfix/day2-location-spans/upstream4e7536f. NextdraftPRagainstparentfix/day1-late-media-sourceandexactcommitCIchecks;PRbodyready. NoPR/CI/review/deploymentclaim. Serverstubrequestedwhilepaused;liveC01rerunawaitsacceptedrelease.
+
+D2-02compat218PASS331.83s/0fails/errors/skipscompleteslocalvalidationwith579targetedPASSandRuffPASS. Candidate4e7536fcommitted,reviewpacketupdated;no testsactive. Networkpush128meansownerpush/fullCI/Tahareview/pinnedrelease/liveC01stillrequired;noserverdeploymentorregressionpassclaim.
+
+ConfirmedD2-02badextractionspansfromlivecatalogprobe. Implementedandcommittedlocal4e7536f/fix-day2-location-spans(3app2testsdoc),RuffPASS/579targetedPASS/0fails/errors/skips;compat4modulesrunning. GitHubAPIandpushnetworkblocked,push128;noremotebranch/PR/CI/deployclaim. Reviewpatchpacketreadyunderworkspaceoutput/day2-location-spans-review. Nextfinishcompat->ownerpush/CI/Tahareview/acceptedrelease/liveC01. Preservefailedconversation/fixtures,stubrequestedwhilepaused.
+
+FreshC01FAIL/D2-02Blocker:owner screenshotclearackthenexactofficequeryrejectsKarachiunknown/noresults. Local1efresolvercorrectforKarachi/inKarachi/Karachimein,soactualfailedlocationpatch/livecatalogrequired. Diagnosticprepared,failedstatepreserved,sequencepausedbeforeC02. Nocode/catalog/goldfixes yet;prior216/428passesretained.
+
+Ownerpreflightboth1efimages/stub/elevenlabsandkeypresenceTrue,public27/leads0/handoffs0,2614+8048customers/3504broker,fixtures1014/1022prepared. Timinganchor2026-11-06T19:03:29.577899+00:00. Remainingquotas/minutesunanswered;no freshC01livepassyet. NextguardedGemini/clear2614/freshC01afterusagecheck. No reset,testsrepeatedorconfigurationchanged.
+
+# Previous continuation: 2026-11-06
+
+RemainingDay2planimplementationstarted:1efHEADverified;newtargetedspeech/voiceflow/STTbenchreadiness216passed339.71s/JUnit0fails/errors/skips,localPG55434,noRDS/models. Timingprobehelperpluspuretiming/p90checksready;ownerEC2preflight/quota/minuteinputpending. Freshmanualregression16rowsNotrun,workingrecordworkspaceoutput/day2-remaining-results.md. Priorclosedbatchevidenceretained,nofullreset/428rerun/newlivepassclaimed.
+
+Standalonehealthowneroutputconfirmsstatusok/databaseok/bucketok;workerstubalreadyconfirmed. RequestedDay2first3functionalblocksclosedwithallcasesPASS/freshoffline428,fixturesretained. D2-01presentationorderingandpreciselatencylimitsremain;noall-Day2completionorAWSshutdownclaimed.
+
+Ownercloseoutoperatorstub+workerprintenvconfirmsstub. Healthoutputinterleaved/truncatedafterstatusok/checks;standalonehealthconfirmationpending,notfullhealthpassclaim. Requestedfunctionalbatchcomplete,fixturesretained,noAWSshutdown. D2-01presentationfindingandlatencyevidencelimitsremain.
+
+Scenario3cowner screenshotPASSexactDH8102/6.9crthenDH8101/7.4crwithabovebudgetlabel;headerDHA6/DHA8keepscheaper500gaz/salecontext. Requestedfunctionalbatchpassesallcases,notallDay2. D2-01open;read-onlysourceplans/sendscarouselbeforecoverless,livemetadatarequiredforcause. Nextownerstub/healthconfirm;noreset/repeatoffline/rolechanges. Preciselatencyunmeasured.
+
+Scenario3bowner screenshotPASScorrectPhase6/500gazsalelowpricenomatch,7.8crfloor,Nearby/Budget/Agentchoices,norepeatedcards. Next3cPhase8bhi,same2614conversation;noreset. D2-01orderingandpreciselatencyevidencepending.
+
+Owner3ascreenshotPASS3additionalDH6101imagesallcaption#2,covernotrepeated,nounrelatedfallback. Minute49/50notexactlatencymeasurement. Nextsame2614cheaper3bthenPhase8add3c;noreset/codechanges.
+
+House setupowner screenshotsfunctionalPASSexactset/prices/Phase7label,actualorderDH6102/DH6101/DH7101. Scenario3aphotostargetDH6101position2. D2-01provisionalHighvisiblecoverless#3cardbeforesummary/coveredcarousel,causeunverified. Followups3a/b/cstillpending,noproduct/goldchanges.
+
+Scenario1owner screenshotPASSexactEnglishoffices108/PEC/SHFcorrectmonthly5/5.5/4.5lakh.2614requestedtestactor,preciselatencyunmeasured. NextsameconversationDHAhousesetupthen3a/b/c;noreset/offlinerereunneeded. Source/fixturesunchanged.
+
+Ownerauthorizes2614customerfortests,overrides8048testactor. Gemini switchhealthy/settingsconfirmed. Preparefresh2614staffsnapshotandexistinghelpercustomer/status,thenstandaloneclearrequirementsbeforeEnglishofficequery. Noapplyconfirmation/testresultyet.
+
+OwnerAIStudioquota screenshotprimary102/500dailyandfailover1/20,under80%threshold. Readinessinputscomplete;nextguardedGeminiand8048Scenario1Englishofficequery,oneatatime. Livecasesremainpending.
+
+OwnerreadonlyfixturePASSDH6102ACTIVE80m/v8/coverTrue/2photos2prepared,latestmedia_added7->8. Readyformodelwindowafterquotaconfirmation;asyncquotaquestionunanswered. First2blockspass;Scenario1/3notrunyet,lastproviderstub.
+
+OwnerDH6102fixturephoto-onlySTUBattachscreenshotcorrecttarget/2photos/8croreandConfirmsuccess. Persistedpreparedmedia/cover/latestmedia_addedeventcheckpending;expected7->8. Asyncquotacheckrequestedbeforelivecustomerqueries. Noreset/repeatofflinetestsneeded.
+
+ResetreadonlyauditPASSseed30statuses/prices/public27+3hiddennonpublic. Media1014prepared/cover;102zero. First2Day2blockspass(resetandfresh428offline). Nextdeterministicstubphoto-onlyattach2fictionalhouseimages2614->DH6102->Confirm/audit,noinventoryfactchanges;thenquota/Gemini/customer8048cases1/3. Nofixture/livescenariopassyet.
+
+Ownerverifiesfreshsnapshotmanzil-day2-before-reset-20261106-170048AVAILABLEthenresetCOMMITTEDexactpreview. Poststub/27ACTIVE14WITHDRAWN/2projects/rolecountsunchanged;old6GLIcodesretired,1customerconversation/lead/handoffclosed. Nextdetailedread-onlyauditandmediafixture;offline428passretained,livecasespending. Read-onlyauditartifactprepared/syntaxchecked,notrunlive.
+
+FreshDay2offlinecompletedexact1ef:428passed31.09s,JUnit428/0failures/0errors/0skipped,localPG18on55434. Retainedworkspaceoutput/day2-offline-20261106T165721560814Z. Ownerstub/resetpreviewreviewed27ACTIVE14WITHDRAWN,6GLIwithdrawncopiesretired,1conversation/lead/handoffclosureplanned;6release timersareallowed. NextfreshAVAILABLErecovery snapshot/resetapply/postaudit. NoRDS/modelcallsfromlocaltests;livecasespending.
+
+Day2first3blocksimplementationauthorizedafterownerreportsdemocompleted. VerifiedHEAD1ef408038fb29c075fe26184d6036e4a45b70168matchesdeployedsource;freshbenchmarkmanifestvalid. Preparedworkspacepinnedrunner tmp/day2_20261106_checks.py andexecutionrecordoutput/day2-first-three-results.md. RunnercorrectlyrefusedmissinglocalDB55434,nopyteststarted. ToolsAWSNoCredentials/DockerAPIaccessdenied;ownerEC2stub/status/reset-planandlocaldisposablePG18startupneeded. Resetpreviewreview/freshAVAILABLEsnapshot/apply/auditthenofflineandlivecasespending;noappsourcereleasechangesornewpassesclaimed.
+
+Owner screenshots:GLI-102Visit/DetailtapopenedL-14anddeliveredcorrectvisit leadtoDemoBroker3504. CustomerMilti-jultiinteractiveforwardarrivedbroker. Expectedpending/acceptedAIgatebehaviour;Acceptnotyetproven. CaptionedGLI-102photoresponsevisible,2-photo-countunconfirmed. NextverifyAccept/post-Accepttextforward/noAIpropertyanswer,thenclosure/resumeandbetween-demowithdraw/recreate. PreserveL-14/GLI-102untilcheckscomplete;fullcontactdataomittedfromnotes.
+
+Customer8048screenshotconfirmsnatural-languagequeryreturnsnewstaff-createdGLI-102withcorrectlocation/950sqft/2bed2bath/85lakh/cover. Staff->customeravailabilitypass. NextAurphotos,GLI-102visit,handoff3504Accept,forwardednegotiation/noAIreply;nohandoffpassorcleanupyet.
+
+Owner screenshot shows newGLI-102draftcorrectpubliccorefacts+Photos2andSaveackactive. Presentation finding: Note repeatslocation/type/bedrooms/sale+ownerdirect; Ownerdirectlineabsent, persistedsource_typeunverified. Continuecustomer8048search/photosandbroker3504handoffwithsamecode; noreset/Undo yet. LoggedinOPEN_ISSUESwithoutclaimingsameunderlyingoldbug.
+
+Owner enabled Gemini via existing1efoperator with exact latest-image guard; web/worker recreated, transient502 recovered, healthdatabase/bucketok. Worker confirmsprimarygemini-3.5-flash-lite/failovergemini-3.6-flash. Forwarded brokerhelp/noopenleads screenshot supplied after3504hi. Next staff2614newGulshanBlock13flat+2fictionalphotos/done/draftverification/Saveactualcode. No listing-save/customersearch/handoff pass yet, no quota proof from deterministicbrokerhelp.
+
+Owner reports role setup COMMITTED:2614staff/8048customer/new3504broker,6266unchanged. Durable EC2 backup /home/ubuntu/day1-phone/roles-before-rehearsal-QTtge0Ex.json; new broker0957b83e-9140-4947-8be3-6c48d5170acb. No full phone exposed; provider unchanged/laststub. Next guarded existing1efoperatorGemini, nonsecretworker settings and brokerhi delivery check before creating Gulshan demo listing. No rehearsal pass yet.
+
+Agency rehearsal startup verified from owner outputs: RDS available, EC2 running/status-ok, publichealth database+bucketok, web/worker on exact1efc6dd image. Owner authorized2614staff/8048customer/3504broker. Read-only role list proves3504notregistered; others2614brokerinactive/6266agentinactive/8048adminactive, zeroopenhandoffs, providerstub/no pendingjobs. Prepared workspace output/configure-rehearsal-roles.sh plus compact paste command: private terminal input, durable masked backup, exact agency/snapshot/identity checks, atomic requested role updates/newbrokerinsert, preserves6266, failure rollback. Bash/Python syntax and8offline snapshot/mapping/refusal/rollback cases passed; no real database/provider test calls or live role changes. Next owner runs setup and supplies masked status; verify Meta recipient/routing beforeGemini/rehearsal.
+
+# Previous continuation: 2026-11-05
 
 CI run42042058400 on366c3df passed lint and the complete unit/migration/restricted-login RLS test step. Failure was Gitleaks generic-api-key on literal numeric/boolean prose after keys in ce4df35:docs/STAFF_EXTRACTION.md:325; image/container gates were skipped. Added only that full historical fingerprint to .gitleaksignore, explicitly wired its path into CI, and rephrased current prose. No history rewrite or rule/file-wide exclusion. Owner reran pinned v8.24.2 redacted scan:123commits, no leaks, exit0. Ruff/diff clean. New-head CI still required, no deployment; local full DB suite remains active separately. Keep PR55 open for Taha under the owner's pre-review demo exception.
 
@@ -318,3 +1362,277 @@ Entries are historical snapshots; later entries supersede earlier status stateme
 2026-11-04 S04 follow-up: owner later verified110draftcancelled/count0. Incomplete Phase7/500gaz/sale returned generic help; logs show three draft_listing invalid_arguments calls, iteration_limit, no provider outage. Exact payload not retained. PR55 revision drops only declared optional null/blank spans, keeps strict type/key/grounding validation, returns static schema guidance and clarifies incomplete-draft prompting. New worker/admission regressions cover missing Price/Bedrooms, no Save/property write, argument immutability and rejection of unknown/computed values. 300 tests passed with disposable PostgreSQL, no skips/failures (79.23s); overlaps previous328. Ruff/diff clean. W04 High remains open until CI/review/merge/deploy/live rerun; no new production change.
 
 2026-11-05 CI follow-up: owner confirms PR55 OPEN/unmerged at ce4df35. Both CI runs failed on that head; parent e8bade6 passed. Full failed-run summary is 1 failed, 3846 passed; existing blank-price admission assertion in test_staff_drafts_spans.py failed because optional blank normalization erased every supplied field and accepted an empty object. Keep that assertion unchanged. Fix rejects a supplied nonempty draft if normalization removes all content, while permitting omitted optional fields beside stated text/spans. Added blank-only null/empty/whitespace and original-argument preservation coverage. Focused327 passed (1.29s); Ruff/diff clean. Owner created isolated postgres:18 manzil-schema-test at loopback55432; agent verified database identity and started full suite in committed-byte archive with the two-file local fix, no production credentials/DB. Full result pending; no deployment or live acceptance. Owner explicitly authorizes pinned pre-review demo deployment after green CI/concrete release review; keep PRs for Taha and formal review/merge status pending.
+# 2026-11-09 Day 12 implementation checkpoint
+
+Implemented on feature/task-12-turn-replay: claim-time customer text debounce
+(1.5s quiet/4s cap), explicit queue deferral/refunded attempts, durable one-replan
+and dispatch boundaries in additive migration 018, requirement source filtering,
+and signed synthetic webhook replay tests including fresh canonical/shuffled
+sessions. Migration not applied; no production access, deploy, merge, push or
+provider calls. Ruff passes; offline verification and database limitations are
+recorded in docs/PROJECT_STATE.md and docs/TURN_ASSEMBLY.md. Database tests remain
+pending because Docker and native initdb are inaccessible in the sandbox.
+Final offline evidence: LF verification tree 2664 passed / 1309 skipped in
+230.32s; latest Day 12 checks 6 passed / 10 DB skips (overlapping, not additive).
+Ruff passed. No tests running. Preserve unrelated OPEN_ISSUES changes, including
+its existing trailing-blank-line whitespace finding.
+
+Owner DB run subsequently reported 3955 passed / 6 failed / 5 skipped / 10 errors.
+Fixed test image Git dependency, invalid HTTP replay envelope, stale fixture
+timestamps and real replan metering-key collision; updated concurrency assertions
+for the intended single expanded turn. Added metering identity regression. Ruff
+and 48 targeted local checks pass (83 DB skips); DB rerun pending on owner host.
+No release acceptance, production changes, merge or PR claim.
+
+Owner follow-up: rebuilt test image with Git; focused PostgreSQL regression run
+passed all 28 tests in 18.54s (one existing Starlette warning). Includes Day 1
+kit, Day 12 turn assembly/replay and the two-worker requirements regression.
+Full PostgreSQL suite remains pending before PR/release gates.
+
+Owner full PostgreSQL suite subsequently PASSED: 3977 passed, zero failures,
+errors or skips, one existing Starlette warning, 846.86s. No implementation
+change since the verified source. User's conditional PR/deploy authorization
+now proceeds to release preparation. GitHub API network blocked; no push,
+PR creation, CI, migration application or deployment claimed.
+
+Created task-only commit d908a8612c9da8d1cb09637cb90f6e7321f52367 (14 files).
+Preserved unrelated local documentation edits outside the commit. Prepared
+../output/day12-open-pr.ps1 and day12-pr-body.md for owner execution because
+GitHub API is blocked from the sandbox. Script pins the head and verifies parent
+PR #62 before choosing stacked/main base. Await actual push/PR/CI results.
+
+Owner push succeeded for feature/task-12-turn-replay (d908a86); no PR URL or
+CI runs were printed. Corrected operator script empty-JSON-array handling and
+added explicit PR metadata verification. PR/CI/deploy remain unverified.
+
+Owner confirms draft PR63 OPEN at exact d908a8612c9da8d1cb09637cb90f6e7321f52367,
+stacked on fix/day2-strict-location (PR62). Push CI is running, run ID truncated
+in supplied table. Next watch PR63 checks; no CI success or deployment claimed.
+
+Owner PR63 checks now green: 2 successful, none failing/pending, elapsed13m21s/
+14m2s. Prepared ../output/day12-production-preflight.sh for fresh read-only EC2
+baseline and migration checksum evidence before release pinning. No deployment,
+production018 application or merge performed.
+
+Owner production preflight confirms both services at baseline521a0033/Gemini,
+new module and migration018 absent. Admin migrate.env login rejected; ledger
+unverified. Added mandatory SSL and sanitized errors to preflight; no DDL or
+production change. Next read-only SSL-required login test, then privately repair
+the migration credential if still invalid. No password reset authorized/implied.
+
+SSL-required admin retry failed. Owner lacks current password; locating existing
+approved credential via read-only AWS secret metadata is next. No secret-value
+export, password reset, migration, deployment or restart performed.
+
+Owner metadata output: RDS manzil-demo-db has no managed secret reference and
+no Manzil-named Secrets Manager match was found in us-east-1. Found protected
+pre-task22.env backup path in deploy/activate_rls.py; next test backup admin login
+without displaying credentials. Existing credentials/services remain unchanged.
+
+Backup login failed too. Prepared read-only-by-default targeted RDS admin
+password recovery script at ../output/day12-reset-admin-password.py. Hidden
+input, strict target checks, no pending-modification application, no password
+output. Separate explicit reset approval required; no cloud mutation performed.
+
+Owner explicitly approved targeted admin password reset. Recovery script now
+requires a TTY and rejects getpass echo fallback; awaiting owner CloudShell
+execution. No RDS change, migration, deployment or runtime-role password change
+claimed. Use hidden password entry and preserve it only in approved private storage.
+
+Owner reports ADMIN_PASSWORD_RESET_REQUESTED from approved CloudShell recovery.
+No repeated reset. Prepared EC2 hidden-input migration-env repair script and
+code-only encoded shell wrapper; validates new login and migration checksums
+before atomic private-file update. Runtime credentials/services and DDL untouched.
+Await owner execution/results; no successful login or deployment claimed.
+
+Owner repaired migration admin env after successful hidden-input login and
+ledger checksum check001-017;018 columns absent, runtime unchanged. Prepared
+day12-d908a86-kit.zip (SHA256b1625de638293372f41f021c61fd9efad3f3929bbc0302bba9690b6378e916a9).
+Offline validation covers exact Git archive bytes, all manifests/file coverage,
+baseline hashes, preservation of historical migration bytes, shell/Python syntax
+and snapshot-before-migrate ordering. Initial CRLF archive was caught and rebuilt.
+CloudShell snapshot/staging and EC2 build scripts ready; no cloud staging,
+snapshot creation, production migration or application switch claimed.
+
+Owner CloudShell staging succeeded: ZIP checksumOK and uploaded; RDS snapshot
+manzil-pre-day12-d908a86-20261109100130 available, receipt uploaded to release
+prefix. Next EC2 build-only script; migration018 and service switch remain pending.
+
+Owner EC2 build verified baseline521a0033, unchanged fixtures, release hashes,
+new imaged2d506e7f738, exact trees/imports/appuser and ledger17. Final
+BUILD-VERIFIED-NO-SERVICES-SWITCHED. Next migration018 via operator migrate;
+no schema/application switch claimed yet.
+
+Owner migration stage PASS: snapshot receipt verified, fixtures unchanged,
+applied1/skipped17, post-check18, finalMIGRATION018-VERIFIED-NO-SERVICES-SWITCHED.
+018 now applied/immutable. Next switch to d908a86/providerstub; app still old521a0033.
+
+Owner switch passed: both services exactd2d506e7f738c64d4785a89c7efb48909ee610c2bd2528c2129e074e625bb78c,
+providerstub, healthyDB/bucket, fixtures preserved, after18 checkPASS. Initial502
+recovered; SWITCH-VERIFIED-STUB-d908a86. Next enableGemini then live Day12
+acceptance. No live acceptance or latency claim yet; PR63 remains draft/CIgreen.
+
+Owner Gemini enable passed on d908a86/image d2d506e7f738; after18 gateOK,
+both services recreated, transient502 recovered, finalhealthDB/bucketOK. Next
+rapid3text burst in unchanged2614customer chat, then scoped trace and voice
+correction. No live acceptance/latency claim before evidence.
+
+Owner15:11PKT burst screenshot visibly correct: one summary/carousel for all3
+texts, strictDHA6/500sqyd/sale/max80m, DH6-10280m and10178m only. Prepared fixed
+window read-only burst diagnostic for actualturn/search/send/timing proof;
+functional screenshot passes, database acceptance and voice test still pending.
+
+Owner burst tracePASS: turn9f1b4548,3texts/replan1/1search/1outboundsentonce;
+last input arrived after assembly so supersede exercised,6provider calls(3+3).
+Firstreceipt-to-lastsent11.474417s; lastreceipt-to-lastsent5.727010s; p90unmeasured,
+7s firstreceipt target not met by this sample. Same trace pastedtwice countedonce.
+Saved evidence ../output/day12-burst-acceptance-evidence.json. Voicecorrection
+live test next, noreset; no broad latencyPASS claim.
+
+Owner15:17PKT screenshot visibly passes voice8->typed7 correction: summary7cr,
+DHA6/500gaz/sale retained, 80m/78m cards labelledabovebudget under existing ladder.
+Prepared narrow read-only voicecorrection diagnostic for STT/patch chronology,
+sourcefinalbudget/text, sends/turns/timing. No rawtranscript export; DB proof
+pending before12.1 closure.12.2 remains offlinePASS, latency gateunmeasured.
+
+Owner voice trace ALLPASS: STT before voice80m patchv54, later typed70m patchv55,
+one2message turn/replan1/send1attempt;2searchaudits, onlyfinal70mshown.2.140s
+ElevenLabs audio untruncated. Firstreceipt response7.338028s (lastreceipt6.203994s).
+Saved voice evidence JSON.12.1+12.2 functionallycomplete/deployed d908a86/018,
+tests3977PASS+2CIgreen. Review/merge stillpending; formalp90 and burst11.474417s
+firstreceipt latency remain13.3 follow-up. Preparing PRready/body update script;
+no merge performed/inferred. Preserve data/chat/roles/photos; no reset needed.
+
+Owner final PR63 verification: OPEN, isDraftfalse/readyforreview, exactheadd908a86,
+basefix/day2-strict-location;2CIchecksSUCCESS. Body updated with functional/live
+and timing evidence.12.1/12.2 functionallyaccepted+deployed; review/mergepending,
+formal p90/tuning remains13.3. No merge performed. Final handoff saved outside repo.
+
+Owner requested saving context before new chat. Created authoritative full
+handoff ../Handoffs/codex/Manzil_AI_Day12_1_12_2_Context_2026-11-09.md with
+decisions/implementation, production/PR/CI/test/live evidence, latency limits,
+credential-recovery status without secrets, preservation/rollback rules and
+local environment caveats. Linked it at PROJECT_STATE top. No new implementation,
+cloud action, merge or cleanup performed.12.1/12.2 alreadydeployed; next work is
+to be planned in a new chat. No background tests remain running.
+2026-11-09 Tasks12.3/12.4 implementation started per accepted plan. Recovery
+metadata/state/handler, migration019, per-job transport budgets and dead-letter
+alerts implemented locally. Validation in progress on disposable PostgreSQL17
+loopback55439; providers mocked. No production changes. See FAILURE_PATHS.md.
+
+2026-11-09 Tasks12.3/12.4 local implementation complete; validation incomplete.
+Python3.12.7/PostgreSQL17: full partitions0/2 passed856/1199 respectively;
+focused101 and final recovery25/concurrency1 passed (overlap). Partition1
+807pass/1skip/128infrastructure errors after disk exhaustion/PostgreSQL shutdown;
+partition3 interrupted. Recursive session-temp cleanup rejected by automatic
+approval review (sandbox approval disabled). Owner script output/day12-clean-test-temp.ps1
+prepared; next free space and rerun affected checks with pytest retention=failed.
+No production migration019, deploy, merge or commit. Details at PROJECT_STATE top.
+
+2026-11-09 Owner elevated cleanup succeeded. Validation resumed with passing
+temporary files removed per test; disk remains about52GB free. Partition1 affected
+cases127PASS/1Linux-only /proc skip/0errors. Partition3 complete rerun still active;
+do not claim all4006cases passed. No application changes or production actions.
+
+2026-11-09 Tasks12.3/12.4 final local validation:3964PASS/0failures/0errors/
+42platformskips across4006unique collected cases/82files, Python3.12.7/PG17.
+POSIX release tests41 + Linux /proc1 explicitly skipWindows; Linux CI pending.
+Ruff/diff checks PASS. Receipt output/day12-3-12-4-validation.json verifies source
+hashes and committed001-018 snapshot bytes. Corrected stale RLS table allowlist
+for new ai_recovery; ownership/RLS/FORCE checks retained and regression1PASS.
+Earlier disk failures superseded after owner cleanup and selective reruns; passing
+temporary files now removed immediately. All session tests/PG servers stopped.
+No production migration019, AWS, deployment, commit, PR or merge. See final handoff.
+
+2026-11-09 Owner requests PR and deployment of12.3/12.4. Created isolated branch
+feature/task-12-failure-paths, committed only21taskfiles as02304c2b9e0259806676639cdecba510bcdcccb4.
+Validated source hashes before staging, committed byte equivalence (LF normalization
+only), staged whitespace clean. Unrelated docs unchanged outside task records.
+GitHub gh/read and gitpush blocked by sandbox network. Prepared syntax-checked
+owner PR/CI script and read-only production preflight under output/day12-failure-*.
+Await owner PR/CI evidence; no remote publication, AWS action, migration019 or
+deployment claimed. Owner deployment authorization persists after green gates.
+
+2026-11-09 Corrected owner PR script's merged-parent assumption. Owner fetched
+mainf04e1ea, which lacks the deployed d908 code/migration018; preserved taskbranch
+and all deployed-parent work. Resolver now follows merged PR base chains to the
+open ancestor, verifies baseline ancestry/code before push, and saves parent trace.
+10mocked cases/syntax PASS; PowerShell JSON array enumeration corrected too.
+No application code/commit change; no remote PR/CI/deploy claim. Owner reruns same
+PR script to continue the already-authorized release workflow.
+
+2026-11-09 All parent PRs63through56 reportedMERGED, but currentmainf04e1ea does
+not include deployed018/d908. Preserved task branch; no source rebase/merge. Created
+local pinned release/day12-deployed-baseline atd908. Owner PR script now publishes
+that exact baseline branch if absent and refuses a conflicting remote pointer,
+then opens task-only PR against it. Main integration is separate. Resolver11mocked
+checks/syntax PASS; task02304c2 unchanged. Await owner script output; network blocked
+for agent. No remote publication or deployment claimed.
+
+2026-11-09 PR64 opened by owner against pinned deployed-baseline branch, ready
+for review, exact02304c2. Linux CI push42669401316 and PR42669419662 bothSUCCESS;
+receipt saved/verified. No merge or deployment yet. Prepared read-only EC2
+preflight, wrapped for terminal paste; next verify runtime/ledger001-018 before
+packaging019. Deployment remains owner-authorized after gates.
+
+2026-11-09 Owner fresh preflight passed image/Gemini/ledger001-018; hashes match
+Gitd908. Built pinned PR64/02304c2 kit,10appmodules+019, preserving inherited SQL.
+Final ZIPdfcd56fe830fe6089bb38633b76de5af98568ff9685f51feba500c54e870a37c.
+Git payload/manifests/syntax/order/migration/CI/snapshot offline checks PASS.
+Prepared CloudShell stage/backup and EC2 build-only scripts plus release runbook.
+Await CloudShell available snapshot receipt; no remote mutations yet claimed.
+
+2026-11-09 Owner CloudShell uploaded verified02304c2ZIP and completed available
+snapshot manzil-pre-day12-02304c2-20261109182144; receipt staged in new S3prefix.
+Next EC2 build-only script; no019DDL/service switch claimed. Approval persists.
+
+2026-11-09 EC2 download/kit/CI and current-image byte gates passed; fixture L27
+assertion stopped build before image build/DDL/switch. Read-only L27/L28 lifecycle
+diagnostic prepared; await owner output. Preserve current state, no reset/bypass.
+
+2026-11-09 L27 diagnostic confirmed expected48h auto-release at14:56UTC before
+18:21snapshot, same actors/property and successful due job/read notice. L28closed/
+completed history preserved. Updated strict read-only release fixture to observed
+history, rejecting25corruptions; no data reset or app/CI changes. V2 bundleSHA
+c5b1831a70f94cd6ee8e8061ae43015803f114a4f5f27370ced4803fced1434a verified.
+Owner restages V2 using existing snapshot, then builds in distinct v2release dir.
+No migration or switch claimed. See PROJECT_STATE top and revised release runbook.
+
+2026-11-09 Owner V2 checksum/upload and existing-snapshot verification succeeded
+in CloudShell. Next V2 EC2 build-only script in distinct v2directory. No DDL or
+switch yet verified; preserve current lifecycle history and production state.
+
+2026-11-09 Owner V2 build successful: new877dce3bdd13/fresh-02304c2, exact tree/
+imports/user checks pass, ledger18 unchanged, fixtures preserved. Next bounded
+migration019 via v2operator; no service switch or DDL success claimed yet.
+
+2026-11-09 Owner RDS019migration succeeded applied1/skipped18; ledger19 and
+recovery schema/image checks passed; snapshot/fixtures preserved.019 now immutable.
+Next V2operator switch to new image/providerstub; no service switch yet claimed.
+
+2026-11-09 Owner switch passed: bothservices877dce3bdd13afd0c209efd8496670c2008db15ac0e243ccaaa491d65a3201fb,
+stub provider,19applied, fixtures preserved. Startup502 recovered; healthDB/bucketOK.
+Next enableGemini via v2operator, then final provider/image/health verification.
+
+2026-11-09 FINAL12.3/12.4 DEPLOYED: v2operatorGemini completed, both providers
+checkedGemini, healthDB/bucketOK after recovered startup502. Newimage877dce3bdd13
+verified on both services during switch; commit02304c2/PR64, twoLinuxCIgreen.
+019 applied/immutable. Preserved inventory/roles/photos/releasedL27/completedL28.
+No merge/reset/credential change. Final handoff/receipt under output; no further
+deployment action needed. Main integration/review and formal13.3latency remain.
+
+2026-11-09 Owner authorizes demo server shutdown and obsolete snapshot cleanup.
+Prepared guarded CloudShell stop-and-inventory script,7mock checks PASS. Agent AWS
+credentials absent. Await actual stopped states/inventory before selecting snapshots;
+no AWS shutdown/deletion claimed. Retain data/volumes and current recovery backup.
+
+2026-11-10 Owner confirms EC2/RDS stopped; RDSauto-restartNov16T18:59:21UTC.
+Owner optsKEEP98.85.18.90 EIP. Prepared exact8obsolete manual-snapshot deletion
+script retaining latestpre019recovery snapshot; mockchecks PASS. Await owner
+cleanup output, no deletions yet claimed. DB/EBS and automated backups preserved.
+
+2026-11-10 FINAL owner cost cleanup verified: EC2/RDS stopped,8exact older
+manual snapshots deleted/absent, latestverifiedpre019backup available. EIP98.85.18.90
+kept by owner choice; EBS20GiB retained. RDSauto-restartNov16 18:59:21UTC /
+23:59:21PKT. No DB/volume/automated-backup deletion or termination. Handoff updated;
+no remaining cleanup in authorized scope. Storage/IP charges remain, no automation set.

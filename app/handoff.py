@@ -18,9 +18,12 @@ broker with the lead code.
 forward_turn (Task 11.2, R-28 / RFC 9b): while a handoff is open (pending or accepted)
 the AI is silent; each customer message (a voice note as its transcript) goes one way
 to the assigned staff member's own conversation, and the customer gets one holding reply
-per handoff (its dedupe key is the handoff's, so it is sent at most once ever). An
-accepted handoff's 48 h release moves with every forwarded message. Never log names,
-numbers or message text.
+per handoff (its dedupe key is the handoff's, so it is sent at most once ever). The
+holding reply says the message was passed on only when a forward of that turn was sent;
+otherwise it says the message is saved (audit MA-005). An accepted handoff's 48 h release
+moves with every forwarded message. expired_message is the customer's message when a
+lead was not accepted in time (audit MA-001, app.handoff_actions.expire). Never log
+names, numbers or message text.
 """
 
 import logging
@@ -58,6 +61,12 @@ TEXT = {
         "chat_short": "Agent se chat",
         # Task 11.2 holding reply (R6 "Ahmed ko aapka message bhej diya hai")
         "holding": "✅ *{name}* ko aapka message bhej diya hai; woh jald jawab denge.",
+        # Audit MA-005 / MA-001 (owner-approved wording, BD-4, 2026-11-12)
+        "holding_unsent": ("✅ Aapka message mehfooz hai; *{name}* aapki request ke sath yeh "
+                           "bhi dekhenge."),
+        "expired": ("Main dobara aapki madad ke liye haazir hoon. Aapka reference *{code}* "
+                    "hamare consultant *{name}* ke paas hai; aap unse seedha bhi baat kar "
+                    "sakte hain."),
     },
     ENGLISH: {
         "connect": ("I'm Manzil's AI assistant — I'm connecting you with our consultant "
@@ -67,6 +76,9 @@ TEXT = {
         "chat": "Chat with {name}",
         "chat_short": "Chat with agent",
         "holding": "✅ I've passed your message to *{name}*; they will reply soon.",
+        "holding_unsent": "✅ Your message is saved; *{name}* will see it with your request.",
+        "expired": ("I'm here to help you again. Our consultant *{name}* has your reference "
+                    "*{code}*; you can also message them directly."),
     },
 }
 
@@ -265,6 +277,19 @@ def customer_message(opened, language):
     return whatsapp.cta_url("\n".join(lines), button, url)
 
 
+def expired_message(agent, lead_code, language):
+    """Audit MA-001: the customer's message when nobody accepted the lead in time (the AI
+    answers again), with the same wa.me CTA to the staff member. It does not say they are
+    unavailable: they may have phoned without tapping Accept."""
+    words = TEXT.get(language, TEXT[ROMAN_URDU])
+    name = first_name(agent.name) or words["chat_short"]
+    button = words["chat"].format(name=name)
+    if len(button) > whatsapp.CTA_DISPLAY_TEXT_MAX:
+        button = words["chat_short"]
+    url = f"https://wa.me/{agent.number}?text={quote('Ref ' + lead_code)}"
+    return whatsapp.cta_url(words["expired"].format(name=name, code=lead_code), button, url)
+
+
 # -- Task 11.2: forwarding and the holding reply ---------------------------------------------
 
 @dataclass(frozen=True)
@@ -324,6 +349,7 @@ def forward_turn(conn, client, turn, transcribe=None):
             touch_release(conn, held.handoff_id)
     if transcribe is not None:
         turn = transcribe(turn)
+    forwarded = False   # audit MA-005: the holding reply claims delivery only if one was sent
     for seq, message in enumerate(turn.messages):
         try:
             result = outbound.send_message(
@@ -332,6 +358,7 @@ def forward_turn(conn, client, turn, transcribe=None):
                 f"turn:{turn.id}:fwd:{seq}", ai_generated=False)
         except whatsapp.PermanentSendError as exc:
             result = outbound.SendResult(f"failed:{exc.code}")
+        forwarded |= result.status == "sent"
         if result.status != "sent":
             # Recorded on its outbound_message row; the holding reply still goes out.
             logger.warning("Handoff %s: forward not sent (%s)", held.handoff_id,
@@ -341,7 +368,7 @@ def forward_turn(conn, client, turn, transcribe=None):
     name = first_name(held.agent.name) or words["chat_short"]
     sent = outbound.send_message(
         conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
-        whatsapp.text(words["holding"].format(name=name)),
+        whatsapp.text(words["holding" if forwarded else "holding_unsent"].format(name=name)),
         f"handoff:{held.handoff_id}:holding", ai_generated=False)
     if sent.status == "sent":
         with tenant_transaction(conn, turn.agency_id):

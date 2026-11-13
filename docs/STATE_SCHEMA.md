@@ -128,6 +128,11 @@ nothing captured), slots JSONB, created_at, updated_at.
   unmapped_prefs, excluded_property_ids. Each slot must be an object with `source` in
   `text`/`voice`/`inferred`/`default`; `confidence`, when present, is a number in 0..1; `confirmed`,
   when present, is boolean. Adding a slot needs a migration.
+- `location.value.no_nearby` is an optional backend-derived boolean for an explicit
+  only/sirf area restriction. It prevents automatic neighbour expansion and survives
+  budget-only follow-ups. An explicit Nearby-area action may broaden that search;
+  its `search_run.filters` records `nearby_requested: true` alongside `no_nearby`.
+  These are JSON metadata fields, not additional slot names.
 - Optimistic concurrency contract (8.1): `UPDATE ... SET slots = ..., version = version + 1 WHERE id = :id
   AND version = :expected`; 0 rows means a concurrent writer won. The patch log's
   `UNIQUE (conversation, version)` backs this up.
@@ -255,7 +260,10 @@ escalated_at, accepted_at, release_due_at, holding_reply_sent_at, called_at, out
   >= requested_at and due times are after it.
 - Status vs control_state (11.2 keeps them together in one transaction): pending -> handoff_pending,
   accepted -> human_owned, completed / released / cancelled -> ai_active (or closed). `#pass` and the
-  ADMIN escalation (R-29) reassign assigned_staff_id and set escalated_at while pending.
+  ADMIN escalation (R-29) reassign assigned_staff_id and set escalated_at while pending. A handoff
+  still pending at the second accept timeout becomes `released` with accepted_at NULL (lead closed,
+  ai_active; audit MA-001): `status = 'released' AND accepted_at IS NULL` identifies an unaccepted,
+  expired lead. No migration: the constraints already allow it.
 - Broker buttons (R6, RFC 7): [Accept] sets accepted_*; [Pass] / accept timeout reassign
   assigned_staff_id (next broker, then ADMIN, R-29) and set escalated_at; [Called] sets called_at; the
   outcome buttons set outcome + outcome_at together (ROI tracking). Reassignment history (R-32) is a

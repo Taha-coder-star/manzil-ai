@@ -26,14 +26,20 @@ sender's open leads; it is never read as a listing or sent to a model.
 
 release (handoff_release job): an accepted handoff with no customer message for 48 h is
 released to the AI; a job whose deadline has moved on finds a later release_due_at and
-does nothing. Never log names, numbers or message text.
+does nothing.
+
+expire (handoff_accept_timeout round 2, audit MA-001): a lead still pending after
+2 x HANDOFF_ACCEPT_MINUTES is released unaccepted (status released, accepted_at NULL),
+the conversation goes back to the AI, and the customer (with the chat link) and the
+assigned staff member and active admins are told. A later Accept tap gets "closed".
+Never log names, numbers or message text.
 """
 
 import dataclasses
 import logging
 import re
 
-from app import handoff, handoff_alert, outbound, whatsapp
+from app import handoff, handoff_alert, outbound, render, whatsapp
 from app.db import tenant_transaction
 
 logger = logging.getLogger(__name__)
@@ -69,6 +75,10 @@ TEXT = {
     "open": "Your open leads: {leads}.",
     "released": ("{code} was handed back to the AI assistant after {hours} h without a "
                  "customer message."),
+    # Audit MA-001 (owner-approved wording, BD-4, 2026-11-12)
+    "expired": ("⏰ *{code}* was not accepted within {minutes} min. The AI assistant is "
+                "answering the customer again.\n\n💬 Chat with the customer:\n"
+                "https://wa.me/{number}"),
 }
 
 
@@ -242,6 +252,62 @@ def release(conn, job, client_factory):
                 f"handoff:{handoff_id}:released", ai_generated=False)
         except whatsapp.PermanentSendError as exc:
             logger.warning("Release notice not sent (%s)", exc.code)
+
+
+def expire(conn, job, client_factory):
+    """The handoff_accept_timeout job, round 2 (audit MA-001; owner BD-1, BD-2): a lead
+    nobody accepted in 2 x HANDOFF_ACCEPT_MINUTES is released (lead closed, conversation
+    back to the AI) in one transaction, then the customer and the staff are told. A retry
+    after the commit finds it released with no accepter and sends again; the dedupe keys
+    send each message at most once."""
+    handoff_id = job.payload["handoff_id"]
+    with tenant_transaction(conn, job.agency_id):
+        conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
+        row = _lock(conn, handoff_id)
+        if row is None:
+            return
+        if row.status == "pending":
+            _close(conn, handoff_id, row.conversation_id, "released")
+        elif row.status != "released" or row.accepted_by is not None:
+            return   # accepted, completed, or released after an Accept: not ours
+        agent = handoff._agent(conn.execute(
+            "SELECT id, name, whatsapp_number FROM staff WHERE id = %s",
+            (row.assigned,)).fetchone()) if row.assigned else None
+        recipients = [
+            (handoff.Agent(str(r[0]), r[1], handoff.digits(r[2])),
+             handoff.staff_conversation(conn, handoff.digits(r[2])))
+            for r in conn.execute(
+                "SELECT id, name, whatsapp_number FROM staff WHERE is_active "
+                "AND (id = %s OR role = 'admin') ORDER BY id = %s DESC, created_at, id",
+                (row.assigned, row.assigned)).fetchall()]
+        last = conn.execute(
+            "SELECT text_body FROM message WHERE conversation_id = %s AND direction = "
+            "'inbound' AND message_type = 'text' ORDER BY created_at DESC LIMIT 1",
+            (row.conversation_id,)).fetchone()
+    logger.warning("Handoff %s expired unaccepted", handoff_id)
+    language = render.detect_language(last[0] if last else "")
+    minutes = 2 * handoff.accept_minutes()
+    with handoff_alert._client(conn, job.agency_id, client_factory) as client:
+        if agent is not None:
+            _notify(conn, client, job.agency_id, row.conversation_id, row.customer,
+                    handoff.expired_message(agent, row.code, language),
+                    f"handoff:{handoff_id}:expired")
+        for staff, staff_conv in recipients:
+            _notify(conn, client, job.agency_id, staff_conv, staff.number,
+                    _text("expired", code=row.code, minutes=minutes, number=row.customer),
+                    f"handoff:{handoff_id}:expired:{staff.staff_id}")
+
+
+def _notify(conn, client, agency_id, conversation_id, recipient, payload, key):
+    """One system message about a handoff; a refused send is logged by code only."""
+    try:
+        result = outbound.send_message(conn, client, agency_id, conversation_id, recipient,
+                                       payload, key, ai_generated=False)
+    except whatsapp.PermanentSendError as exc:
+        logger.warning("Expiry notice refused (%s)", exc.code)
+        return
+    if result.status != "sent":
+        logger.warning("Expiry notice not sent (%s)", result.status)
 
 
 def accept(conn, client, turn, handoff_id, gazetteer=None):

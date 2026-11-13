@@ -58,6 +58,42 @@ def loc(*nodes, mode="SUBTREE", confirmed=True, raw="x"):
             "updated_at": NOW.isoformat()}
 
 
+@pytest.mark.parametrize("body", [
+    "sirf DHA Phase 8 mein ghar", "only in DHA Phase 8", "DHA Phase 8 mein hi ghar",
+    "صرف DHA Phase 8 میں گھر", "सिर्फ DHA Phase 8 में घर",
+])
+def test_only_place_replaces_previous_scope_and_disables_automatic_nearby(gz, body):
+    merge = run(gz, {"location": loc("dha-ph6")},
+                [op("location", "add", "DHA Phase 8")], [("text", body)])
+    assert value(merge, "location")["nodes"] == ["dha-ph8"]
+    assert value(merge, "location")["no_nearby"] is True
+
+
+@pytest.mark.parametrize("body", [
+    "DHA Phase 8 mein ghar, sirf budget 8 crore", "not only in DHA Phase 8",
+    "sirf budget 8 crore, DHA Phase 8 mein ghar",
+])
+def test_only_for_another_constraint_is_not_a_location_restriction(gz, body):
+    merge = run(gz, {}, [op("location", "set", "DHA Phase 8")], [("text", body)])
+    assert not value(merge, "location").get("no_nearby")
+
+
+def test_only_location_does_not_cross_source_messages(gz):
+    merge = run(gz, {}, [op("location", "set", "DHA Phase 8")],
+                [("text", "sirf"), ("text", "DHA Phase 8")])
+    assert not value(merge, "location").get("no_nearby")
+
+
+def test_only_location_survives_an_ambiguous_place_clarification(gz):
+    asked = run(gz, {}, [op("location", "set", "p6")], [("text", "sirf p6 mein ghar")])
+    candidates = next(effect[2] for effect in asked.effects if effect[0] == "open")
+    pending = Pending("pending", "location", candidates, NOW, NOW)
+    answered = run(gz, {}, [op("location", "set", "DHA Phase 6")],
+                   [("text", "DHA Phase 6")], pending=pending)
+    assert value(answered, "location")["nodes"] == ["dha-ph6"]
+    assert value(answered, "location")["no_nearby"] is True
+
+
 def slot_entry(value, source="text"):
     return {"value": value, "raw": "x", "source": source, "confidence": 1.0,
             "confirmed": True, "updated_at": NOW.isoformat()}

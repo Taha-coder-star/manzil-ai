@@ -1,2 +1,5 @@
 # Migration checksums are computed over raw bytes; keep SQL as LF on every checkout.
 *.sql text eol=lf
+
+# Preserve byte-pinned audit evidence and LF shell wrappers across Windows checkouts.
+docs/audits/2026-11-12/** -text whitespace=trailing-space,space-before-tab,cr-at-eol

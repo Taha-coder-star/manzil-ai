@@ -1,0 +1,111 @@
+{
+  "schema": 1,
+  "cohort": "day13_minimal_effort_comparison",
+  "config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+  "plan_sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+  "window_start_utc": "2026-11-11T19:34:20.530416+00:00",
+  "readiness_receipt": "minimal-trial-ready-owner.json",
+  "observed_samples": [
+    {
+      "id": "T01",
+      "modality": "text",
+      "source": "owner-pasted WhatsApp bot replies",
+      "displayed_reply_time_pkt": "2026-11-12 00:39",
+      "timestamp_precision": "minute",
+      "original_inbound_message_returned": false,
+      "clear_setup_acknowledgement_returned": false,
+      "expected_results_visible": true,
+      "functional_observation": "Expected office-rent result set and monthly prices; summary plus three coverless cards",
+      "visible_listings": [
+        {
+          "code": "DH6-108",
+          "monthly_price_pkr": 500000,
+          "area_sq_ft": 1200
+        },
+        {
+          "code": "PEC-101",
+          "monthly_price_pkr": 550000,
+          "area_sq_ft": 2000
+        },
+        {
+          "code": "SHF-101",
+          "monthly_price_pkr": 450000,
+          "area_sq_ft": 1500
+        }
+      ],
+      "visible_reply_parts": 4,
+      "primary_latency_ms": 11533.57,
+      "timing_status": "server first substantive acceptance verified; >7-second target",
+      "server_turn_mapping": "correlated to planned office query and four visible replies",
+      "replacement_attempt_requested": false,
+      "diagnostic": "minimal-diagnostic-owner.json",
+      "server_attempt_label": "T01-attempt-2"
+    },
+    {
+      "id": "T02",
+      "modality": "text",
+      "source": "owner WhatsApp screenshot",
+      "displayed_request_time_pkt": "2026-11-12 00:41",
+      "displayed_reply_time_pkt": "2026-11-12 00:41",
+      "timestamp_precision": "minute",
+      "original_inbound_message_returned": true,
+      "expected_results_visible": true,
+      "failure_visible": false,
+      "purchase_assumption_notice_visible": true,
+      "visible_listings": [
+        {
+          "code": "DH6-102",
+          "price_pkr": 80000000,
+          "area_sq_yd": 500
+        },
+        {
+          "code": "DH6-101",
+          "price_pkr": 78000000,
+          "area_sq_yd": 500
+        },
+        {
+          "code": "DH7-101",
+          "price_pkr": 75000000,
+          "area_sq_yd": 500,
+          "nearby": true
+        }
+      ],
+      "functional_observation": "Expected purchase summary and three cards visible; Phase 7 identified as nearby",
+      "visible_ordering_observation": "Screenshot shows purchase assumption notice, then #3 coverless card, summary, then #1 and #2 photo cards",
+      "ordering_acceptance": "application send order correct; delivery reordered #3 before carousel",
+      "primary_latency_ms": 7161.561,
+      "timing_status": "server first substantive carousel acceptance verified; >7-second target",
+      "server_turn_mapping": "verified exact single T02 input",
+      "replacement_attempt_requested": false,
+      "diagnostic": "minimal-diagnostic-owner.json",
+      "first_text_accepted_ms": 6685.912,
+      "server_attempt_label": "T02-attempt-1",
+      "send_review": "minimal-send-review-owner.json"
+    }
+  ],
+  "next_sample": null,
+  "phase": "comparison_complete_low_restored",
+  "day13_closed": false,
+  "text_observed": 2,
+  "voice_observed": 0,
+  "samples_with_measured_primary_latency": 2,
+  "accidental_inputs": [
+    {
+      "diagnostic_label": "T01-attempt-1",
+      "received_at": "2026-11-11T19:38:54.100695+00:00",
+      "first_accepted_ms": 2004.265,
+      "owner_direction": "that was a wrong message I sent my mistake ignore that",
+      "excluded_from_planned_comparison": true,
+      "raw_record_preserved": true,
+      "reply_semantics": "unknown; not assumed to be clear-all acknowledgement",
+      "protocol_deviation_recorded": true
+    }
+  ],
+  "comparison_complete": true,
+  "remaining_text_not_run": 8,
+  "remaining_voice_not_run": 6,
+  "fixed_ten_text_p90_lower_bound_ms": 7161.561,
+  "no_more_samples_in_this_cohort_recommended": true,
+  "restore_low_observed": true,
+  "restore_receipt": "minimal-trial-restored-low-owner.json"
+}

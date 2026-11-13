@@ -57,15 +57,18 @@ def test_st02_is_a_possible_duplicate_of_bahria_101_and_still_saveable():
     assert "duplicate" in annotated.warnings and annotated.blockers() == ()  # non-blocking
 
 
-def test_st01_known_disagreement_with_the_gold_is_reported_not_tuned_away():
-    """The gold says ST-01 duplicates nothing, yet DH6-101 (78 lakh, 4 bed, 500 yd, same
-    phase) and the reserved DH6-106 are closer than BTK-101 is to ST-02. Q1 in
-    docs/STAFF_EXTRACTION.md: the gold, not the rule, is to be corrected."""
-    assert GOLD["ST-01"]["duplicate_of"] == []  # bench/staff.json is unchanged
+def test_st01_owner_approved_gold_matches_duplicate_rule_and_remains_saveable():
+    """Day13 owner resolved Q1 before paid runs: warn for both matching listings.
+    Keep the RFC rule, active/reserved matches and non-blocking Save behavior.
+    """
+    assert GOLD["ST-01"]["duplicate_of"] == ["DH6-101", "DH6-106"]
     found = sn.find_duplicates(build(*ST["ST-01"]), ROWS, GAZETTEER)
+    assert [d["code"] for d in found] == GOLD["ST-01"]["duplicate_of"]
     assert [(d["code"], d["status"]) for d in found] == [
         ("DH6-101", "active"), ("DH6-106", "reserved")]
-    assert sn.annotate([build(*ST["ST-01"])], ROWS, GAZETTEER)[0].blockers() == ()
+    annotated = sn.annotate([build(*ST["ST-01"])], ROWS, GAZETTEER)[0]
+    assert "duplicate" in annotated.warnings and annotated.blockers() == ()
+    assert GOLD["ST-01"]["save_allowed"] is True
 
 
 @pytest.mark.parametrize("item", [i for i in ST if i != "ST-01"])

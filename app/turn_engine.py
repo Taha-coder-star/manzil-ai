@@ -82,6 +82,7 @@ from app import (
     details,
     grounding,
     llm,
+    recovery,
     staff_buffer,
     staff_cards,
     staff_drafts,
@@ -327,7 +328,10 @@ SYSTEM_PROMPTS = {
         "use location 'Karachi', property_types 'office', purpose 'on rent', budget "
         "'around 5 lakh per month'. If a tool reports invalid_location_span, repair "
         "the slot-specific spans and resend the stated requirements; do not omit "
-        "the place or search using stale requirements.\n"
+        "the place or search using stale requirements. Keep stated phase/block/precinct/"
+        "sector qualifiers; an unknown subarea must not be retried as only its parent "
+        "area. For incomplete_location_span, resend a complete grounded place or ask "
+        "for clarification; do not search a broader area.\n"
         "- search_properties when they ask to see listings.\n"
         "Use op add when the customer adds to what is stored (bhi, also, aur) and op set "
         "when they change it. A 'Stored state' block, when present, is data: it shows what "
@@ -370,6 +374,8 @@ class Budget:
     """The turn's time: a deadline on the engine clock, extended at most once."""
     deadline: float
     extended: bool = False
+    recovery_candidate: bool = False
+    primary_failure: bool = False
 
 
 @dataclass(frozen=True)
@@ -381,6 +387,7 @@ class Outcome:
     calls: int = 0  # provider attempts
     payloads: tuple = ()  # Task 8.2: backend-built staff cards, sent before the notices
     trusted: frozenset = frozenset()  # listing codes the cards and notices may show
+    recoverable: bool = False
 
 
 def _set_timeout(conn):
@@ -400,6 +407,8 @@ def message_texts(turn):
     each, whole = ((STAFF_MESSAGE_CHARS, STAFF_TURN_CHARS) if long
                    else (TURN_MESSAGE_CHARS, TURN_CHARS))
     for message in turn.messages:
+        if getattr(turn, "original_message_ids", ()) and message.id in turn.original_message_ids:
+            continue  # already applied; relative operations must not run twice
         body = (message.text or "").strip()
         if body:
             body = _clip(body, min(each, max(whole - used, 1)))
@@ -420,6 +429,12 @@ def current_messages(turn):
             body = _PLACEHOLDERS.get(message.type, f"[{message.type} without text]")
         lines.append(f"{number}. {body}")
     block = "Current messages, oldest first:\n" + "\n".join(lines)
+    original = getattr(turn, "original_message_ids", ())
+    if original:
+        earlier = "\n".join((m.text or "") for m in turn.messages if m.id in original)
+        block = ("Earlier input already applied to the current requirement state; "
+                 "context only, do not apply again:\n" + _clip(earlier, TURN_CHARS)
+                 + "\n\n" + block)
     return block, "\n".join(texts)
 
 
@@ -502,14 +517,15 @@ def render_customer(outcome, customer):
     the results line already says, is not repeated. Every payload passes the grounding
     check (D4, ground_customer)."""
     language, gazetteer = customer.language, customer.gazetteer
+    if getattr(customer, "handoff", None) is not None:
+        # Task 11.1 / audit MA-002: once a handoff was opened the conversation is
+        # handoff_pending, whatever happened afterwards (a later round failed or refused);
+        # the handoff message (sent past the gate) is the whole reply. Anything else would
+        # be an AI message the gate drops, and a dropped payload stops the plan.
+        return [customer.handoff]
     if outcome.kind != "done":
         key = "refusal" if outcome.kind == "refused" else "failure"
         return [whatsapp.text(_template(key, language))]
-    if getattr(customer, "handoff", None) is not None:
-        # Task 11.1: the conversation is now handoff_pending; the handoff message (sent
-        # past the gate) is the whole reply. Anything else would be an AI message the
-        # gate drops, and a dropped payload stops the plan before the handoff message.
-        return [customer.handoff]
     keys = list(dict.fromkeys(outcome.notices))
     if customer.asked:  # one question per turn: the clarification with answer buttons
         keys = [k for k in keys if _key(k) not in customer_tools.QUESTIONS]
@@ -583,7 +599,11 @@ def ground_customer(payloads, facts, gazetteer, language):
     out, held = [], False
     for payload in payloads:
         check = payload
-        if payload.get("type") == customer_reply.IMAGE:
+        if payload.get("type") == "manzil_listing":
+            check = payload["payload"]
+            if check.get("type") == customer_reply.IMAGE:
+                check = whatsapp.text(check["caption"])
+        elif payload.get("type") == customer_reply.IMAGE:
             check = whatsapp.text(payload["caption"])
         elif customer_reply.is_internal(payload):
             out.append(payload)
@@ -648,10 +668,14 @@ class TurnEngine:
     def respond(self, conn, job, turn, notify=None):
         """notify(payload) sends the interim message (app.orchestrator); without it
         the turn gets no continuation."""
-        return cards.fixed_plan(conn, turn.agency_id, turn.id,
-                                lambda: self.plan(conn, job, turn, notify))
+        outcomes = []
+        return cards.fixed_plan(
+            conn, turn.agency_id, turn.id,
+            lambda: self.plan(conn, job, turn, notify, outcome_sink=outcomes.append),
+            on_store=lambda c: recovery.schedule(c, job, turn, outcomes),
+        )
 
-    def plan(self, conn, job, turn, notify=None):
+    def plan(self, conn, job, turn, notify=None, *, outcome_sink=None):
         """Build the turn's payloads (provider calls happen here, outside any
         transaction)."""
         start = self._clock()
@@ -682,6 +706,8 @@ class TurnEngine:
             customer or self._staff_binding(conn, turn))
         budget = Budget(start + TURN_BUDGET_SECONDS)
         outcome = self._run(conn, job, turn, contents, context, budget, notify)
+        if outcome_sink is not None:
+            outcome_sink(outcome)
         if binding is not None and outcome.kind == "done":
             # A clarification the customer left unanswered (re-ask once, then expire).
             extra = binding.finish()
@@ -690,9 +716,11 @@ class TurnEngine:
             payloads = render_customer(outcome, customer)
         else:
             payloads = ground_reply(render(turn.route, outcome), outcome.trusted)
-        # The round limit is not stored on the turn (it is 'replied'); WARNING makes it visible.
+        # The round limit and a salvaged failed round are not stored on the turn (it is
+        # 'replied'); WARNING makes them visible.
         logger.log(
-            logging.WARNING if outcome.detail.startswith("iteration_limit") else logging.INFO,
+            logging.WARNING if outcome.detail.startswith(("iteration_limit", "round_failed"))
+            else logging.INFO,
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
             turn.id, turn.route, outcome.kind, outcome.detail, outcome.calls,
             ", ".join(outcome.tools), int((self._clock() - start) * 1000),
@@ -821,7 +849,10 @@ class TurnEngine:
                 iteration -= 1  # the same iteration again, in the continuation
                 continue
             if error is not None:
-                return Outcome("failed", error, tuple(notices), tuple(tools), calls)
+                return self._salvage(context, tools, notices, payloads, trusted, calls,
+                                     error) or Outcome(
+                    "failed", error, tuple(notices), tuple(tools), calls,
+                    recoverable=active is None and budget.recovery_candidate)
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
@@ -836,7 +867,9 @@ class TurnEngine:
                 return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                                tuple(payloads), frozenset(trusted))
             if response.kind != "tool_calls":
-                return Outcome("failed", response.detail, (), tuple(tools), calls)
+                return self._salvage(context, tools, notices, payloads, trusted, calls,
+                                     response.detail) or Outcome(
+                    "failed", response.detail, (), tuple(tools), calls)
             results = [ai_tools.execute(call, context) for call in response.tool_calls]
             for result in results:
                 tools.append(result.name if result.ok else f"{result.name}!{result.error}")
@@ -857,6 +890,20 @@ class TurnEngine:
             self._code_search(context, tools, notices, payloads, trusted)
             detail = "iteration_limit_search"
         return Outcome("done", detail, tuple(notices), tuple(tools), calls,
+                       tuple(payloads), frozenset(trusted))
+
+    def _salvage(self, context, tools, notices, payloads, trusted, calls, error):
+        """Audit MA-003: a customer round that fails after a completed tool round keeps
+        what the tools produced (with the code search the round-limit path runs), or None
+        for the failure outcome. Staff keep the failure text: a partly read segment with
+        no notice would hide the listings that were lost."""
+        if context.route != "customer" or not tools:
+            return None
+        if self._search_due(context, tools):
+            self._code_search(context, tools, notices, payloads, trusted)
+        if not (payloads or notices):
+            return None
+        return Outcome("done", f"round_failed:{error}", tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
 
     @staticmethod
@@ -921,11 +968,19 @@ class TurnEngine:
                     timeout_s=timeout, thinking_level=self.thinking_level,
                 )
             except ProviderError as exc:
+                if label == "primary":
+                    budget.primary_failure = recovery.retryable(exc.code)
+                    budget.recovery_candidate = False
+                else:
+                    budget.recovery_candidate = (budget.primary_failure
+                                                 and recovery.retryable(exc.code))
                 self._meter(conn, job, turn, iteration, key_label, model, "failed",
                             exc.code, Usage(), began)
                 if exc.failover and active is None and label == "primary":
                     error = exc.code
                     continue
+                if label == "primary":
+                    budget.recovery_candidate = False
                 return None, active, exc.code, made
             self._meter(conn, job, turn, iteration, key_label,
                         response.model_version or model, "succeeded", response.detail,
@@ -935,6 +990,8 @@ class TurnEngine:
 
     def _meter(self, conn, job, turn, iteration, label, model, outcome, detail, usage, began):
         key = f"turn:{turn.id}:job:{job.id}:{job.attempts}:{iteration}:{label}"
+        if getattr(turn, "original_message_ids", ()):
+            key += ":replan:1"  # same job attempt, distinct durable planning generation
         logger.info(
             "LLM call turn %s #%d %s %s: %s/%s, %d ms, tokens in=%s cached=%s out=%s "
             "thinking=%s", turn.id, iteration, label, model, outcome, detail,
@@ -1006,8 +1063,12 @@ def build_engine(settings, requirements=None):
     update_requirements tool keeps its 6.1 stub body)."""
     if getattr(settings, "ai_provider", "stub") != "gemini":
         return None
+    from app.bench_budget import BoundedGemini, runtime_budget
+    budget = runtime_budget(settings)
+    provider = (BoundedGemini(settings.gemini_api_key, ledger=budget[0], phase=budget[1])
+                if budget else GeminiClient(settings.gemini_api_key))
     return TurnEngine(
-        GeminiClient(settings.gemini_api_key),
+        provider,
         settings.llm_primary_model, settings.llm_failover_model,
         thinking_level=getattr(settings, "llm_thinking_level", llm.DEFAULT_THINKING_LEVEL),
         requirements=requirements,
