@@ -1,3 +1,21 @@
+2026-11-13 AUDIT WP3 IMPLEMENTED (UNCOMMITTED): REPRODUCIBLE RELEASE.
+Worktree .claude/worktrees/wp3-reproducible-release, branch fix/wp3-reproducible-release
+from e896e5b (WP2; PR #69 still open). BD-12 = A. No migration, no deployment.
+MA-007 app/migrate.py HISTORICAL_CHECKSUMS: ledger may hold the CRLF checksum of
+001 (ffc7c8c2...4d9d) / 002 (5a98bcd6...e641) by exact value; else still raises.
+001 has no final newline: the prompt's bd5bb6cc... was CRLF + stray CR; owner chose
+ffc7c8c2 (matches CRLF working copy and .local/task44-audit.json); RDS unconfirmed.
+TD-16 Dockerfile ARG GIT_SHA -> label + /app/REVISION; /live returns "revision".
+MA-015 requirements.lock (27 pins = manzil-ai:test freeze, hashes), --require-hashes;
+python:3.12-slim@a6e34c59 (tested base), caddy:2@9c1b76fb. docs/release/RELEASE.md:
+tag build, ledger checks, switch, rollback, refresh, stop/restart commands.
+Local: two builds equal content; CRLF-ledger rehearsal 0 applied (old runner
+raises); migration/runtime tests 14 passed; host git tests 16 passed; Ruff clean.
+Full suite (6 sequential batches) in manzil-ai:test and in the locked image: each
+4105 collected, 4087 passed, 18 skipped (16 need git, 2 Compose), 0 failed, 0 errors.
+Resume: owner review; commit / push / PR only on owner instruction; then the tag
+release per docs/release/RELEASE.md. Reports: output/claude-remediation/WP3_*.md.
+
 2026-11-13 AUDIT WP2 IMPLEMENTED (UNCOMMITTED): OPERATIONAL QUICK WINS.
 WP1 committed locally on owner instruction: 9dc3fa8 on fix/wp1-customer-reliability
 (not pushed). WP2 worktree .claude/worktrees/wp2-ops-quick-wins, branch

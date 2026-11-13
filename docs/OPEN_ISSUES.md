@@ -1,3 +1,15 @@
+2026-11-13 AUDIT WP3: CHECK BEFORE AND AFTER THE FIRST TAG RELEASE.
+Before: read-only SELECT name, checksum FROM schema_migration WHERE name IN
+('001_schema_v1.sql','002_tenant_rls.sql') must show 001 ffc7c8c2759f48d2...4d9d and
+002 5a98bcd6a561623d...e641 (app/migrate.py HISTORICAL_CHECKSUMS); anything else:
+stop. Build only from a tag on main with --build-arg GIT_SHA; the image's migration
+check must print problems: 0 and the migrator 0 applied (docs/release/RELEASE.md s3).
+After: /live shows the tag's commit; internal health 200; POST /webhook 401; Worker
+started; one customer reply; rollback by recorded image ID. A second builder and a
+copy of production complete the acceptance; only then retire the file-layer kit in
+docs/release/. The kit refuses Dockerfile/requirements changes, so WP3 cannot ship
+through it. Taking the caddy digest pin recreates caddy. Not deployed.
+
 2026-11-13 AUDIT WP2 ROLLOUT NOTE: PUBLIC /health BECOMES 404.
 WP2 (branch fix/wp2-ops-quick-wins, uncommitted, stacked on WP1 9dc3fa8) changes
 deploy/Caddyfile (/health answers 404 publicly) and deploy/compose.yml (worker

@@ -1,5 +1,6 @@
 import json
 import logging
+from pathlib import Path
 
 import psycopg
 from fastapi import FastAPI, Request
@@ -18,10 +19,23 @@ logging.getLogger("uvicorn.access").addFilter(webhook.RedactVerifyTokenFilter())
 
 app = FastAPI(title="Manzil AI")
 
+REVISION_FILE = Path("/app/REVISION")
+
+
+def read_revision(path=REVISION_FILE):
+    """The Git commit the image was built from (Dockerfile GIT_SHA), else "unknown"."""
+    try:
+        return path.read_text(encoding="utf-8").strip() or "unknown"
+    except OSError:
+        return "unknown"
+
+
+REVISION = read_revision()
+
 
 @app.get("/live")
 def live():
-    return {"status": "running", "role": "web"}
+    return {"status": "running", "role": "web", "revision": REVISION}
 
 
 @app.get("/privacy", response_class=HTMLResponse)

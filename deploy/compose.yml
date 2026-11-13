@@ -21,7 +21,8 @@ services:
     stop_grace_period: 90s
 
   caddy:
-    image: caddy:2
+    # Pinned by digest (docs/release/RELEASE.md: refreshing the pins).
+    image: caddy:2@sha256:9c1b76fb701c1f77383d3124d9f626e38bcf83bc1255ed47475d4f2420701d03
     ports:
       - "80:80"
       - "443:443"
