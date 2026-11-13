@@ -1,3 +1,22 @@
+2026-11-13 AUDIT WP2 IMPLEMENTED (UNCOMMITTED): OPERATIONAL QUICK WINS.
+WP1 committed locally on owner instruction: 9dc3fa8 on fix/wp1-customer-reliability
+(not pushed). WP2 worktree .claude/worktrees/wp2-ops-quick-wins, branch
+fix/wp2-ops-quick-wins from 9dc3fa8. No migration, no app/ change, no deployment.
+MA-011 deploy/compose.yml: worker stop_grace_period 90s (SIGTERM only sets stop;
+running job finishes; new test for a stop mid-job).
+MA-014 deploy/Caddyfile: respond /health 404; /live, /webhook, /privacy unchanged.
+Operator checks moved inside web: fresh_search_switch.sh alive() (+ stub case
+INTERNAL_HEALTH_FAIL), RELEASE_10_2 s8 command, fresh-search, cost, RLS, carousel,
+Day1 runbooks. Caddy validated locally (caddy:2, internal network).
+MA-019: git-dependent tests skip without git (test_day1_kit, one staff_drafts test).
+Env split per container: proposal only, docs/release/ENV_SPLIT.md (not applied).
+Full image run 4099: 4081 passed, 18 skipped, 0 failed, 0 errors; host git tests 16
+passed; host Compose tests 2 passed; Ruff clean. Reports:
+output/claude-remediation/WP2_*.md (owner server steps, hashes, rollback, stop and
+restart commands in the implementation report section 6).
+Next: owner review; commit WP2 / push / PRs only on owner instruction; old release
+kits must be rebuilt (public /health check). WP3 not started (needs BD-12).
+
 2026-11-12 AUDIT WP1 IMPLEMENTED (UNCOMMITTED): SIX CUSTOMER-FACING FIXES.
 Worktree .claude/worktrees/wp1-customer-reliability, branch fix/wp1-customer-reliability
 (local, no upstream), base 7b044b3 (app tree = 7eefb9c). Plan:

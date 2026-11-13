@@ -127,7 +127,10 @@ docker compose -f deploy/compose.yml --env-file .env ps     # web, worker on the
 
 ## 8. Health and worker checks
 
-- `curl -fsS https://<SITE_ADDRESS>/health` returns OK.
+- Health, inside the web container (public `/health` answers 404 since audit WP2, MA-014):
+  `docker compose -f deploy/compose.yml --env-file .env exec -T web python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=10).read().decode())"`
+  prints `"status":"ok"` with database and bucket `ok`; `curl -fsS https://<SITE_ADDRESS>/live`
+  answers publicly.
 - `docker compose ... logs --since 5m worker`: `Worker started: ...` with the job types, no
   `Worker not started` (exit 78) and no gazetteer error.
 - `docker compose ... logs --since 5m web`: no traceback.

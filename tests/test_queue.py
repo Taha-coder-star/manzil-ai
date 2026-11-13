@@ -126,6 +126,27 @@ def test_workers_never_overlap_within_a_conversation(queue_db):
     assert {queue_db["row"](a, job_id)[0] for job_id in job_ids} == {"succeeded"}
 
 
+def test_a_stop_during_a_job_finishes_that_job_and_claims_no_other(queue_db):
+    # Audit MA-011 / OH-01: SIGTERM only sets the stop flag (app.worker.run); the running
+    # job completes and is recorded, the next one stays pending for the next start.
+    a = queue_db["a"]
+    first = queue_db["enqueue"](a, "first", CUSTOMER_X)
+    second = queue_db["enqueue"](a, "second", CUSTOMER_Y)
+    stop = threading.Event()
+
+    def handler(conn, job):
+        stop.set()          # the signal arrives while this job runs
+        time.sleep(0.3)
+
+    worker = Worker(queue_db["url"], [a], {"turn": handler}, stop, poll_seconds=0.02)
+    thread = threading.Thread(target=worker.run)
+    thread.start()
+    thread.join(10)
+    assert not thread.is_alive()
+    assert queue_db["row"](a, first)[0] == "succeeded"
+    assert queue_db["row"](a, second)[:2] == ("pending", 0)
+
+
 def test_failing_job_dead_letters_after_max_attempts(queue_db, caplog):
     a = queue_db["a"]
     job_id = queue_db["enqueue"](a, "boom", CUSTOMER_X)
