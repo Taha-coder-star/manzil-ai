@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 MIGRATION_NAME = re.compile(r"^\d{3}_[a-z0-9_]+\.sql$")
 MIGRATION_LOCK_ID = 60172001
+# The production ledger recorded 001/002 from Windows (CRLF) bytes; Git holds LF.
+# Only these exact values are accepted besides the file's own checksum (TD-15).
+HISTORICAL_CHECKSUMS = {
+    "001_schema_v1.sql": frozenset({
+        "ffc7c8c2759f48d2965153884e9e637d8142f0833bd7e03437373a30132d4d9d",
+    }),
+    "002_tenant_rls.sql": frozenset({
+        "5a98bcd6a561623df2d5ba541106a04f512c9c41916d628a7c9ae6ccb879e641",
+    }),
+}
 
 
 class MigrationError(Exception):
@@ -99,7 +109,9 @@ def apply_migrations(database_url):
                     f"Applied migration file is missing: {name}"
                 )
 
-            if available[name] != checksum:
+            if available[name] != checksum and checksum not in HISTORICAL_CHECKSUMS.get(
+                name, ()
+            ):
                 raise MigrationError(
                     f"Applied migration was modified: {name}"
                 )

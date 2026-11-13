@@ -99,6 +99,52 @@ def test_modified_migration_rejected(
         migrate.apply_migrations(database_url)
 
 
+def crlf_checksum(name):
+    lf = (migrate.MIGRATIONS_DIR / name).read_bytes()
+    assert b"\r" not in lf  # otherwise the file itself would match the allowance
+    return migrate.hashlib.sha256(lf.replace(b"\n", b"\r\n")).hexdigest()
+
+
+def record_checksum(database_url, name, checksum):
+    with psycopg.connect(database_url) as conn:
+        conn.execute(
+            "UPDATE schema_migration SET checksum = %s WHERE name = %s",
+            (checksum, name),
+        )
+
+
+@pytest.mark.parametrize("name", ["001_schema_v1.sql", "002_tenant_rls.sql"])
+def test_recorded_crlf_checksum_is_accepted(migration_database, migration_files, name):
+    database_url, _ = migration_database
+    count = migrate.apply_migrations(database_url)[0]
+    # The allowed values are the CRLF form of the Git (LF) files, nothing else.
+    assert migrate.HISTORICAL_CHECKSUMS[name] == {crlf_checksum(name)}
+    record_checksum(database_url, name, crlf_checksum(name))
+
+    assert migrate.apply_migrations(database_url) == (0, count)
+
+
+@pytest.mark.parametrize(
+    ("name", "recorded"),
+    [
+        ("001_schema_v1.sql", "0" * 64),
+        ("002_tenant_rls.sql", "crlf of 001"),
+        ("003_job_conversation_key.sql", "crlf of 001"),
+    ],
+)
+def test_other_recorded_checksums_still_raise(
+    migration_database, migration_files, name, recorded
+):
+    database_url, _ = migration_database
+    migrate.apply_migrations(database_url)
+    if recorded == "crlf of 001":
+        recorded = crlf_checksum("001_schema_v1.sql")
+    record_checksum(database_url, name, recorded)
+
+    with pytest.raises(migrate.MigrationError, match=f"Applied migration was modified: {name}"):
+        migrate.apply_migrations(database_url)
+
+
 def test_failed_migration_rolls_back(
     migration_database, migration_files
 ):
