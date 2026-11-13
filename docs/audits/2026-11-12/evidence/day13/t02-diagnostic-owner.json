@@ -1,0 +1,482 @@
+{
+  "schema": 1,
+  "scope": "day13_T01_T02_attempts",
+  "anchor": "2026-11-11T18:51:55.834069+00:00",
+  "provider_calls": 0,
+  "database_writes": 0,
+  "attempts": [
+    {
+      "id": "T01-attempt-1",
+      "first_attempt_in_sample": true,
+      "received_at": "2026-11-11T18:55:02.762019+00:00",
+      "reply_status": "replied",
+      "sends": [
+        {
+          "ordinal": 1,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "text",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:55:14.691364+00:00",
+          "receipt_to_accepted_ms": 11929.345,
+          "delivered_at": "2026-11-11T18:55:21+00:00",
+          "error_code": null
+        },
+        {
+          "ordinal": 2,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "interactive",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:55:15.391649+00:00",
+          "receipt_to_accepted_ms": 12629.63,
+          "delivered_at": "2026-11-11T18:55:21+00:00",
+          "error_code": null
+        },
+        {
+          "ordinal": 3,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "interactive",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:55:15.991812+00:00",
+          "receipt_to_accepted_ms": 13229.793,
+          "delivered_at": "2026-11-11T18:55:21+00:00",
+          "error_code": null
+        },
+        {
+          "ordinal": 4,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "interactive",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:55:16.513094+00:00",
+          "receipt_to_accepted_ms": 13751.075,
+          "delivered_at": "2026-11-11T18:55:21+00:00",
+          "error_code": null
+        }
+      ],
+      "usage": [
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:55:08.300545+00:00",
+          "input_tokens": 1661,
+          "output_tokens": 102,
+          "thinking_tokens": 217,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:55:09.083193+00:00",
+          "input_tokens": 2071,
+          "output_tokens": 10,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "stop_empty",
+          "created_at": "2026-11-11T18:55:14.087562+00:00",
+          "input_tokens": 2151,
+          "output_tokens": null,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        }
+      ],
+      "recovery": null,
+      "turn_created_at": "2026-11-11T18:55:04.493858+00:00",
+      "completed_at": "2026-11-11T18:55:16.550734+00:00",
+      "replans": 0,
+      "receipt_to_completion_ms": 13788.715,
+      "job": {
+        "status": "succeeded",
+        "attempts": 1,
+        "error_code": null
+      }
+    },
+    {
+      "id": "T02-attempt-1",
+      "first_attempt_in_sample": true,
+      "received_at": "2026-11-11T18:57:07.177968+00:00",
+      "reply_status": "replied",
+      "sends": [
+        {
+          "ordinal": 1,
+          "kind": "failure",
+          "branch": "original",
+          "shape": "text",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:57:22.199669+00:00",
+          "receipt_to_accepted_ms": 15021.701,
+          "delivered_at": "2026-11-11T18:57:23+00:00",
+          "error_code": null
+        }
+      ],
+      "usage": [
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:57:15.012662+00:00",
+          "input_tokens": 1828,
+          "output_tokens": 125,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:57:16.037792+00:00",
+          "input_tokens": 2103,
+          "output_tokens": 10,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "failed",
+          "detail": "http_503",
+          "created_at": "2026-11-11T18:57:21.639108+00:00",
+          "input_tokens": null,
+          "output_tokens": null,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        }
+      ],
+      "recovery": null,
+      "turn_created_at": "2026-11-11T18:57:08.745510+00:00",
+      "completed_at": "2026-11-11T18:57:22.210226+00:00",
+      "replans": 0,
+      "receipt_to_completion_ms": 15032.258,
+      "job": {
+        "status": "succeeded",
+        "attempts": 1,
+        "error_code": null
+      }
+    },
+    {
+      "id": "T02-attempt-2",
+      "first_attempt_in_sample": false,
+      "received_at": "2026-11-11T18:58:15.392482+00:00",
+      "reply_status": "replied",
+      "sends": [
+        {
+          "ordinal": 1,
+          "kind": "interim",
+          "branch": "original",
+          "shape": "text",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:58:33.822411+00:00",
+          "receipt_to_accepted_ms": 18429.929,
+          "delivered_at": "2026-11-11T18:58:35+00:00",
+          "error_code": null
+        },
+        {
+          "ordinal": 2,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "interactive",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:58:35.345677+00:00",
+          "receipt_to_accepted_ms": 19953.195,
+          "delivered_at": "2026-11-11T18:58:38+00:00",
+          "error_code": null
+        },
+        {
+          "ordinal": 3,
+          "kind": "answer_candidate",
+          "branch": "original",
+          "shape": "interactive",
+          "status": "sent",
+          "accepted_at": "2026-11-11T18:58:36.134396+00:00",
+          "receipt_to_accepted_ms": 20741.914,
+          "delivered_at": "2026-11-11T18:58:39+00:00",
+          "error_code": null
+        }
+      ],
+      "usage": [
+        {
+          "provider": "gemini",
+          "model": "gemini-3.5-flash-lite",
+          "operation": "L1",
+          "outcome": "failed",
+          "detail": "timeout",
+          "created_at": "2026-11-11T18:58:26.224606+00:00",
+          "input_tokens": null,
+          "output_tokens": null,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.6-flash",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:58:29.337472+00:00",
+          "input_tokens": 1897,
+          "output_tokens": 105,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.6-flash",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "tool_calls",
+          "created_at": "2026-11-11T18:58:30.261699+00:00",
+          "input_tokens": 2093,
+          "output_tokens": 10,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.6-flash",
+          "operation": "L1",
+          "outcome": "failed",
+          "detail": "timeout",
+          "created_at": "2026-11-11T18:58:33.209296+00:00",
+          "input_tokens": null,
+          "output_tokens": null,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        },
+        {
+          "provider": "gemini",
+          "model": "gemini-3.6-flash",
+          "operation": "L1",
+          "outcome": "succeeded",
+          "detail": "stop",
+          "created_at": "2026-11-11T18:58:34.678817+00:00",
+          "input_tokens": 2174,
+          "output_tokens": 14,
+          "thinking_tokens": null,
+          "cached_input_tokens": null
+        }
+      ],
+      "recovery": null,
+      "turn_created_at": "2026-11-11T18:58:17.820047+00:00",
+      "completed_at": "2026-11-11T18:58:36.163017+00:00",
+      "replans": 0,
+      "receipt_to_completion_ms": 20770.535,
+      "job": {
+        "status": "succeeded",
+        "attempts": 1,
+        "error_code": null
+      }
+    }
+  ],
+  "engine_summaries": [
+    {
+      "attempt": "T01-attempt-1",
+      "route": "customer",
+      "outcome": "done",
+      "detail": "stop",
+      "provider_calls": 3,
+      "tools": [
+        "update_requirements",
+        "search_properties"
+      ],
+      "engine_elapsed_ms": 9217
+    },
+    {
+      "attempt": "T02-attempt-1",
+      "route": "customer",
+      "outcome": "failed",
+      "detail": "http_503",
+      "provider_calls": 3,
+      "tools": [
+        "update_requirements",
+        "search_properties"
+      ],
+      "engine_elapsed_ms": 12435
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "route": "customer",
+      "outcome": "done",
+      "detail": "stop",
+      "provider_calls": 5,
+      "tools": [
+        "update_requirements",
+        "search_properties"
+      ],
+      "engine_elapsed_ms": 16492
+    }
+  ],
+  "provider_attempt_timings": [
+    {
+      "attempt": "T01-attempt-1",
+      "iteration": 1,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 3393,
+      "input_tokens": 1661,
+      "cached_input_tokens": null,
+      "output_tokens": 102,
+      "thinking_tokens": 217
+    },
+    {
+      "attempt": "T01-attempt-1",
+      "iteration": 2,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 727,
+      "input_tokens": 2071,
+      "cached_input_tokens": null,
+      "output_tokens": 10,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T01-attempt-1",
+      "iteration": 3,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "succeeded",
+      "detail": "stop_empty",
+      "provider_ms": 4864,
+      "input_tokens": 2151,
+      "cached_input_tokens": null,
+      "output_tokens": null,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-1",
+      "iteration": 1,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 5786,
+      "input_tokens": 1828,
+      "cached_input_tokens": null,
+      "output_tokens": 125,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-1",
+      "iteration": 2,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 980,
+      "input_tokens": 2103,
+      "cached_input_tokens": null,
+      "output_tokens": 10,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-1",
+      "iteration": 3,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "failed",
+      "detail": "http_503",
+      "provider_ms": 5513,
+      "input_tokens": null,
+      "cached_input_tokens": null,
+      "output_tokens": null,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "iteration": 1,
+      "branch": "primary",
+      "model": "gemini-3.5-flash-lite",
+      "outcome": "failed",
+      "detail": "timeout",
+      "provider_ms": 8000,
+      "input_tokens": null,
+      "cached_input_tokens": null,
+      "output_tokens": null,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "iteration": 1,
+      "branch": "failover",
+      "model": "gemini-3.6-flash",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 3102,
+      "input_tokens": 1897,
+      "cached_input_tokens": null,
+      "output_tokens": 105,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "iteration": 2,
+      "branch": "failover",
+      "model": "gemini-3.6-flash",
+      "outcome": "succeeded",
+      "detail": "tool_calls",
+      "provider_ms": 881,
+      "input_tokens": 2093,
+      "cached_input_tokens": null,
+      "output_tokens": 10,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "iteration": 3,
+      "branch": "failover",
+      "model": "gemini-3.6-flash",
+      "outcome": "failed",
+      "detail": "timeout",
+      "provider_ms": 2860,
+      "input_tokens": null,
+      "cached_input_tokens": null,
+      "output_tokens": null,
+      "thinking_tokens": null
+    },
+    {
+      "attempt": "T02-attempt-2",
+      "iteration": 3,
+      "branch": "failover:c",
+      "model": "gemini-3.6-flash",
+      "outcome": "succeeded",
+      "detail": "stop",
+      "provider_ms": 845,
+      "input_tokens": 2174,
+      "cached_input_tokens": null,
+      "output_tokens": 14,
+      "thinking_tokens": null
+    }
+  ],
+  "log_capture_succeeded": true,
+  "source_sha256": "2d2fda1a126e1f308d81b9f6b4bb9d1c5a0f895fb0006e294b976a8adacdb742",
+  "image": "sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a",
+  "config_sha256": "34d4b870796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60",
+  "limitations": [
+    "Do not replace T02 first attempt with its resend.",
+    "Provider/engine log timings are stage timings, not handset delivery latency.",
+    "No log match is unknown, not evidence that a provider call never happened.",
+    "An answer_candidate still needs substantive-response review; failure and interim are explicitly distinguished."
+  ]
+}

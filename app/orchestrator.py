@@ -98,6 +98,9 @@ TURN_FAILED = "turn_failed"
 # reply): TEMPLATES["failure"] under turn:{id}:failed, through the send-time gate.
 FAILED_NOTICE_SUFFIX = "failed"
 INTERIM_SUFFIX = "interim"
+# Audit MA-010: a customer turn of only these (a thumbs-up, a poll, a system notice) has
+# nothing to answer or forward; it is closed silently, as the staff buffer does.
+NO_CONTENT_TYPES = staff_buffer.IGNORED_TYPES | {"system"}
 # Reply ids of the listing cards (app.cards). The id is client-supplied: only this exact
 # shape is ever echoed back.
 TAP_ID = re.compile(r"(photos|visit|similar|listing):([A-Z0-9]{2,4}-[0-9]{3})")
@@ -760,6 +763,12 @@ def answer_turn(conn, client, job, turn, *, engine=None):
 
 
 def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, storage=None):
+    if (turn.route == "customer" and turn.messages
+            and all(m.type in NO_CONTENT_TYPES for m in turn.messages)):
+        # Before the gate: a reaction during a handoff is neither forwarded nor answered.
+        close_turn(conn, turn, "replied")
+        logger.info("Turn %s ignored (no content)", turn.id)
+        return
     if not turn.ai_allowed:
         # Control-state gate: no AI output. Task 11.2 (R-28): while a handoff is open, a
         # customer's messages (voice as its transcript) go to whoever holds it, plus one

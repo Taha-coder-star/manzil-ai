@@ -8,7 +8,9 @@ connection and the lease reaper requeues the job.
 
 Ordering note: a job waiting on retry backoff does not block newer jobs of the
 same conversation. The conversation orchestrator (C3) coalesces all pending
-messages of a turn in WhatsApp timestamp order, so this is safe.
+messages of a turn in WhatsApp timestamp order, so this is safe. Jobs of a busy
+conversation do not block other conversations either: claim_job re-queries past
+them (audit MA-004); among free conversations the oldest due job still wins.
 
 Never log job payloads or exception messages; they can contain customer data.
 """
@@ -26,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 STATEMENT_TIMEOUT = "5s"
 CLAIM_BATCH = 10
+MAX_CLAIM_PASSES = 20   # safety cap on claim_job's re-queries past busy conversations
 DEFAULT_LEASE_SECONDS = 300
 BACKOFF_BASE_SECONDS = 5
 BACKOFF_CAP_SECONDS = 300
@@ -136,43 +139,57 @@ def enqueue_job(
 def claim_job(conn, agency_id, job_types, locked_by, lease_seconds=DEFAULT_LEASE_SECONDS):
     """Claim the oldest due job of the given types whose conversation is free.
 
+    Candidates come CLAIM_BATCH at a time; when every candidate's conversation is
+    busy (its lock is held), the next pass excludes those conversations, so one
+    busy conversation with many waiting jobs cannot hide another's (audit MA-004).
+    Each unproductive pass adds at least one busy conversation, and only running
+    jobs hold locks, so passes stay few; MAX_CLAIM_PASSES is a safety cap.
+
     On success the caller holds the conversation lock (if the job has a key)
     and must release it through finish_job.
     """
     locked_key = None
+    busy = []
     try:
         with tenant_transaction(conn, agency_id):
             _set_timeout(conn)
-            candidates = conn.execute(
-                """
-                SELECT id, conversation_key FROM job
-                WHERE status = 'pending' AND available_at <= now()
-                  AND job_type = ANY(%s)
-                ORDER BY available_at, created_at
-                LIMIT %s
-                FOR UPDATE SKIP LOCKED
-                """,
-                (list(job_types), CLAIM_BATCH),
-            ).fetchall()
-            for job_id, key in candidates:
-                if key is not None:
-                    if not try_lock_conversation(conn, agency_id, key):
-                        continue
-                    locked_key = key
-                row = conn.execute(
-                    f"""
-                    UPDATE job SET
-                        status = 'running',
-                        attempts = attempts + 1,
-                        locked_at = now(),
-                        locked_by = %s,
-                        lease_expires_at = now() + make_interval(secs => %s)
-                    WHERE id = %s
-                    RETURNING {_JOB_COLUMNS}
+            for _ in range(MAX_CLAIM_PASSES):
+                candidates = conn.execute(
+                    """
+                    SELECT id, conversation_key FROM job
+                    WHERE status = 'pending' AND available_at <= now()
+                      AND job_type = ANY(%s)
+                      AND (conversation_key IS NULL OR conversation_key <> ALL(%s::text[]))
+                    ORDER BY available_at, created_at
+                    LIMIT %s
+                    FOR UPDATE SKIP LOCKED
                     """,
-                    (locked_by, lease_seconds, job_id),
-                ).fetchone()
-                return Job(*row)
+                    (list(job_types), busy, CLAIM_BATCH),
+                ).fetchall()
+                if not candidates:
+                    return None
+                for job_id, key in candidates:
+                    if key is not None:
+                        if not try_lock_conversation(conn, agency_id, key):
+                            busy.append(key)
+                            continue
+                        locked_key = key
+                    row = conn.execute(
+                        f"""
+                        UPDATE job SET
+                            status = 'running',
+                            attempts = attempts + 1,
+                            locked_at = now(),
+                            locked_by = %s,
+                            lease_expires_at = now() + make_interval(secs => %s)
+                        WHERE id = %s
+                        RETURNING {_JOB_COLUMNS}
+                        """,
+                        (locked_by, lease_seconds, job_id),
+                    ).fetchone()
+                    return Job(*row)
+            logger.warning("Claim stopped after %d passes over busy conversations",
+                           MAX_CLAIM_PASSES)
         return None
     except BaseException:
         # Session locks survive a rollback; release one taken for an unclaimed job.

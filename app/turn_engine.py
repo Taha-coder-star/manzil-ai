@@ -517,14 +517,15 @@ def render_customer(outcome, customer):
     the results line already says, is not repeated. Every payload passes the grounding
     check (D4, ground_customer)."""
     language, gazetteer = customer.language, customer.gazetteer
+    if getattr(customer, "handoff", None) is not None:
+        # Task 11.1 / audit MA-002: once a handoff was opened the conversation is
+        # handoff_pending, whatever happened afterwards (a later round failed or refused);
+        # the handoff message (sent past the gate) is the whole reply. Anything else would
+        # be an AI message the gate drops, and a dropped payload stops the plan.
+        return [customer.handoff]
     if outcome.kind != "done":
         key = "refusal" if outcome.kind == "refused" else "failure"
         return [whatsapp.text(_template(key, language))]
-    if getattr(customer, "handoff", None) is not None:
-        # Task 11.1: the conversation is now handoff_pending; the handoff message (sent
-        # past the gate) is the whole reply. Anything else would be an AI message the
-        # gate drops, and a dropped payload stops the plan before the handoff message.
-        return [customer.handoff]
     keys = list(dict.fromkeys(outcome.notices))
     if customer.asked:  # one question per turn: the clarification with answer buttons
         keys = [k for k in keys if _key(k) not in customer_tools.QUESTIONS]
@@ -715,9 +716,11 @@ class TurnEngine:
             payloads = render_customer(outcome, customer)
         else:
             payloads = ground_reply(render(turn.route, outcome), outcome.trusted)
-        # The round limit is not stored on the turn (it is 'replied'); WARNING makes it visible.
+        # The round limit and a salvaged failed round are not stored on the turn (it is
+        # 'replied'); WARNING makes them visible.
         logger.log(
-            logging.WARNING if outcome.detail.startswith("iteration_limit") else logging.INFO,
+            logging.WARNING if outcome.detail.startswith(("iteration_limit", "round_failed"))
+            else logging.INFO,
             "AI turn %s: %s %s/%s, %d provider call(s), tools [%s], %d ms",
             turn.id, turn.route, outcome.kind, outcome.detail, outcome.calls,
             ", ".join(outcome.tools), int((self._clock() - start) * 1000),
@@ -846,8 +849,10 @@ class TurnEngine:
                 iteration -= 1  # the same iteration again, in the continuation
                 continue
             if error is not None:
-                return Outcome("failed", error, tuple(notices), tuple(tools), calls,
-                               recoverable=active is None and budget.recovery_candidate)
+                return self._salvage(context, tools, notices, payloads, trusted, calls,
+                                     error) or Outcome(
+                    "failed", error, tuple(notices), tuple(tools), calls,
+                    recoverable=active is None and budget.recovery_candidate)
             if response.kind == "refused":
                 return Outcome("refused", response.detail, (), tuple(tools), calls)
             if response.kind == "text":
@@ -862,7 +867,9 @@ class TurnEngine:
                 return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                                tuple(payloads), frozenset(trusted))
             if response.kind != "tool_calls":
-                return Outcome("failed", response.detail, (), tuple(tools), calls)
+                return self._salvage(context, tools, notices, payloads, trusted, calls,
+                                     response.detail) or Outcome(
+                    "failed", response.detail, (), tuple(tools), calls)
             results = [ai_tools.execute(call, context) for call in response.tool_calls]
             for result in results:
                 tools.append(result.name if result.ok else f"{result.name}!{result.error}")
@@ -883,6 +890,20 @@ class TurnEngine:
             self._code_search(context, tools, notices, payloads, trusted)
             detail = "iteration_limit_search"
         return Outcome("done", detail, tuple(notices), tuple(tools), calls,
+                       tuple(payloads), frozenset(trusted))
+
+    def _salvage(self, context, tools, notices, payloads, trusted, calls, error):
+        """Audit MA-003: a customer round that fails after a completed tool round keeps
+        what the tools produced (with the code search the round-limit path runs), or None
+        for the failure outcome. Staff keep the failure text: a partly read segment with
+        no notice would hide the listings that were lost."""
+        if context.route != "customer" or not tools:
+            return None
+        if self._search_due(context, tools):
+            self._code_search(context, tools, notices, payloads, trusted)
+        if not (payloads or notices):
+            return None
+        return Outcome("done", f"round_failed:{error}", tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
 
     @staticmethod

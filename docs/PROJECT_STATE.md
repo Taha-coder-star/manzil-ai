@@ -1,3 +1,513 @@
+2026-11-12 AUDIT WP1 IMPLEMENTED (UNCOMMITTED): SIX CUSTOMER-FACING FIXES.
+Worktree .claude/worktrees/wp1-customer-reliability, branch fix/wp1-customer-reliability
+(local, no upstream), base 7b044b3 (app tree = 7eefb9c). Plan:
+output/claude-remediation-plan/ (IMPLEMENTATION_SEQUENCE WP1, TD-02..TD-08); owner
+BD-1/BD-2/BD-4 defaults approved. Code only, no migration (next free number 021).
+MA-002 render_customer: handoff message first for every outcome kind.
+MA-003 TurnEngine._salvage: customer route, tool round done, later provider error or
+malformed answer -> tool output (+ code search) as done/round_failed; staff unchanged.
+MA-010 orchestrator._answer: reaction/unsupported/system-only customer turn closed
+replied before the gate (no reply, no forward, no holding reply, no model call).
+MA-004 queue.claim_job: re-query excluding busy conversation keys, max 20 passes.
+MA-005 handoff.forward_turn: holding_unsent wording unless a forward was sent.
+MA-001 handoff_actions.expire (round 2 via handlers): pending -> released, lead closed,
+ai_active; customer cta_url + staff/admin notices once each (handoff:{id}:expired*).
+Tests: 27 new (tests/test_audit_regressions_db.py 13, test_queue 5, test_turn_engine 4,
+test_customer_tools 5); 2 existing expectations changed (MA-001, MA-005; quoted in
+report). Full image run 4097: 4079 passed, 7 skipped, 1 failed + 10 errors = the 11
+git-only baseline cases; host git tests 16 passed; Ruff clean; audit proofs: 6
+behaviour proofs fail, catalog passes. Reports: output/claude-remediation/WP1_*.md.
+Not committed/pushed/deployed. Rollout: pending prod handoffs not healed (OPEN_ISSUES).
+Next: owner review; commit/PR only on owner instruction; WP2 not started.
+
+2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
+Owner requested pushing Claude prompts and remaining work. GitHub network access
+is blocked in this agent session; remote publication is not yet claimed.
+Portable tracked pack: docs/audits/2026-11-12/README.md (three prompts, project
+brief, coverage/template, selected sanitized Day13 evidence and archived operators).
+Pending PROJECT_STATE/TASK_LOG/OPEN_ISSUES notes included. No app/migration/test/
+runtime changes, private recordings, raw historical exports, .env, source/release
+ZIPs or unrelated untracked local test directories selected.
+Day13 remains open by owner direction; runtime known low/image976dff195d20/schema020.
+Next publish isolated docs branch through normal authenticated PowerShell; exact
+head/remote verification required. No force push, merge, deployment or AWS action.
+
+2026-11-12 OWNER KEEPS DAY13 OPEN; INDEPENDENT SYSTEM AUDIT PREPARATION.
+Owner will address Day13 gaps later and now prioritizes a senior engineering audit
+of built behavior, bugs, architecture, and single/multiple-agency client readiness.
+Prepared ../output/claude-system-audit context brief and three staged prompts:
+context -> comprehensive audit -> challenge/readiness/remediation handoff.
+This is an audit setup, not a completed audit or a finding of production readiness.
+Source snapshot is current tracked working-tree bytes on local HEAD7eefb9c; current
+operational doc edits included. Latest known owner runtime remains low on976dff195d20,
+schema020; no new runtime access, provider calls, tests, app edits, push/merge or AWS
+actions. Day13 gates remain unwaived; no conditional closeout accepted.
+Local archive ../output/manzil-ai-audit-input-2026-11-12.zip includes tracked source
+(except .env.example), context/evidence summaries and per-file hashes; excludes .git,
+real env/credentials, raw audio/screenshots, untracked output kits/caches/worktrees.
+Claude Code can use actual workspace and Git history; web-chat ZIP has no full history.
+Newest brief overrides historical deployment notes; exact source and evidence must
+still be checked by the auditor. External RFC PDFs and deployed settings not reverified.
+Next owner gives Claude 00_START_HERE and prompts02/03/04 in order. Findings must be
+validated and separated from accepted demo policy, missing features and evidence gaps.
+
+2026-11-12 LOW RESTORED; MINIMAL EXPERIMENT ENDED, ACCEPTANCE DECISION PENDING.
+Owner returned DAY13-LOW-EFFORT-RESTORED, receipt recorded at
+2026-11-11T19:53:16.277923+00:00 (00:53 PKT Nov12). Same image976dff195d20,
+baseline config34d4b870796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60.
+Operator provider calls/database writes zero; .env not edited; trial evidence retained.
+Receipt ../output/day13-closeout/minimal-trial-restored-low-owner.json.
+Low ACTIVE; minimal not adopted. Prior minimal/current low samples remain separate;
+do not resume original closed measurement windows or repeat the same cohort.
+Comparison complete, targeted latency unmet; eight text/six voice unrun preserved.
+Day13 remains open: explicit owner decision needed on concrete remaining gap draft
+../output/day13-closeout/remaining-decisions.md (latency, voice, cache, cost, fullRun2).
+Can fix gaps or accept conditional closeout with each deferral recorded; no critical
+threshold pass, paid fallback, or waiver is inferred from the restoration receipt.
+No further same-cohort timing tests or AWS changes are pending from this experiment.
+
+2026-11-12 MINIMAL COMPARISON COMPLETE; TARGET UNMET, RESTORE LOW RECOMMENDED.
+Owner-returned send review imported with pinned b8ba0146 source/runtime/anchor.
+T01 first substantive Meta acceptance 11533.570ms (low11929.345); T02 7161.561ms
+(low original failed503). Both exceed7s, six minimal primary calls succeeded;
+two turns cannot establish general causality or a completed percentile.
+T02 6685.912ms is purpose_inferred notice, excluded. Carousel summary accepted
+7161.561/delivered11059.594ms; #3 accepted7734.299/delivered10059.594ms.
+No later fallback rows: application accepted in order; delivery receipts reversed
+carousel/#3 by one second. Screenshot order explained, not confirmed app bug.
+With two values>7s, fixed10 nearest-rank p90 lower bound7161.561ms even if eight
+remaining instant. Not a completed percentile. Stop additional cohort samples;
+8text/6voice retained unrun. Earlier accidental/coalesced input excluded by explicit
+owner direction and retained; no clear-all acknowledgement inferred.
+Restore same-image low recommended via ../output/day13-minimal-restore-low.sh;
+runtime STILL minimal until owner restoration receipt. Permanent adoption false.
+Comparison result ../output/day13-closeout/minimal-comparison-result.md.
+Concrete remaining decision draft ../output/day13-closeout/remaining-decisions.md:
+text latency, current voice, cache, cost, full Run2 evidence gaps need fix or explicit
+owner deferral/conditional acceptance. Not waived or Day13 closed by this review.
+No further diagnostic/test campaign needed to conclude this effort experiment.
+
+2026-11-12 MINIMAL DIAGNOSTIC IMPORTED; OFFICE STILL 11.53 SECONDS.
+Pinned source/image/config/plan/anchor verified in owner-returned sanitized JSON.
+Two office textmatches: owner explicitly identifies earlier 00:38:54 input as a
+mistake to ignore. Excluded from planned comparison, retained as protocol deviation;
+its 2.004s single reply/no-usage is NOT claimed as fast search or clear-all ack.
+Planned office T01 at 00:39:41: first substantive Meta acceptance 11533.570ms
+(low11929.345ms), last13081.894ms; three calls/engine8645ms. Single comparison
+does not establish effort benefit; this turn remains above7s. T02 three primary
+successes, no errors; first text6685.912ms, interactive7161.561/7734.299ms.
+Screenshot first text is assumption notice; do not call6.69s substantive latency.
+Existing diagnostic omits later carousel-fallback keys, so card ordering and actual
+substantive acceptance need focused existing-record review, no new input/calls.
+Prepared ../output/day13-minimal-send-review.sh: restricted read-only, exact actor
+and saved anchor; classify notices/known fixture codes, original and linked later
+fallback receipts; no raw payloads/phone/UUID. Compile/classification/redaction/LF/
+bash syntax checks passed. Actual owner execution pending. All cached/thinking
+counts null, not zero; no dollar cost or percentile pass. Minimal remains temporary.
+Next owner copy/paste send-review wrapper; hold further samples.
+Evidence ../output/day13-closeout/minimal-comparison-analysis.json.
+
+2026-11-12 MINIMAL T02 RESULTS VISIBLE; EXACT COMPARISON PENDING.
+Owner screenshot shows original T02 and expected DH6-102 8 crore, DH6-101 7.8
+crore, DH7-101 7.5 crore; 500 sq yd and nearby Phase 7 labelled. No failure
+visible. Purchase-assumption notice followed by #3 coverless card ABOVE summary,
+then #1/#2 photo cards. Preserve ordering observation; send/delivery order pending.
+Displayed 00:41 PKT is minute precision, not a measured latency. Two minimal
+text observations, zero measured timings; no percentile or improvement claim.
+Next: copy ../output/day13-minimal-diagnostic.sh in normal PowerShell, paste into
+EC2 and return JSON. Read-only, no provider calls or database writes. Hold further
+samples until exact comparison review. Low cohort and original failure unchanged.
+Evidence ../output/day13-closeout/minimal-t02-owner-observation.json.
+
+2026-11-12 MINIMAL T01 FUNCTIONAL RESULT OBSERVED; TIMING PENDING.
+Owner pasted four bot replies displayed 00:39 PKT. Expected office results match:
+DH6-108 5 lakh/month, PEC-101 5.5 lakh/month, SHF-101 4.5 lakh/month.
+Minute-resolution chat times cannot establish latency or improvement. Original
+inbound/setup acknowledgement not returned; exact server correlation pending.
+Separate minimal cohort retained; low baseline failure/resend remains unchanged.
+Next: at least 60 seconds after T01, send T02 once in same chat WITHOUT clear:
+DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak
+Return response, then run prepared scoped minimal read-only diagnostic for times.
+No latency/cost/cache acceptance, permanent adoption or Day13 closure inferred.
+Evidence ../output/day13-closeout/minimal-t01-owner-observation.json.
+
+2026-11-12 MINIMAL-EFFORT TRIAL ACTIVE; FIRST SAMPLE PENDING.
+Owner returned DAY13-MINIMAL-TRIAL-READY. Same image 976dff195d20; effort minimal;
+config c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a.
+New window 2026-11-11T19:34:20.530416+00:00 (00:34:20 PKT, November 12).
+HTTPS healthy; customer ...2614 AI active, no blockers, global jobs/turns zero;
+public29 and hidden fixtures absent. Operator provider calls/database writes zero;
+.env unchanged. Owner evidence: ../output/day13-closeout/minimal-trial-ready-owner.json.
+Low baseline/results and original anchor retained separately. Minimal is a trial,
+not permanent adoption or a latency/cost/cache/Run2 pass. No new samples yet.
+Next: customer ...2614 sends clear all, waits for acknowledgement, then T01 once:
+office on rent in Karachi, around 5 lakh per month
+Return bot response; do not rerun switch or replace an unsuccessful first attempt.
+Scoped minimal diagnostic and same-image low restore remain prepared.
+
+2026-11-12 OWNER AUTHORIZES MINIMAL-EFFORT COMPARISON; OPERATOR READY, NOT RUN.
+Explicit Try the minimal-effort comparison. Prepared17focusedoffline checksPASS,
+including fullenvironment preservation, no.env edit/oldanchorchange, idempotent
+candidateanchor, explicitlowrestore, partialswitch/posthealth auto-restoration,
+drift/busy/tag/budget refusals and rollbackattention. ThreeLF wrappersbash-nPASS.
+No actualDocker/Compose/AWS/provider execution here; these are mocked/operator
+checks, not another product/fullpytest campaign. Application bytes unchanged.
+Next ../output/day13-minimal-trial.sh copiednormalPowerShell/rawclipboard then
+pastewholeblockUbuntuEC2, keepchatquiet duringrecreation. Pinned976dff tag andall
+effectiveenv comparedprivately; onlyLLM_THINKING_LEVELlow->minimal allowed in
+temporaryComposeoverride bothservices; .env stayslow. BudgetoverrideOFF kept.
+Globaldemo processingjobs/openturns+actor/fixtures/HTTPS/worker checks before/after.
+FailurepostmutationrestoresLOW sameimage; NEVER usesoldimage rollback. Explicit
+restore wrapper day13-minimal-restore-low.sh; scopedread-only comparison wrapper
+day13-minimal-diagnostic.sh prepared from unchanged provenchildsource.
+CandidateconfigSHA c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a.
+FrozenminimalplanSHA4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748.
+OperatorSHA4daad3c7d81f072bb6d22e4ddd7d39c51786536bb94bbf3af623520cfac7aac7.
+HosttrialDIR /home/ubuntu/day13-closeout/effort-trial-7eefb9c. Newminimal-session
+anchor savedonce; originalLOWtiming-active.json/failure/resend preserved. Normal
+baseCompose withouttrialoverride returnsLOW; do not mixrestarts/configcohorts.
+WhenDAY13-MINIMAL-TRIAL-READY owner...2614clear all/waitack then T01exactoffice
+on rent in Karachi, around 5 lakh per month, ONCE. Returnoperatoroutput+botreply.
+FirstcomparisonT01/T02; onlythen reviewcontinuingcandidate. No lowvoice baseline
+exists; no pairedvoice improvement claim. No35notecollection, provider/model/
+billing/schema/roles/inventory change or fullRun2/cost/cache waiver. Permanent
+adoption remainsfalse, actualcurrentruntime stillLOW until ownerREADY evidence.
+Runbook ../output/day13-closeout/minimal-trial-runbook.md; approvalreceiptJSON.
+
+2026-11-12 T02 DIAGNOSTIC VERIFIED: CURRENT LOW BASELINE CANNOT MEET TEXT P90.
+Owner-returned JSON imported/sourcechecksum+image/config/anchor verified; private
+clipboard content not emitted. ../output/day13-closeout/t02-diagnostic-owner.json.
+T01firstsubstantive11929.345ms;3calls/engine9217ms/provider8984ms, laststop_empty
+4864ms. T02firstonlyfailure apology15021.701ms; toolsupdate+search succeeded,
+thirdcallHTTP5035513ms. No429observed. Noai_recovery row: failure after active
+tool/model, not initial-both-provider failure. Resend is NEWturn, firstsubstantive
+19953.195ms; primarytimeout8000 thenfailover;5calls, engine16492ms; interim18429.929
+isNOTSLAboundary. OriginalT02infinity preserved, resendextra(notreplacement).
+For fixedn10nearest-rankp90, T01>7s +T02failed make targetunattainable evenif8
+remaininginstantaneous: bestpossiblep90>=11929.345ms. NOT a fullymeasuredp90;
+baseline incomplete,8text/6voice unrun. Pausequota spending pending tuning choice.
+Sourceinspection: finalmodelround mayrequestfurther tools/compoundactions; no
+blind early-exit patch. T01minus4.864s onlycounterfactual7.065345s, notpassingproof.
+Prepared one-setting minimal-effort candidate +ComposeJSON/lowrestore overlays;
+no app/runtime/env changes. Same976dff/providers/schema; officialGenerateContent
+thinkingdoc verifies both configuredmodels supportminimal. Local bodycheck only
+thinking config changes. Candidatehash inminimal-trial.proposed.json, NOTadopted.
+Report low-baseline-findings.md; ownerchoice required because approvedplanpinslow:
+separate minimaltrial onT01/T02 thencontinuecandidate ifvalid, orfinishoriginal
+unchanged batch. No guarantee minimal fixes503s. No fullRun2/cost/cache waiver.
+Runtime remainsGemini-low/config34d4/976dff/schema020; no deploy/AWS mutation.
+
+2026-11-12 T02 FIRST ATTEMPT FAILED; USER RESEND VISIBLE; PAUSE BEFORE T03.
+Owner screenshots:11Nov23:57PKT exactT02 -> processingfailure apology; at23:58
+samequeryresent, interimthen correct10280m/10178m/710175mnearby summary/cards.
+Originalfailure remains cohort observation; resend is extra, NOT a replacement.
+Could be newturn or earlier automaticrecovery; correlation/elapsed/rootcause NOT
+established by screenshots. Do not assert quota exhaustion or code bug yet.
+Progress2text/0voice +1extraresend; nextT03PAUSED, not a new fulltest campaign.
+Prepared ../output/day13-t02-diagnostic.sh: pinned currentimage/config +existing
+sessionplan/anchor; restricted READONLY exactactor T01/T02 textmatches only,
+turn/outbound/job/usage/recovery state, structured code-only worker-log summaries
+and provider timings. PrivateUUIDs used onlyinternally then stripped, no phones/
+messagebodies/transcripts/toolargs/rawlogs exported. No providercalls/DBwrites,
+roles/service/settings changes or simulated failure. Saves root0600 hostJSON.
+Offline read-only/refusal-shape/redaction/failure-template/unknown-token/logregex/
+compile/LF checksPASS. Actual diagnostic execution PENDING owner EC2. Nextcopy
+output/day13-t02-diagnostic.sh via normalPowerShell Get-Content -Raw|Set-Clipboard,
+pasteentireblockEC2 andreturn output; no further messages/reset/anchor restart.
+No additional samples: onlyT01,T02first plusT02resend observed. Formal
+p50/p90/cost/cache notpassed; no new provider/model/effort/fallback adoption.
+
+2026-11-11 TIMING SAMPLE T01 OWNER REPLY OBSERVED; PRECISE LATENCY PENDING.
+T01 owner23:55PKT botreply: office/rent/Karachi/around5lakh summary, exactDH6-108
+500000/mo,PEC-101550000/mo,SHF-101450000/mo; three correct coverless cards.
+Functional result matches; four visible substantive parts. Minute-level reply
+times do NOT establish latency. Original query/clear acknowledgement not pasted;
+do not infer their exact timestamps or require a repeat merely for that omission.
+Progress ../output/day13-closeout/timing-progress.json;1text/0voice observed,
+0exact primary latency values yet. No phone number/message UUID persisted.
+Next after60s from final reply, same...2614chat WITHOUT clear/reset: T02 exactly
+DHA Phase 6 mein 500 gaz ka ghar, budget aath crore tak. Preserve first attempt,
+anchor2026-11-11T18:51:55.834069UTC, frozenplan/config/runtime. No repeatedT01.
+Read precise timing from scoped server records later; p50/p90/cost/cache still
+unverified. No source/deploy/roles/inventory/guard/billing change by agent.
+
+2026-11-11 TIMING PREFLIGHT READY VERIFIED FROM OWNER EC2 OUTPUT.
+Readytrue/blockersnone; ...2614customer/AI-active/unmuted; actorhandoffs/open turns/
+processingjobs all0; public29/hidden0; both976dff/config34d4 matches/HTTPShealthOK.
+Pinnedwindow2026-11-11T18:51:55.834069+00:00 (23:51:55PKT); originalanchor saved
+at /home/ubuntu/day13-closeout/timing-active.json. Preflight made0providercalls/
+0DBwrites. Receipt ../output/day13-closeout/timing-preflight-owner.json; exact
+plan/preflight SHA match verified locally. No live sample/latency result yet.
+TrailingEC2 > prompts after completion look like unfinished pasted shell input;
+Ctrl+C once returns normalprompt, without rerunning or replacing savedsession.
+Next approved action WhatsApp...2614: clear all as standalone setup; waitforack;
+T01 exactly office on rent in Karachi, around 5 lakh per month. Return botreply.
+Do NOT send T01 inEC2, resetdata/roles/redeploy, restartpreflight toresetanchor,
+or send repeated samples. Saved24hcustomerwindowfalse ispre-inbound observation;
+this isowner-initiated WhatsApp testing, not outbound template setup. Keepallfirst
+attempts/failures. Cases10text/6voice and currentloweffort/config unchanged.
+No new billing/guard activation or AWS mutation. Day13acceptance stillpending.
+
+2026-11-11 OWNER APPROVED TARGETED CURRENT-BUILD TIMING CHECK.
+Explicit reply: Proceed with that timing check. Scope10text+6shortvoice only;
+prior functional/broker/silence/81s evidence retained, no35note recollection.
+Frozen plan ../output/day13-closeout/timing-plan.approved.json; checksum in
+timing-session-preparation.json. Human script timing-check.approved.md. This
+doesnot waive cost/cache/fullRun2 numeric coverage or approve a new model/effort.
+Prepared ../output/day13-timing-start.sh, LF-only: exact976dff/image34d4config on
+both services, HTTPS health, restricted READONLY REPEATABLE READ tenant query;
+checks ...2614 remains customer/AI-active/unmuted, no actor openhandoff/open turn/
+processing jobs, public29/hidden exclusion. No role/control/data repair attempted.
+On READY saves0600 /home/ubuntu/day13-closeout/timing-active.json with UTCanchor/
+planhash/image/config/maskedactor/runtime-starts; repeat preserves originalanchor.
+No DB writes/providercalls/restarts. Offline ready/private-ID-redaction/humanmode/
+handoff/job/hiddenfixture/staffroute refusal and compile/LF checksPASS. Actual
+EC2 readiness and all16samples remain PENDING; no real DB/provider tests here.
+If READY owner may proceed directly: send clear all from ...2614, wait forclear
+acknowledgement; then T01 office on rent in Karachi, around5lakh per month (exact
+spaced script in approved guide). Return readiness output and bot response. No
+extra permission required for this approved sample. Space measured trials60s
+after final replies, keep firstattempt/failures; don't resetanchor or repeatfast.
+Existing free accounts retained, no billing upgrade/paidguard activation; incomplete
+policy not activated. Observer export is scoped to later selected samples, not
+another historical-audit replay. Cached unknown/dollar gaps still recorded.
+Current7eefb9c/Gemini-low/schema020 preserved; no deploy/migration/AWS mutation.
+
+2026-11-11 DAY13 AUDIT DATA RECEIVED/DECODED/INTEGRITY VERIFIED.
+Imported complete owner-returned line via local clipboard (no unrelated clipboard
+content emitted); zlibEOF/CRC+JSON shape/sourcechecksum/runtime image+config checks
+PASS. Saved ../output/day13-closeout/owner-audit-0e188e39a202.json, SHA256
+0e188e39a2026acd7ddef6713a46ca1f5cafec288b8853931c53283b3f51d7c5.
+Latest500of505 turns sinceNov3:264staff/44broker/192customer. Omitted5areoldest,
+not current timing. LastturnNov09T10:17:41UTC; ZERO turns in pinned currentruntime
+window sinceNov10T17:35:06UTC. Thus no current-build p50/p90 is established.
+46customer voice notes ALL stored/audiohash/durationpresent;45transcribed/1no_speech,
+total313.44s/max80.86s. Reuse eligible real audio; no blanket35note rerecording.
+Speaker/device/noise/case assignment and human gold coverage NOT established.
+483LLM usage rows:424inputcounts/345outputcounts/70thinkingcounts/0cachedcounts;
+allstoredcostNULL. All4tokenfields nevercomplete. Cacheunknown is NOT0%hits;
+full-dollarcost unknown, free tier doesnot turn missing metering into zero cost.
+Summary ../output/day13-closeout/recovered-evidence-report.md +analysisJSON;
+sanitized timing and audio inventories CSV. Fiveknown cases matched, allhistoric;
+do not pool mixedimages/controls/failures as formal SLA. Prior functions retained.
+Async owner scope question PENDING: recommend ONLY10text+6shortvoice fresh timing
+observations oncurrentbuild, or explicitly defer performance/cache/fullcost as
+open exceptions (no false thresholdpasses). Concrete proposed timing plan under
+day13-closeout/targeted-timing-plan.proposed.md; not executed/adopted yet. Small
+sample doesnot replace fullformal30/30/3repeat denominators automatically.
+All38formal gates stillunwaived; Day13notclosed. No newcalls/tests/deployment/AWS
+mutation/priceupgrade/guardactivation. RetainGemini-low976dff/schema020.
+Next incorporate owner choice; do not rerun audit or request more account screens.
+
+2026-11-11 OWNER REPORTS CLOSEOUT AUDIT COMPLETE: provider_calls0/database_writes0.
+Only completion marker returned; summary and DAY13_AUDIT_DATA_BASE64 not supplied.
+Execution receipt ../output/day13-closeout/audit-execution-owner-receipt.json.
+Do NOT rerun the audit/tests. Read the newest existing-evidence-*.json already
+saved under /home/ubuntu/day13-closeout and return its compressed evidence line.
+No metrics evaluated or Day13 closure inferred from marker. Other state unchanged.
+
+2026-11-11 DAY13 CLOSEOUT STARTED: EXISTING EVIDENCE RECONCILED, LIVE AUDIT READY.
+Current status ../output/day13-closeout/status.json +README.md. All38original
+thresholds mapped to evidence families; no automatic passes/waivers/denominators.
+Retain earlier accepted customer/photos/safety/voice/broker behavior. Later living
+tracker PROVES S04/S05/S06 livePASS on1ef4080 (missingfields/Edit/staleCancel/new
+Cancel/no write), originaltext/sourceowner_direct/3photo draft+Cancel pass; exact
+late-webhook race only DB-covered. S18 oldpriceUndo-after-photo refusal PASSED the
+version guard; undo-across-later-write deferred, not required as new repair.
+Historical timings preserved separately: cheaper voice4.646513s, English6.574384s,
+Day12 textburst11.474417s and voicecorrection7.338028s. NO pooled/current p90 claim.
+Current7eefb9c CIbothSUCCESS/deployed976dff/Gemini-low/schema020 unchanged.
+Prepared ../output/day13-closeout-audit.sh: checksum-pinned exact-runtime gate,
+restricted manzil_app READONLY REPEATABLE READ demo-tenant queries; newest500
+turn inventory with explicit truncation, timestamps, usage and audio provenance
+presence only. No phones, message bodies, transcripts, rawUUIDs, keys, DSNs or
+storage keys exported. Candidate classifications are provisional, controls/failures
+retained; runtime-start window association not per-turn image attestation.
+OfflinechecksPASS: compile/notice+echo/unknownbilling/cachemissing/failureinfinity/
+read-only-mock endtoend/redaction/audio/compressionLF. No real DB tests or provider
+calls. Async owner onepaste EC2 execution requested; actual execution PENDING.
+Returns summary+DAY13_AUDIT_DATA_BASE64 and saves private hostJSON. Next import,
+classify/reconcile, identify ONLY remaining measurements/changed paths, then final
+acceptance/gap decisions. D2-01 deliveryorder and newarea staffNote/source finding
+still need reconciliation; do not silently close. No new35-recording/manual/broker
+replay by default. Budget guardOFF, policy incomplete; no runtime/AWS mutation.
+
+2026-11-11 OWNER STEERING: REUSE STABILIZATION TESTS; AVOID REDUNDANT TESTING.
+This supersedes the default next-step request for a new35-note corpus / full
+manual replay. Reviewed extracted stabilization plan, living tracker, accepted
+Day2 checks and cohorts, Day12 final handoff/traces, current CI/deploy receipts.
+Substantial functional search/photos/follow-up/safety/voice and owner-accepted
+broker evidence exists. Reuse it, including81s duration exception; no new broker
+setup, data reset, duplicate full pytest/CI/deployment or blanket manual rerun.
+Plan ../output/day13-evidence-reuse-review.md and source-hash inventory JSON.
+Next first reconcile stale checklist rows against later acceptance and inspect
+existing timing/metering/audio metadata READ-ONLY. Historical functions remain
+accepted; older timings stay separate by source/config, not pooled as current
+p50/p90. Day12 handoff explicitly leaves latency/cost open (text11.474s and
+voice7.338s individual samples do not establish p90). Need only demonstrably
+missing13.3 performance/cost/cache evidence and affected changed-path checks,
+then13.4 consolidated evidence/gap report. Low effort stays until tuning needed.
+Current38-gate full3repeat/corpus denominators are not proven; user direction to
+avoid duplicates is NOT a numerical threshold waiver, safety cut or formal Run2
+completion. Any intentionally deferred formal coverage needs a recorded scope
+decision. Do not fabricate passes, denoms or eligible corpus from old screenshots.
+Account screenshots resolved; policy incomplete/guardOFF unchanged. Existing
+free976dff/Gemini-low/schema020 runtime retained. No calls/tests/AWS mutations.
+
+2026-11-11 ELEVENLABS USAGE SCREENSHOT MATCHES VERIFIED FREE ACCOUNT.
+397/10000 used;9603 remaining credits. No separate Scribe minute allowance shown.
+Account screenshot request RESOLVED; do not repeatedly request the same dashboard.
+Official generic pricingFAQ https://elevenlabs.io/pricing says APPROX330credits/min
+STT; balance suggests29.10min BEFORE keyterms/minimums/other products. This is NOT
+verified account allowance or an enforceable billing rate. API pricing and credit
+pricing pages differ; retain unknowns instead of silently applying a conversion.
+Receipt ../output/day13-elevenlabs-capacity.json; screenshot privately in output.
+Assignment targets: speech193s +controls164s; collection plus3backend
+repeats target1428s, plus3deployed speech repeats target
+2007s BEFORE tuning/retries/rehearsals. Targets are
+not actual durations or billable totals (control rejection/truncation matters).
+No assertion of sufficient/insufficient remaining credit from this estimate.
+Existing prices-draft stays INCOMPLETE/account_verified=false. Besides Scribe
+rounding/one-credit floor mapping, Gemini generateContent exact-model combined
+thinking bound/default single candidate still need proof; current docs redirect
+to Interactions API, which must not be silently treated as exact endpoint proof.
+Guard remainsOFF; no generations/transcriptions/upgrade/runtime/AWS mutation.
+Keep deployed7eefb9c/976dff/Gemini-low/schema020. No redeploy or repeated account
+probe needed. Next independent work is recording/device assignment preparation;
+activation/formal dispatch waits for complete bounds/policy, not more screenshots.
+Day13.3/13.4 measured acceptance remains open; paid upgrade not requested/adopted.
+
+2026-11-11 GEMINI PROJECT LIMITS RECORDED from owner AI Studio screenshot.
+Primary gemini-3.5-flash-lite15RPM/250000inputTPM/500RPD; failover gemini-3.6-flash
+5RPM/250000inputTPM/20RPD. Screenshot is PEAK usage over7days;137/500 and16/20
+are historical peaks, NOT remaining daily allowance. Current headroom unknown.
+Receipt ../output/day13-gemini-quota-evidence.json, screenshot in recordings/.
+Formal5set3repeat matrix342scenario turns before setup/tuning/collection/deployed
+cohort; provider call count can be higher. Free-tier run may span quota days;
+pace BETWEEN measured trials, preserve in-turn retry/429 latency/failures, never
+silently omit failed cases or pool changed configurations. Project-level limits
+apply across keys; no key/project workaround or paid upgrade performed. No actual
+quota enforcement added here; this is planning/evidence only. Provider docs reset
+RPD at midnight Pacific. Gemini limit question resolved; no repeat request needed.
+Pending ElevenLabs Scribe/API allowance plus billing floor/rounding/credit mapping,
+verified reference-cost policy, shared guard activation, real corpus/human freeze,
+tuning and full measured13.3/13.4. Budget guard remainsOFF; no benchmark/provider
+calls/AWS or deployment changes. Day13 remains open; current976dff/schema020 kept.
+
+2026-11-11 DAY13 READ-ONLY PROVIDER CHECK PASSED (owner EC2 evidence).
+Completion marker observed; noisy terminal paste echo did not prevent execution.
+Both configured Gemini models metadata HTTP200, generateContent listed, verified
+input1048576/output65536 tokens. Exact deployed976dff/config34d4 gates passed in
+wrapper. This is metadata access, NOT a generation/quota/cache/latency pass.
+ElevenLabs subscription HTTP200 confirms tier/status free;397/10000 credits used,
+9603 reported credits remaining, overage extension0 and both extension flagsfalse.
+Do not convert these credits to Scribe seconds without verified account mapping.
+Evidence ../output/day13-provider-account-evidence.json; no keys/raw account data.
+No generation/transcription, mutation, billing upgrade or guard activation.
+Next owner to provide current API-project primary/failover RPM/TPM/RPD from AI
+Studio and remaining Scribe/API allowance from ElevenLabs Usage. Async question
+pending; unavailable values must remain unknown. No repeat of completed check.
+New official billing research: ElevenLabs2026-10-26 changelog says TTS/STT requests
+below one credit are charged one credit. Account credit conversion and a policy
+minimum/rounding that safely covers this floor must be verified before activation;
+do not silently assume per-second pricing alone covers very short controls.
+Source https://elevenlabs.io/docs/changelog/2026/10/26 . Policy remains incomplete;
+free-credit cost and verified standard-rate usage estimates stay separate. Runtime
+7eefb9c/976dff/Gemini-low/schema020 retained; guardOFF. No redeploy/migration or AWS
+action needed for this read-only step. Formal13.3/13.4 acceptance still pending.
+
+2026-11-11 DAY13 PROVIDER TIERS CLARIFIED: owner reports BOTH Gemini and ElevenLabs
+are FREE API accounts, no paid upgrade. This supersedes the unknown-tier question;
+API account/quota verification remains pending. Keep current deployed7eefb9c /
+976dff195d20/Gemini-low/schema020; guard OFF, no service/AWS/billing change here.
+Do not set reference prices to zero or claim cost/SLA/cache acceptance from free
+credits. Record actual charges separately from standard-rate metered estimates,
+retain quota failures/retries, and label the tested tier. Google's current pricing
+table lists Flash-Lite free-tier caching unavailable; actual eligibility/metadata
+needs evidence and any remaining gap a recorded decision, not an assumed pass.
+Prepared ../output/day13-recordings/provider-account-check.sh: LF-only, exact
+deployed image/config/running gates, Docker-exec GET model metadata and ElevenLabs
+subscription allowlist only. No generation/transcription/countTokens, raw env,
+account response, invoices or credentials output; no mutations. Offline GET-only,
+redaction and denial/malformed/timeout/missing-key checks PASS. Owner must run it
+on EC2 and return sanitized output. Read-only API permission failure is not proof
+that generation fails; do not broaden permissions automatically. Also read the
+current project's Gemini model RPM/TPM/RPD in AI Studio (not exposed by modelGET).
+Policy remains incomplete/account_verified=false; $10(2/7/1) reference cap retained.
+No benchmark/recordings/guard activation performed;13.3/13.4 acceptance and Day13
+closure remain pending. No rebuild/redeploy/migration/bootstrap repeat needed.
+Receipt ../output/day13-provider-tier-status.json; keep published kit unchanged.
+
+2026-11-10 DAY13.3/13.4 TOOLING DEPLOYED; OWNER EC2 VERIFICATION COMPLETE.
+Owner observed DAY13-TUNING-BUILD-VERIFIED and DEPLOYMENT-VERIFIED for exact CI
+head7eefb9c787ef39b8d24b84f420dbc13e335e90bd, PR66. Both services now run
+sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a,
+tagmanzil-ai:day13-tuning-7eefb9c, Gemini/low, same non-secret configSHA34d4b870
+796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60. Schema020 retained;
+NO migration ran. Operator gate passed CI/kit/image exact files/imports/nonroot,
+both services/config/running, schema/applied bytes, fixtures, HTTPS database/bucket
+health and worker startup. Optional Compose override installed, budget guard OFF.
+Receipt ../output/day13-tuning-deployment-verified.json records owner evidence;
+agent did not independently query AWS. Published source and kit remain unchanged.
+Both exact-head CI runs42861430103/42861446643 SUCCESS. ZIP12c3441ad4ec008ad3a2b5bd0fec3ca5fcfa78de7021154a3d8386cc811ef66a.
+AWS stays RUNNING by owner choice; no shutdown. No merge inferred/performed by
+agent/operator. Keep prior c42e91b03f6e image and all earlier recovery artifacts.
+Rollback for this release restores c42e91b03f6e/Gemini/low and retains020. Do NOT
+rerun completed bootstrap (its baseline gate expects priorimage); do not use old
+13.1/13.2 migration/rollback scripts or rebuild/re-migrate/reset roles/data.
+13.3/13.4 CODE PUBLICATION/DEPLOYMENT DONE; MEASURED ACCEPTANCE NOT DONE. Pending:
+verify private account rates/taxes, Scribe billing rounding/minimum, Flash-Lite
+cache eligibility; install verified policy and ONE authoritative shared ledger,
+explicitly activate override after readiness checks;35 real recordings/6speakers/
+3Android/15quiet10moderate5street, human audio-bound gold freeze; bounded low/
+minimal tuning; full3repeat5set benchmark +real WhatsApp latency/cost/cache traces
+and Android/Web rehearsals/manual gates. iPhone exception persists. No paid
+benchmark or fallback adoption yet; total$10(2/7/1) retained. Day13 NOT CLOSED.
+Operational docs updates remain uncommitted after tested7eef; do not move release
+head or repackage dirty working files. Preserve unrelated dirs/stashes. Completed
+handoff ../Handoffs/codex/Manzil_AI_Day13_Tooling_Deployed_2026-11-10.md.
+
+2026-11-10 EC2 BOOTSTRAP STOPPED BEFORE DEPLOYMENT: host aws CLI missing atline9.
+No extraction/operator/service switch ran; only the release directory was created.
+Agent had incorrectly assumed EC2 CLI availability; prior proven bootstrap used
+boto3 inside retained application image. Updated output/day13-tuning-ec2-deploy.sh
+now checks both services on c42e91b03f6e/running, then sudo docker run --rm with
+that immutable image, root and release bind mount to SDK-download/extract. Host
+aws/unzip not needed. Instance role used as in prior successful Day13 bootstrap;
+no credentials requested or included. ZIP SHA12c3441ad4ec008ad3a2b5bd0fec3ca5fcfa78de7021154a3d8386cc811ef66a
+and all CI kit bytes unchanged; head7eef and both successful CI proofs retained.
+Seven offline SDK/shell/extraction/checksum/repeat/conflict/traversal/missingS3
+checks PASS; package template updated and mocked construction checkPASS. Future
+kits generate SDK-based wrapper too. No actual AWS download/deployment by agent.
+Next owner RE-COPY updated wrapper with normalPowerShell Get-Content -Raw|Set-
+Clipboard and paste entire block into Ubuntu EC2. No reupload/CI rerun needed if
+S3 staging copy already succeeded. If only CloudShell UI upload occurred, first
+run the documented aws s3 cp there. NoSuchKey now reports staging step needed.
+Deployment remains authorized/pending; no migration/reset/budget activation/model
+change. Bootstrap repair receipt output/day13-tuning-bootstrap-repair.json.
+
+2026-11-10 POST-PUBLICATION NOTES: PR66 CORRECTED-HEAD CI VERIFIED; DEPLOY NEXT.
+Exact7eefb9c787ef39b8d24b84f420dbc13e335e90bd passed push42861430103 and
+pull_request42861446643. Owner helper produced CI receipt and immutable kit;
+local ZIP SHA12c3441ad4ec008ad3a2b5bd0fec3ca5fcfa78de7021154a3d8386cc811ef66a
+and every KIT.json entry verified. output/day13-tuning-publication.json is actual
+exact-head success evidence; earlier failed93a71be CI remains historical.
+Deployment NOT YET PERFORMED. ExistingAWS c42e91b03f6e/Gemini/low/schema020 remains
+unchanged; no migration, reset, budget activation or paid calls. Owner deployment
+authorization persists. Next upload ZIP and .zip.sha256 from output to CloudShell,
+sha256sum-check and stage to existing S3 staging/release-day13-tuning-7eefb9c/.
+Then normalPowerShell Get-Content -Raw output/day13-tuning-ec2-deploy.sh|Set-Clipboard,
+paste ENTIRE block into Ubuntu EC2. LF-only wrapper downloads/verifies pinnedZIP,
+checks safe top-level extraction, preserves changed existing kit files, executes
+sudo python3 absoluteREL/operator.py deploy. Syntax/compile/realZIP extraction/
+idempotence/changed-file refusal checks PASS; no unzip dependency. Operator retains
+appliedSQL/demo, checks CI/tree/schema/fixtures/roles/HTTPS/worker and rolls back
+priorimage/Gemini on failed switch. Guard staysOFF pending privatepolicyverification.
+Do not rerun old restart/migration scripts or publisher just to deploy. These are
+uncommitted operational notes AFTER the published CI head; do not move the tested
+release head or repackage uncommitted sources. Publication/deploy receipts in output
+are current; no merge status inferred from CI. Formal acceptance still outstanding.
+
 2026-11-10 PR66 FIRST CI FAILED; TEST-ONLY ST01 GOLD CORRECTION PREPARED.
 Owner pushed93a71bee8ff1876587cee8dba0cb00fa4d968210 and opened PR66 against
 release/day13-security-staleness-baseline. Job129974400813 actual LinuxCI test

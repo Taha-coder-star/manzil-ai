@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "scope": "approved small10text6voice timing baseline",
+  "configuration": "Gemini/low",
+  "original_samples_observed": 2,
+  "resends_observed": 1,
+  "text_remaining_unrun": 8,
+  "voice_remaining_unrun": 6,
+  "current_config_still_deployed": true,
+  "baseline_complete": false,
+  "text_first_substantive_ms": {
+    "T01": 11929.345,
+    "T02": null
+  },
+  "T02_observation": "infinity: only failure apology, no substantive answer",
+  "T02_failure_detail": "http_503",
+  "T02_automatic_recovery": false,
+  "resend_first_substantive_ms": 19953.195,
+  "resend_replaces_T02": false,
+  "provider_duration_sum_ms": {
+    "T01-attempt-1": 8984,
+    "T02-attempt-1": 12279,
+    "T02-attempt-2": 15688
+  },
+  "full_text_p90_measured": false,
+  "best_possible_completed_text_p90_ms": 11929.345,
+  "text_p90_target_ms": 7000,
+  "text_p90_gate_attainable_in_this_fixed_cohort": false,
+  "observed_http_429": false,
+  "cache_counts_unknown": true,
+  "full_turn_cost_unknown": true,
+  "source_findings": [
+    "_run makes a further provider request after successful update_requirements/search_properties tools.",
+    "T01's last call stop_empty took4864ms; T02's post-search last call returned503 after5513ms.",
+    "Post-search model turns can request more actions. Blindly deleting them risks compound request/handoff behavior.",
+    "Recovery is limited to initial failures before an active model; post-tool503 is not eligible under current design.",
+    "Removing T01's4864ms call arithmetically leaves7065.345ms, still above7s; this is not a measured counterfactual."
+  ],
+  "next_proposal": "Separate minimal-effort current-image trial; existing tool/grounding/handoff flow unchanged",
+  "runtime_changed_by_agent": false,
+  "new_provider_calls_by_agent": 0,
+  "day13_closed": false,
+  "baseline_stopped_early": true,
+  "stopping_decision": "Owner chose a separate minimal-effort comparison",
+  "remaining_cases_not_run_not_dropped": true,
+  "runtime_note": "Low restored after minimal trial; original measurement window remains closed"
+}

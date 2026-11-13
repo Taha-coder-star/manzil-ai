@@ -1,0 +1,52 @@
+Local branch lineage only; no remote status verification.
+
+7eefb9c 2026-11-10 Align ST01 regression with approved duplicate gold
+93a71be 2026-11-10 Add Day13 latency cost controls and full benchmark tooling
+3c6df54 2026-11-10 Secure customer tools and handle stale listings (13.1-13.2)
+02304c2 2026-11-09 Handle AI and channel failure recovery (12.3-12.4)
+d908a86 2026-11-09 Assemble customer bursts and verify webhook replay
+36989b5 2026-11-09 Keep explicit only-area searches within the requested location
+b51146c 2026-11-08 Preserve budget operators before extracted amount spans
+2ee415b 2026-11-08 Recognize Devanagari cheaper voice commands before search
+0e0ad24 2026-11-08 Omit unresolved replacement locations from acknowledgements
+22d7015 2026-11-08 fix: preserve qualified locations during extraction repair
+f17dc3f 2026-11-07 fix: apply omitted cheaper update before customer search
+5d2f682 2026-11-07 fix: simplify purpose inference condition for CI lint
+4e7536f 2026-11-07 fix: reject misclassified location clauses before customer search
+1ef4080 2026-11-05 Exclude exact historical prose false positive from secret scan
+366c3df 2026-11-05 Reject blank-only staff drafts and pin approved demo kits
+ce4df35 2026-11-04 Handle empty optional staff draft fields and guide invalid calls
+e8bade6 2026-11-04 Handle reordered album photos and omitted staff source
+a05b477 2026-11-03 Merge pull request #54 from Taha-coder-star/fix/day1-live-findings
+9f5430b 2026-11-03 Fix repeated draft notes and unavailable listing replies
+bbd106d 2026-11-03 Merge pull request #53 from Taha-coder-star/fix/day1-stabilisation
+bb855f8 2026-11-03 docs: record owner-verified Day 1 database checks
+e69fae7 2026-11-03 fix: prepare Day 1 reset safety and active staff targeting
+26ca5cc 2026-11-03 Merge pull request #52 from Taha-coder-star/fix/release-kit-18-files
+8d531bf 2026-11-03 Merge pull request #51 from Taha-coder-star/feature/demo-reset
+27447eb 2026-11-03 feat: add demo-data reset (dry run by default)
+4b5e3f5 2026-10-19 Merge pull request #50 from Taha-coder-star/fix/customer-test-findings
+9331869 2026-10-18 docs: customer test fixes (location particles, requirements, search, renderer wording, turn engine, decisions)
+0b5f2cf 2026-10-18 fix: owner-approved wording - em dash in the details replies, no-budget no-match, place said once, 'bikau' (customer test 2026-10-18)
+2ffaa66 2026-10-18 fix: photos alone get no fallback text; a question is not sent twice in one reply (F-1, F-11, customer test 2026-10-18)
+f1bd680 2026-10-18 fix: a listing code asked for by itself is looked up in code (F-9, customer test 2026-10-18)
+78e25a8 2026-10-18 fix: a documents question gets the agent offer, not a handoff (F-4, customer test 2026-10-18)
+6d5ed80 2026-10-18 fix: 'bhi' / 'also' next to a place makes it an add whatever op the model chose (F-3, customer test 2026-10-18)
+07aa5e2 2026-10-18 fix: a replaced property type ends 'cheaper' and a unit-swapping type drops the size (F-5b, F-5c, customer test 2026-10-18)
+29527a3 2026-10-18 fix: the no-match 'prices start from' counts every ACTIVE listing in scope (F-2, customer test 2026-10-18)
+274cdf8 2026-10-18 fix: a reply that only acknowledges is answered with the search; a place not found holds it (F-10, F-5a, customer test 2026-10-18)
+0613ac0 2026-10-18 fix: the search gate's buy / rent buttons set the purpose (F-7, customer test 2026-10-18)
+2447ab5 2026-10-18 fix: place names followed by a sentence particle (mein, mai, side, in ...) resolve (F-8, customer test 2026-10-18)
+2a61917 2026-10-18 docs: production as verified from the owner's dump; exact-combination validation
+ac578da 2026-10-18 release kit: complete production profile from the owner's dump of 2026-10-18; mapper explains CRLF migrations
+0770350 2026-10-18 release kit: production profile - the verified production combination decides the allowed states
+d44ccd8 2026-10-18 release kit v2: 18 files, gate collects every mismatch, stdin forwarded, tested build script
+46c44d8 2026-10-18 Merge pull request #49 from Taha-coder-star/release/fresh-search
+30b0504 2026-10-18 test: use a non-hex media id in the M1 status test (a random UUID can contain "777")
+8e851be 2026-10-18 docs: release scripts that really stop - baseline gate on the running containers, switch with rollback by image ID
+f8b8044 2026-10-18 fix: review findings - negated reset commands, session-bound question token, every inherited filter shown
+1eac2b7 2026-10-18 docs: release runbook gates, corrected incident, rollback compatibility, pinning; cost block split out
+89b779a 2026-10-18 docs: fresh-search production release runbook (prepared, not run)
+69820fe 2026-10-18 test: the voice-loop no-match test expects the budget in the no-match wording
+8310b2e 2026-10-18 fix: search saved requirements when every round went to update_requirements
+6368cdd 2026-10-18 feat: ask about filters from an earlier session before searching

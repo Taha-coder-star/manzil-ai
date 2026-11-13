@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "phase": "low_restored",
+  "image": "sha256:976dff195d20f6f9adbf593cccccbef12b31184ffb7be9fd51bef07ac08b7b8a",
+  "baseline_config_sha256": "34d4b870796b7684567fb78682ca49930e24971dbad573359ea1bd4a08381d60",
+  "candidate_config_sha256": "c014e9e0af227d55fab199ff1cf2f45b6459c93f8da857972a55f0f43158be7a",
+  "plan_sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+  "operator_provider_calls": 0,
+  "operator_database_writes": 0,
+  "env_file_edited": false,
+  "recorded_at": "2026-11-11T19:53:16.277923+00:00",
+  "existing_trial_evidence_preserved": true
+}

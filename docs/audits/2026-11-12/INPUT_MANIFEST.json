@@ -1,0 +1,178 @@
+{
+  "schema": 1,
+  "prepared_on": "2026-11-12",
+  "application_baseline": "7eefb9c787ef39b8d24b84f420dbc13e335e90bd",
+  "kind": "Audit preparation and sanitized historical evidence, not findings or acceptance",
+  "files": [
+    {
+      "path": "00_START_HERE.md",
+      "sha256": "da7441bb7f9fae2005e511659e7b729ed5ad7ebf80d6ace1480d682ce2b6b599",
+      "bytes": 3403
+    },
+    {
+      "path": "01_PROJECT_BRIEF.md",
+      "sha256": "5f684c88e09d7d5f4881fea097f0ec06b77290c763ac22f82fa17a8252325249",
+      "bytes": 11616
+    },
+    {
+      "path": "02_PROMPT_CONTEXT.md",
+      "sha256": "4c3c5e8e9a3005df3cd63bf56b61833341dbe21728c16d1001e345f8ab82b179",
+      "bytes": 4519
+    },
+    {
+      "path": "03_PROMPT_AUDIT.md",
+      "sha256": "09c26f5c7e2fd8e0cfb2c88b4f1178e8b38c9178ee5de9adc29463b2cb2f383c",
+      "bytes": 9993
+    },
+    {
+      "path": "04_PROMPT_CHALLENGE_AND_HANDOFF.md",
+      "sha256": "98a9a0dd4acf97367e5c480931e5302ef7c2686703b1b7588520da8ba3f5a5d1",
+      "bytes": 5089
+    },
+    {
+      "path": "06_COVERAGE_CHECKLIST.md",
+      "sha256": "cdcea745dbb73f87e666aece208e1e76e3ad529fda07f6d67cbde810831922c1",
+      "bytes": 3076
+    },
+    {
+      "path": "07_AUDIT_TRACKER_TEMPLATE.md",
+      "sha256": "8c5a64a17346a1368ee79350eaecc9787dfcbadd3550bc7be7cfaab69ffc76e9",
+      "bytes": 1863
+    },
+    {
+      "path": "08_RECENT_HISTORY.txt",
+      "sha256": "4b7e9ad1acbaca0426b302434bbe875fbbf8ee653ac5780374da8dcb59e32f08",
+      "bytes": 4916
+    },
+    {
+      "path": "evidence/day13/low-baseline-analysis.json",
+      "sha256": "7a07e15d72161a91e3b818f6e8d6403be6d8c942d1dc3262cc52bc53087d31f5",
+      "bytes": 2049
+    },
+    {
+      "path": "evidence/day13/low-baseline-findings.md",
+      "sha256": "7e41b3d9f7f434fe085ea9dad5f4050add3f3c816198fc370a2e4459d76ff6c6",
+      "bytes": 2942
+    },
+    {
+      "path": "evidence/day13/minimal-comparison-analysis.json",
+      "sha256": "da71ffa7e0fecedf2ff53370e7c000eac6b16121c0742a2d1a2d44429ea2457f",
+      "bytes": 3291
+    },
+    {
+      "path": "evidence/day13/minimal-comparison-result.md",
+      "sha256": "ca2579e5771764265a451dce74f785d9067c827a8a39b1d1894aabd7da9dfa8c",
+      "bytes": 2023
+    },
+    {
+      "path": "evidence/day13/minimal-diagnostic-owner.json",
+      "sha256": "c08cdd753baae373be07a68917d0cfe47e116be343eb0856bd3ae03430042e9d",
+      "bytes": 10450
+    },
+    {
+      "path": "evidence/day13/minimal-send-review-owner.json",
+      "sha256": "aa216f004664da1d016034d6de389a4396d567bd3f9fbba99a01201018b182bf",
+      "bytes": 15377
+    },
+    {
+      "path": "evidence/day13/minimal-timing-plan.approved.json",
+      "sha256": "4bf375ec9e4c47b7b4e918606d04c3fbb3377fff15a94aba8b2826b90bbdf748",
+      "bytes": 3384
+    },
+    {
+      "path": "evidence/day13/minimal-timing-progress.json",
+      "sha256": "fe0dea356ec96de7a15f43e5901c5861679ee6a8cbbdcedabd16ebef298f3215",
+      "bytes": 4204
+    },
+    {
+      "path": "evidence/day13/minimal-trial-owner-approval.json",
+      "sha256": "ba9e81a29e9c8050a4187ac326cb4113dab60dc1d9817f1e9a61359b6f38b2f2",
+      "bytes": 731
+    },
+    {
+      "path": "evidence/day13/minimal-trial-preparation.json",
+      "sha256": "4c8cf54d3dd84e507423e59f6b09be388284d8cd8a75f0cac4060b21068a8920",
+      "bytes": 1773
+    },
+    {
+      "path": "evidence/day13/minimal-trial-ready-owner.json",
+      "sha256": "99448835ba838965d960ff1ea4d0e8181a926142c4ccc4e750ba82e968f94b1b",
+      "bytes": 1284
+    },
+    {
+      "path": "evidence/day13/minimal-trial-restored-low-owner.json",
+      "sha256": "b65f65c2de017f67eb1824b888d15c091282d4e2571f511af440d120c4dff36b",
+      "bytes": 600
+    },
+    {
+      "path": "evidence/day13/operators/day13-effort-operator.py",
+      "sha256": "4daad3c7d81f072bb6d22e4ddd7d39c51786536bb94bbf3af623520cfac7aac7",
+      "bytes": 22251
+    },
+    {
+      "path": "evidence/day13/operators/day13-minimal-diagnostic.sh",
+      "sha256": "26b7644ce095f49f8ed9b015ed0e62f9261346781fc005c9a615f9bf547bad7d",
+      "bytes": 9794
+    },
+    {
+      "path": "evidence/day13/operators/day13-minimal-restore-low.sh",
+      "sha256": "77c104c27fdc510e0144546f3db0339c2a80119c1b533785e696dfa9ace61c5b",
+      "bytes": 12569
+    },
+    {
+      "path": "evidence/day13/operators/day13-minimal-send-review.sh",
+      "sha256": "cba365ad6e9b0672a88b1d942ebc6ce31fec33dc055582e58bde61598e18df69",
+      "bytes": 10903
+    },
+    {
+      "path": "evidence/day13/operators/day13-minimal-trial.sh",
+      "sha256": "bc2e0b667e46a05a8fd27903af30142621f471a36c5587045b9c3dc915df6ad9",
+      "bytes": 12565
+    },
+    {
+      "path": "evidence/day13/README.md",
+      "sha256": "786dec010e4efa09330352093728a3a44a4de4eb26682bb74f68600f8e430cb4",
+      "bytes": 1785
+    },
+    {
+      "path": "evidence/day13/recovered-evidence-analysis.json",
+      "sha256": "70f5e2da86bf3c13354f0a8bc4a31a59fa56e01dbe6c5cf02e0c6a441f972f78",
+      "bytes": 8994
+    },
+    {
+      "path": "evidence/day13/recovered-evidence-report.md",
+      "sha256": "61cdd00c889884b771ad7cca2be9f7f182cf8525dbc4c8bd09d7d53e3a65535f",
+      "bytes": 3237
+    },
+    {
+      "path": "evidence/day13/remaining-decisions.md",
+      "sha256": "4c00874fbdd3d606400aa3182340c9ae4bf0c030c56a6d8dc5784ce21dfec63b",
+      "bytes": 1964
+    },
+    {
+      "path": "evidence/day13/status.json",
+      "sha256": "b9a0f2bb44092d3caf714f8f4eb67454d2cf7b188c01a1e5059202378e11def9",
+      "bytes": 32407
+    },
+    {
+      "path": "evidence/day13/t02-diagnostic-owner.json",
+      "sha256": "d04fef2573ef895e0d26b9b6dcfa65811614a6eb32fa86b8393626be4e38b73c",
+      "bytes": 14693
+    },
+    {
+      "path": "evidence/day13/timing-plan.approved.json",
+      "sha256": "6fb6b83f04f925012fb6692e095de83da38f4b793ffac12adc9d29686c985f7d",
+      "bytes": 3086
+    },
+    {
+      "path": "evidence/day13/timing-progress.json",
+      "sha256": "17d8de47ea039e068d4c7b54104a8440bf3c23eb9f4310503dd1dac0ef0859c3",
+      "bytes": 3799
+    },
+    {
+      "path": "README.md",
+      "sha256": "da7441bb7f9fae2005e511659e7b729ed5ad7ebf80d6ace1480d682ce2b6b599",
+      "bytes": 3403
+    }
+  ]
+}
