@@ -258,7 +258,7 @@ def test_property_media_is_a_cache_source(app_role_db):
         karachi = insert(admin, "location", level="city", name="Karachi")
     conn = psycopg.connect(app_url, autocommit=True)
     try:
-        agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID)
+        agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID)
         with tenant_transaction(conn, agency):
             pid = insert(conn, "property", **active_property(agency, karachi))
             item = insert(conn, "property_media", agency_id=agency, property_id=pid,

@@ -75,7 +75,7 @@ def test_quiet_window_is_inside_the_planned_range():
 def sb(app_role_db):
     _, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID_A)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID_A)
     other = create_agency(conn, "Other Realty (DEMO)", "other", PNID_B)
     for agency_id in (agency, other):
         with tenant_transaction(conn, agency_id):

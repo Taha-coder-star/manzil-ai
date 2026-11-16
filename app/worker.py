@@ -26,7 +26,7 @@ from psycopg.pq import TransactionStatus
 from app import gazetteer, orchestrator, queue, requirements, turn_engine, whatsapp
 from app.config import ConfigurationError, load_settings
 from app.handlers import make_handlers
-from app.routing import RoutingConfigError, parse_sender_agencies
+from app.routing import DatabaseSenderResolver, RoutingConfigError
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ class Worker:
     def __init__(
         self, database_url, agency_ids, handlers, stop, *, name="worker-1",
         lease_seconds=queue.DEFAULT_LEASE_SECONDS, poll_seconds=POLL_SECONDS,
-        reap_every_seconds=REAP_EVERY_SECONDS, backoff=queue.backoff_seconds,
+        reap_every_seconds=REAP_EVERY_SECONDS, backoff=queue.backoff_seconds, agencies=None,
     ):
         self.database_url = database_url
         self.agency_ids = list(dict.fromkeys(agency_ids))
@@ -87,6 +87,9 @@ class Worker:
         self.poll_seconds = poll_seconds
         self.reap_every_seconds = reap_every_seconds
         self.backoff = backoff
+        # Audit WP5: agencies() -> current agency ids (routing.DatabaseSenderResolver),
+        # re-read at each reap so a new agency is served without a restart.
+        self.agencies = agencies
         self.conn = None
         self._next_agency = 0
         self._next_reap = 0.0
@@ -107,6 +110,8 @@ class Worker:
         """Reap if due, then run at most one job. Returns True if a job ran."""
         conn = self.connect()
         if time.monotonic() >= self._next_reap:
+            if self.agencies is not None:
+                self._refresh_agencies()
             for agency_id in self.agency_ids:
                 queue.reap_expired(conn, agency_id)
             self._next_reap = time.monotonic() + self.reap_every_seconds
@@ -122,6 +127,18 @@ class Worker:
                 self.execute(job)
                 return True
         return False
+
+    def _refresh_agencies(self):
+        try:
+            ids = list(self.agencies())
+        except (psycopg.Error, RoutingConfigError) as exc:
+            logger.warning("Agency list not refreshed (%s); keeping %d agency(ies)",
+                           type(exc).__name__, len(self.agency_ids))
+            return
+        if ids and ids != self.agency_ids:
+            logger.info("Agency list refreshed: %d agency(ies)", len(ids))
+            self.agency_ids = ids
+            self._next_agency %= len(ids)
 
     def execute(self, job):
         conn = self.conn
@@ -183,14 +200,19 @@ def run():
     signal.signal(signal.SIGINT, request_shutdown)
 
     settings = load_settings()
-    try:
-        agency_ids = list(parse_sender_agencies(settings.webhook_sender_agencies).values())
-    except RoutingConfigError as exc:
-        agency_ids = None
-        logger.error("Worker idle: %s", exc)
-    if agency_ids is not None and not settings.database_url:
-        agency_ids = None
+    agency_ids = None
+    if not settings.database_url:
         logger.error("Worker idle: DATABASE_URL is not set")
+    else:
+        resolver = DatabaseSenderResolver(settings.database_url,
+                                          settings.webhook_sender_agencies)
+        try:
+            agency_ids = resolver.agency_ids()
+        except RoutingConfigError as exc:
+            logger.error("Worker idle: %s", exc)
+        except psycopg.Error as exc:
+            logger.error("Worker not started: routes unreadable (%s)", type(exc).__name__)
+            raise SystemExit(CONFIGURATION_EXIT_CODE) from None
     if agency_ids is None:
         # Idle rather than crash-loop, so the container stays up for inspection.
         stop.wait()
@@ -220,7 +242,8 @@ def run():
         logger.error("Worker not started: %s", exc)
         raise SystemExit(CONFIGURATION_EXIT_CODE) from None
     workers = [
-        Worker(settings.database_url, agency_ids, handlers, stop, name=f"worker-{i + 1}")
+        Worker(settings.database_url, agency_ids, handlers, stop, name=f"worker-{i + 1}",
+               agencies=resolver.agency_ids)
         for i in range(settings.worker_concurrency)
     ]
     threads = [threading.Thread(target=w.run, name=f"worker-{i + 1}") for i, w in enumerate(workers)]

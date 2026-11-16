@@ -80,12 +80,10 @@ envelope, and groups that already committed dedupe through the keys.
 **Provisioning.** FORCE RLS blocks even the table owner, so the agency row is created with
 the runtime login inside a tenant transaction for a new id:
 
-```sh
-sudo docker compose -f deploy/compose.yml --env-file .env exec -T web   python -m app.provision_agency --name "Manzil Demo Realty (DEMO)" --slug manzil-demo
-```
-
-It reads `META_PHONE_NUMBER_ID` / `META_WABA_ID` from the container environment and prints
-the `WEBHOOK_SENDER_AGENCIES=...` line to add to `.env`.
+Audit WP5: `python -m app.provision_agency` plans by default, and with `--apply` also
+writes the agency's route to `sender_route` (migration 021) with the owner login, so no
+`.env` change or restart is needed. `WEBHOOK_SENDER_AGENCIES` is only the fallback while
+that table is empty. Full order and commands: `docs/ONBOARDING.md`.
 
 ## Deploy and Meta verification (owner, with approval)
 

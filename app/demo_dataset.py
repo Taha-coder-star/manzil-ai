@@ -248,7 +248,9 @@ def subtree(locations, key):
     return {k for k in locations if key in ancestors(locations, k)}
 
 
-def check_locations(rows, errors):
+def check_locations(rows, errors, demo=True):
+    """Structural checks; with demo=True also the demo dataset's expected areas (D11).
+    app.load_gazetteer passes demo=False so another market's areas can be loaded."""
     for key in _duplicates(row["key"] for row in rows):
         errors.append(f"locations: duplicate key {key}")
     by_key = {row["key"]: row for row in rows}
@@ -290,6 +292,8 @@ def check_locations(rows, errors):
     for row in rows:
         if len(ancestors(by_key, row["key"])) > 4:
             errors.append(f"location {row['key']}: hierarchy cycle or too deep")
+    if not demo:
+        return by_key
 
     cities = [row for row in rows if row["level"] == "city"]
     if [(c["name"], c["city_code"]) for c in cities] != [("Karachi", "KHI")]:
