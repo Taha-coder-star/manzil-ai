@@ -25,6 +25,7 @@ from app import (
     handoff,
     handoff_actions,
     handoff_alert,
+    limits,
     media,
     orchestrator,
     outbound,
@@ -149,6 +150,7 @@ def record_event(conn, agency_id, inbound_event_id):
             (conversation_id, inbound_event_id, wamid, message_type, text_body,
              media_id, sent_at, _context_wamid(message)),
         ).fetchone()
+        fresh = row is not None
         if row is None:  # a replayed job: the message is already logged
             row = conn.execute(
                 "SELECT id FROM message WHERE provider_message_id = %s", (wamid,)
@@ -157,12 +159,36 @@ def record_event(conn, agency_id, inbound_event_id):
             media.stage_inbound_media(
                 conn, conversation_id, row[0], sender, media_id, inbound_event_id
             )
-        if media_id and audio.is_stageable(message_type):
+        if (media_id and audio.is_stageable(message_type)
+                and _voice_limit(conn, conversation_id, row[0], sender, fresh) is None):
             audio.stage_inbound_audio(
                 conn, conversation_id, row[0], media_id, message["audio"].get("voice"),
                 inbound_event_id,
             )
     return conversation_id, message, phone_number_id
+
+
+def _voice_limit(conn, conversation_id, message_id, sender, fresh):
+    """Audit MA-006: a customer's audio over a limit (app.limits) is marked 'limited' on its
+    message and never staged, so it is never downloaded or transcribed; the turn then
+    sends speech's voice_limit notice. A replayed job keeps the first decision."""
+    if not fresh:
+        row = conn.execute(
+            "SELECT stt_meta->>'limit' FROM message WHERE id = %s AND stt_meta->>'status' = %s",
+            (message_id, speech.LIMITED),
+        ).fetchone()
+        return row[0] if row else None
+    if orchestrator.resolve_role(conn, sender)[1] != "customer":
+        return None  # staff are exempt from the per-number limits
+    limit = limits.voice_limit(conn, conversation_id)
+    if limit is not None:
+        conn.execute(
+            "UPDATE message SET stt_meta = jsonb_build_object('status', %s::text, "
+            "'limit', %s::text) WHERE id = %s",
+            (speech.LIMITED, limit, message_id),
+        )
+        logger.info("Audio %s over limit %s; not staged", message_id, limit)
+    return limit
 
 
 def make_handlers(settings, *, client_factory=None, image_link=None, storage=None,
@@ -179,6 +205,7 @@ def make_handlers(settings, *, client_factory=None, image_link=None, storage=Non
 
     check_ai_settings(settings)
     check_stt_settings(settings)
+    limits.check_settings()
     if engine is None:
         engine = turn_engine.build_engine(settings, requirements=requirements)
     handlers = {"reconcile_status": reconcile_status}

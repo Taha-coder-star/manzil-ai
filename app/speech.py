@@ -85,6 +85,7 @@ KEYTERM_TTL_SECONDS = 600
 # Statuses (stt_meta.status, Turn.voice). transcribed / truncated carry a transcript.
 TRANSCRIBED, TRUNCATED = "transcribed", "truncated"
 USABLE = frozenset({TRANSCRIBED, TRUNCATED})
+LIMITED = "limited"  # set by app.handlers.record_event when app.limits refuses the note
 NO_FALLBACK_REASONS = frozenset({"no_speech", "unsupported_language"})
 
 # Approved templates (Roman Urdu, R-21; wording pending owner approval like 6.1's).
@@ -93,11 +94,14 @@ TEMPLATES = {
     "voice_failed": "Maazrat, awaaz samajh nahi aayi. Please apni baat likh kar bhej dein.",
     "voice_language": "Please Urdu ya English mein bolein ya likh kar bhej dein.",
     "voice_truncated": "Voice note lamba tha; sirf pehle 2 minute suni gayi hain.",
+    # Audit MA-006: over the voice-note limit (app.limits); never downloaded or transcribed.
+    "voice_limit": "Abhi aur voice notes nahi sun sakta. Please apni baat likh kar bhej dein.",
 }
 NOTICES = {
     "too_short": "voice_retry", "no_speech": "voice_retry",
     "download_failed": "voice_retry", "failed": "voice_failed",
     "unsupported_language": "voice_language", TRUNCATED: "voice_truncated",
+    LIMITED: "voice_limit",
 }
 
 # Domain vocabulary for keyterm biasing (R16: DHA, marla, crore, precinct, ...),

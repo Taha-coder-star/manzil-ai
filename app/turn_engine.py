@@ -129,6 +129,9 @@ TEMPLATES = {
     "failure": ("Maazrat, abhi aap ki request process nahi ho saki. "
                 "Thori dair baad dobara bhejein."),
     "interim": "Ek minute, check kar raha hoon.",
+    # Audit MA-006 (BD-8 wording, pending owner approval): over a usage limit.
+    "limit": ("Maazrat, aap ne kaafi zyada messages bheje hain. "
+              "Thori dair baad dobara likhein."),
     "refusal": ("Maazrat, is baat mein main madad nahi kar sakta. "
                 "Property ke baare mein apna sawal likh kar bhejein."),
     "customer_default": ("Shukriya! Property dhoondne ke liye apna area, budget aur "
@@ -239,6 +242,7 @@ TEMPLATES = {
 # customer's language; wording pending owner approval). A key without one stays Roman Urdu.
 TEMPLATES_EN = {
     "failure": "Sorry, your request could not be processed right now. Please try again later.",
+    "limit": "Sorry, you have sent a lot of messages. Please write again a little later.",
     "refusal": "Sorry, I can't help with that. Please send your question about a property.",
     "customer_default": ("Thanks! To find a property, tell me the area, your budget and the "
                          "type of property (house, flat, plot)."),

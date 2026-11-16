@@ -1,3 +1,22 @@
+2026-11-13 AUDIT WP4 IMPLEMENTED (UNCOMMITTED): USAGE LIMITS (MA-006).
+Worktree .claude/worktrees/wp4-limits, branch fix/wp4-limits from v2026.11.13
+(1e5054b). BD-8 = the proposed defaults; BD-9 open (no money cap: prices unverified).
+No migration. app/limits.py counts existing rows: customer turns per conversation
+(route customer, not 'gated'; 20/h, 60/24 h), voice notes per conversation
+(inbound_audio, 10/h), per agency since Karachi midnight model calls (usage_event
+operation <> 'stt', 1500) and succeeded STT seconds (3600). Env LIMIT_* overrides;
+bad values stop the worker (ConfigurationError). orchestrator._over_limit after the
+gate, customer route only: no model call, TEMPLATES["limit"] once per conversation per
+clock hour (limit:{conversation}:{YYYYMMDDHH}, ai_generated=False), turn 'gated'.
+handlers.record_event: a customer's audio over a limit gets stt_meta status 'limited'
+and is never staged (no download, no STT); speech notice voice_limit. Agency caps log
+ALERT agency_limit. tests/test_limits_db.py (8). test_turn_engine metering test locks
+usage_event IN SHARE MODE (was ACCESS EXCLUSIVE; the limit reads would block first).
+FakeSpeech keeps an already-stored stt_meta, as SpeechService does.
+Full suite (6 sequential batches, manzil-ai:wp3-locked-test): 4113 collected,
+4095 passed, 18 skipped, 0 failed. Ruff clean. Wording pending owner approval.
+Resume: owner review; commit / push / PR only on owner instruction.
+
 2026-11-13 AUDIT WP3 IMPLEMENTED (UNCOMMITTED): REPRODUCIBLE RELEASE.
 Worktree .claude/worktrees/wp3-reproducible-release, branch fix/wp3-reproducible-release
 from e896e5b (WP2; PR #69 still open). BD-12 = A. No migration, no deployment.

@@ -715,7 +715,8 @@ def test_transient_metering_failures_exhaust_retries_then_a_later_message_is_ans
     # timeout (a transient error): the job retries within max_attempts, then gives up.
     monkeypatch.setattr(turn_engine, "STATEMENT_TIMEOUT", "300ms")
     blocker = psycopg.connect(ai.admin_url)
-    blocker.execute("LOCK TABLE usage_event IN ACCESS EXCLUSIVE MODE")
+    # SHARE blocks the usage INSERT but not the reads of app.limits (WP4).
+    blocker.execute("LOCK TABLE usage_event IN SHARE MODE")
     try:
         ai.script += [answer(), answer(), answer()]
         ai.deliver(text("pehla"))
