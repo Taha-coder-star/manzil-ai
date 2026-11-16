@@ -314,7 +314,8 @@ def test_an_unknown_thinking_level_stops_the_worker_with_exit_78(monkeypatch, ca
                      meta_api_version="v25.0")
     monkeypatch.setattr(worker_main.signal, "signal", lambda *args: None)
     monkeypatch.setattr(worker_main, "load_settings", lambda: value)
-    monkeypatch.setattr(worker_main, "parse_sender_agencies", lambda v: {PNID: "unused"})
+    monkeypatch.setattr(worker_main, "DatabaseSenderResolver",
+                        lambda url, raw: SimpleNamespace(agency_ids=lambda: ["unused"]))
 
     def never(*args, **kwargs):
         raise AssertionError("nothing may run past the configuration check")
@@ -384,7 +385,7 @@ def sp(app_role_db):
                       "VALUES (%s, 'Difence', 'voice_stt')", (area,))
     speech._keyterm_cache.update(expires=0.0, terms=None)
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID)
     with tenant_transaction(conn, agency):
         conn.execute("INSERT INTO staff (agency_id, name, whatsapp_number, role) VALUES "
                      "(current_agency_id(), 'Demo agent', %s, 'agent')", ("+" + STAFF,))

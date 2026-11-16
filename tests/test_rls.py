@@ -240,7 +240,7 @@ def test_role_and_table_hardening(rls_db):
         (schema,),
     ).fetchall()
     # Shared gazetteer tables have no tenant column; they are read-only for the runtime.
-    shared = {"location", "location_alias", "location_neighbor"}
+    shared = {"location", "location_alias", "location_neighbor", "sender_route"}  # 021: routes
     inventory = {
         "project", "property", "property_media", "property_event", "listing_draft",
         "staff_session",

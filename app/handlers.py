@@ -28,6 +28,7 @@ from app import (
     media,
     orchestrator,
     outbound,
+    seed,
     speech,
     staff_buffer,
     turn_engine,
@@ -318,7 +319,12 @@ def process_message(conn, job, client_factory, *, privacy_url=None, image_link=N
                     payload, f"{dedupe_prefix}:{seq}",
                 )
 
-        orchestrator.run_turns(conn, job, client, sender, demo=demo, engine=engine,
+        with tenant_transaction(conn, job.agency_id):
+            # Audit WP5 (TD-13): '#demo' commands only for the demo agency.
+            is_demo = conn.execute("SELECT name FROM agency WHERE id = current_agency_id()"
+                                   ).fetchone()[0] == seed.DEMO_AGENCY_NAME
+        orchestrator.run_turns(conn, job, client, sender, demo=demo if is_demo else None,
+                               engine=engine,
                                speech_service=speech_service, storage=storage)
 
 

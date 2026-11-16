@@ -37,7 +37,7 @@ def reply(route, count=1):
 def orc(app_role_db):
     _, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID_A)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID_A)
     other = create_agency(conn, "Other Realty (DEMO)", "other", PNID_B)
     with tenant_transaction(conn, agency):
         for name, number, role, active in [

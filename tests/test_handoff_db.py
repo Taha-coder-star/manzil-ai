@@ -98,7 +98,7 @@ def test_picking_a_row_opens_the_lead_and_sends_the_honest_cta(st):
     [reply] = ctas(tap(st, "handoff:visit:DH6-102"))
     body, button, url = cta(reply)
     assert body == (
-        "Main Manzil ka AI assistant hoon — aapko hamare consultant *Ahmed* se connect kar "
+        "Main Manzil Demo Realty (DEMO) ka AI assistant hoon — aapko hamare consultant *Ahmed* se connect kar "
         f"raha hoon. Woh jald rabta karenge.\n\n🏠 Property: *#{n} · DH6-102*\n"
         "🔖 Aapka reference: *L-01*")
     assert button == "Chat with Ahmed"
@@ -152,7 +152,7 @@ def test_one_shown_listing_is_echoed_without_a_question(st):
     [reply] = ctas(turn(st, "I want to visit it", ("request_handoff", {"reason": "visit"}),
                    sender=CUSTOMER_A))
     body, button, _ = cta(reply)
-    assert body.startswith("I'm Manzil's AI assistant") and "#1 · DH6-108" in body
+    assert body.startswith("I'm Manzil Demo Realty (DEMO)'s AI assistant") and "#1 · DH6-108" in body
     assert button == "Chat with Ahmed"
 
 

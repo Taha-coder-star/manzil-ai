@@ -949,7 +949,8 @@ def start(monkeypatch, value, agency):
     seen = {}
     monkeypatch.setattr(worker_main.signal, "signal", lambda *args: None)
     monkeypatch.setattr(worker_main, "load_settings", lambda: value)
-    monkeypatch.setattr(worker_main, "parse_sender_agencies", lambda v: {PNID: agency})
+    monkeypatch.setattr(worker_main, "DatabaseSenderResolver",
+                        lambda url, raw: SimpleNamespace(agency_ids=lambda: [agency]))
 
     def handlers(settings, **kwargs):
         seen.update(kwargs)

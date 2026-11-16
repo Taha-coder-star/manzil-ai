@@ -367,7 +367,7 @@ class FakeChannel:
 def md(app_role_db):
     _, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID)
     with tenant_transaction(conn, agency):
         conn.execute(
             "INSERT INTO staff (agency_id, name, whatsapp_number, role) VALUES "

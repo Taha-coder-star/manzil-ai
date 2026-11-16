@@ -49,7 +49,7 @@ class FakeClient:
 def gw(app_role_db):
     _, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID)
     client = FakeClient()
     settings = SimpleNamespace(
         meta_access_token="unused", meta_api_version="v25.0",

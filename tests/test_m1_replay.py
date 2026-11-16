@@ -43,7 +43,7 @@ def via_test_client(url, body, headers):
 def m1(app_role_db, monkeypatch):
     _, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID_A)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID_A)
     with tenant_transaction(conn, agency):
         conn.execute(
             "INSERT INTO staff (agency_id, name, whatsapp_number, role) VALUES "

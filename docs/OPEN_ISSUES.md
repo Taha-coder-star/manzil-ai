@@ -1,3 +1,14 @@
+2026-11-14 AUDIT WP5: OPEN AFTER ONBOARDING AND ROUTING.
+After 021 is released, route the demo agency first (docs/ONBOARDING.md step 0): the
+first sender_route row turns off the WEBHOOK_SENDER_AGENCIES fallback. A worker that
+started idle (no routes at all) needs one restart. One Meta token for every agency
+(BD-7 A; a leaked token can send from every number); WP7 if an agency brings its own
+account. Brokers added by manage_staff have no areas_covered (no CLI option). Accepted
+leads of a deactivated broker stay with them until release or close. Loading areas
+needs a worker restart (gazetteer read at start). The customer disclosure now shows
+the full agency name, e.g. "Manzil Demo Realty (DEMO)" for the demo. Privacy text for a
+real agency is WP6 (BD-10).
+
 2026-11-13 AUDIT WP3: CHECK BEFORE AND AFTER THE FIRST TAG RELEASE.
 Before: read-only SELECT name, checksum FROM schema_migration WHERE name IN
 ('001_schema_v1.sql','002_tenant_rls.sql') must show 001 ffc7c8c2759f48d2...4d9d and

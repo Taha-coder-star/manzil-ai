@@ -1,3 +1,23 @@
+2026-11-14 AUDIT WP5 IMPLEMENTED (UNCOMMITTED): ONBOARDING AND DATABASE ROUTING.
+Worktree .claude/worktrees/wp5-onboarding-routing, branch fix/wp5-onboarding-routing
+from v2026.11.13 (1e5054b), independent of WP4. Decisions: BD-5 A, BD-6 shared, BD-13
+as recommended. Migration 021 sender_route (no RLS, SELECT only for manzil_app).
+routing.DatabaseSenderResolver: table, 60 s cache, WEBHOOK_SENDER_AGENCIES fallback
+while empty; web keeps one per config; worker builds its agency list from it and
+re-reads it at each reap (30 s). verify_agency cross-check unchanged. ingest logs
+ALERT unknown_sender. provision_agency: plan by default, --apply writes agency then
+route (SEED_OWNER_DATABASE_URL), --agency-id routes an existing agency. New
+manage_staff (list/add/set-role/deactivate; deactivate passes pending leads to an
+admin, lists accepted ones) and load_gazetteer (seed gazetteer phase, any market:
+demo_dataset.check_locations(demo=False) skips the demo's expected areas). Handoff
+disclosure uses agency.name; '#demo' only for seed.DEMO_AGENCY_NAME (nine test fixtures
+renamed to it). docs/ONBOARDING.md. tests/test_onboarding_db.py (13).
+Full suite (6 sequential batches, manzil-ai:wp3-locked-test): 4118 collected,
+4100 passed, 18 skipped, 0 failed. Ruff clean.
+Release: needs migration 021 (RELEASE.md s3 migrator: 1 applied), then step 0 of
+docs/ONBOARDING.md (route the demo agency). Resume: owner review; commit / PR on
+owner instruction.
+
 2026-11-13 AUDIT WP3 IMPLEMENTED (UNCOMMITTED): REPRODUCIBLE RELEASE.
 Worktree .claude/worktrees/wp3-reproducible-release, branch fix/wp3-reproducible-release
 from e896e5b (WP2; PR #69 still open). BD-12 = A. No migration, no deployment.

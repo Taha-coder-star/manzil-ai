@@ -86,7 +86,7 @@ def timeout_after(clock, seconds):
 def ai(app_role_db):
     admin_url, app_url, _ = app_role_db
     conn = psycopg.connect(app_url, autocommit=True)
-    agency = create_agency(conn, "Demo Realty (DEMO)", "demo", PNID_A)
+    agency = create_agency(conn, "Manzil Demo Realty (DEMO)", "demo", PNID_A)
     other = create_agency(conn, "Other Realty (DEMO)", "other", PNID_B)
     with tenant_transaction(conn, agency):
         for name, number, role in [("Agent (DEMO)", AGENT, "agent"),
@@ -996,8 +996,9 @@ def start_worker(monkeypatch, settings_value, make_handlers_result):
     """worker_main.run() up to the point where it would start claiming jobs."""
     monkeypatch.setattr(worker_main.signal, "signal", lambda *args: None)
     monkeypatch.setattr(worker_main, "load_settings", lambda: settings_value)
-    monkeypatch.setattr(worker_main, "parse_sender_agencies",
-                        lambda value: {PNID_A: settings_value.agency})
+    monkeypatch.setattr(worker_main, "DatabaseSenderResolver",
+                        lambda url, raw: SimpleNamespace(
+                            agency_ids=lambda: [settings_value.agency]))
 
     def handlers(settings, **kwargs):
         if isinstance(make_handlers_result, Exception):

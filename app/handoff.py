@@ -53,7 +53,7 @@ OPENED, ALREADY_OPEN, NO_AGENT = "opened", "already_open", "no_agent"
 # Customer wording (R6 / Demo Scope scenario 5; awaits owner approval).
 TEXT = {
     ROMAN_URDU: {
-        "connect": ("Main Manzil ka AI assistant hoon — aapko hamare consultant *{name}* se "
+        "connect": ("Main {agency} ka AI assistant hoon — aapko hamare consultant *{name}* se "
                     "connect kar raha hoon. Woh jald rabta karenge."),
         "property": "🏠 Property: *{refs}*",
         "lead": "🔖 Aapka reference: *{code}*",
@@ -69,7 +69,7 @@ TEXT = {
                     "sakte hain."),
     },
     ENGLISH: {
-        "connect": ("I'm Manzil's AI assistant — I'm connecting you with our consultant "
+        "connect": ("I'm {agency}'s AI assistant — I'm connecting you with our consultant "
                     "*{name}*. They will contact you soon."),
         "property": "🏠 Property: *{refs}*",
         "lead": "🔖 Your reference: *{code}*",
@@ -97,6 +97,7 @@ class Opened:
     lead_code: str | None = None
     agent: Agent | None = None
     refs: tuple = ()            # "#2 · DH6-102" of the confirmed listings
+    agency: str = "Manzil"      # audit WP5 (TD-13): the agency's own name in the disclosure
 
 
 def accept_minutes():
@@ -182,13 +183,14 @@ def open_handoff(conn, conversation_id, items, reason):
     conn.execute(f"SET LOCAL statement_timeout = '{STATEMENT_TIMEOUT}'")
     conn.execute("SELECT id FROM conversation WHERE id = %s FOR UPDATE", (conversation_id,))
     positions = {i.code: i.position for i in items}
+    agency = conn.execute("SELECT name FROM agency WHERE id = current_agency_id()").fetchone()[0]
     existing = _open_handoff(conn, conversation_id)
     if existing is not None:
         handoff_id, code, *staff = existing
         lead_id = conn.execute("SELECT lead_id FROM handoff WHERE id = %s",
                                (handoff_id,)).fetchone()[0]
         return Opened(ALREADY_OPEN, handoff_id, code, _agent(staff if staff[0] else None),
-                      _refs(conn, lead_id, positions))
+                      _refs(conn, lead_id, positions), agency)
     property_ids = [i.property_id for i in items]
     agent = route(conn, property_ids)
     if agent is None:
@@ -251,7 +253,7 @@ def open_handoff(conn, conversation_id, items, reason):
     queue.enqueue_job(conn, ALERT_JOB, f"handoff-alert:{handoff_id}", payload)
     queue.enqueue_job(conn, TIMEOUT_JOB, f"handoff-timeout:{handoff_id}:1",
                       {**payload, "round": 1}, delay_seconds=minutes * 60)
-    return Opened(OPENED, handoff_id, code, agent, _refs(conn, lead_id, positions))
+    return Opened(OPENED, handoff_id, code, agent, _refs(conn, lead_id, positions), agency)
 
 
 
@@ -266,7 +268,7 @@ def customer_message(opened, language):
     wa.me CTA to the assigned staff member ("Ref L-07" pre-filled)."""
     words = TEXT.get(language, TEXT[ROMAN_URDU])
     name = first_name(opened.agent.name) or words["chat_short"]
-    lines = [words["connect"].format(name=name), ""]
+    lines = [words["connect"].format(name=name, agency=opened.agency), ""]
     if opened.refs:
         lines.append(words["property"].format(refs=", ".join(opened.refs)))
     lines.append(words["lead"].format(code=opened.lead_code))

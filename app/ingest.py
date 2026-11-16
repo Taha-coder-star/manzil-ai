@@ -103,8 +103,9 @@ def ingest_events(database_url, resolver, events):
         if agency_id is None:
             # Never fall back to a default agency.
             result.unknown_sender += 1
-            logger.warning(
-                "Webhook event dropped: unknown sender ...%s", event.phone_number_id[-4:]
+            logger.error(
+                "ALERT unknown_sender: webhook event dropped for sender ...%s",
+                event.phone_number_id[-4:],
             )
             continue
         groups.setdefault((agency_id, event.phone_number_id), []).append(event)

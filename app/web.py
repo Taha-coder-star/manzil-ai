@@ -11,13 +11,22 @@ from app import health, log_safety, webhook
 from app.config import load_settings
 from app.ingest import IngestError, ingest_events
 from app.privacy import render_privacy_page
-from app.routing import EnvSenderResolver, RoutingConfigError
+from app.routing import DatabaseSenderResolver, RoutingConfigError
 
 log_safety.install()
 logger = logging.getLogger(__name__)
 logging.getLogger("uvicorn.access").addFilter(webhook.RedactVerifyTokenFilter())
 
 app = FastAPI(title="Manzil AI")
+# One cached resolver per routing configuration (settings are read per request).
+_resolvers = {}
+
+
+def _resolver(settings):
+    key = (settings.database_url, settings.webhook_sender_agencies)
+    if key not in _resolvers:
+        _resolvers[key] = DatabaseSenderResolver(*key)
+    return _resolvers[key]
 
 REVISION_FILE = Path("/app/REVISION")
 
@@ -117,7 +126,7 @@ async def webhook_receive(request: Request):
     try:
         if not settings.database_url:
             raise RoutingConfigError("DATABASE_URL is not set")
-        resolver = EnvSenderResolver.from_config(settings.webhook_sender_agencies)
+        resolver = _resolver(settings)
         result = await run_in_threadpool(
             ingest_events, settings.database_url, resolver, events
         )
