@@ -106,6 +106,46 @@ def cheaper_command(text):
     return text
 
 
+# A deliberately small language for recognizing one search, AFTER a successful
+# search tool has rendered its answer. This never extracts or changes a slot.
+# Unknown words, conjunctions, questions and punctuation retain model continuation
+# so photos, handoff, legal questions and compound requests cannot be cut short.
+_SEARCH_TYPES = frozenset({"house", "houses", "ghar", "flat", "flats", "apartment",
+                           "apartments", "office", "offices", "shop", "shops", "plot",
+                           "plots", "warehouse", "warehouses", "bungalow"})
+_SEARCH_WORDS = frozenset({
+    "i", "need", "want", "a", "an", "please", "plz", "show", "me", "find", "looking",
+    "for", "on", "rent", "sale", "buy", "purchase", "in", "at", "around", "about",
+    "budget", "up", "to", "under", "maximum", "max", "per", "month", "monthly",
+    "pkr", "lakh", "lac", "lakhs", "crore", "cr", "million", "thousand", "k", "gaz",
+    "yard", "yards", "sq", "yd", "ft", "square", "feet", "sqft", "marla", "kanal",
+    "tak", "ka", "ki", "ke", "mein", "main", "chahiye", "chaiye", "dikhao", "dikhayein",
+    "khareedna", "kharidna", "kiraye", "par", "mujhe", "ji", "karachi", "dha",
+    "defence", "defense", "phase", "block", "precinct", "sector", "clifton", "bahria",
+    "town", "gulshan", "e", "iqbal", "pechs", "north", "nazimabad", "shahrah", "faisal",
+    "city", "ek", "aik", "do", "teen", "char", "chaar", "paanch", "panch", "che", "aath",
+    "ath", "nau", "das", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x",
+})
+
+
+def single_search(text):
+    """Conservatively prove a completed search has no second requested action.
+
+    Only a single property type and bounded query vocabulary qualify. This is
+    deliberately not a general intent classifier: unsupported wording keeps the
+    original model loop, and multi-message turns are not shortened.
+    """
+    if (not text or len(text) > 500 or not re.fullmatch(r"[a-zA-Z0-9 ,\.]+", text)
+            or re.search(r"(?<!\d)\.|\.(?!\d)", text)):
+        return False
+    tokens = _tokens(text)
+    return (sum(t in _SEARCH_TYPES for t in tokens) == 1
+            and all(t in _SEARCH_TYPES | _SEARCH_WORDS or t.isascii() and t.isdecimal()
+                    for t in tokens)
+            and not (set(tokens) & {"rent", "kiraye"}
+                     and set(tokens) & {"sale", "buy", "purchase", "khareedna", "kharidna"}))
+
+
 def greeting_kind(text):
     """SALAM / HELLO when the whole text is a greeting and nothing else, else None. Thanks
     alone, an empty text, or a greeting followed by any request word is not a greeting."""

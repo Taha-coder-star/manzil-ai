@@ -870,6 +870,12 @@ class TurnEngine:
                 trusted |= result.trusted_codes
                 if result.ok:
                     payloads.extend(result.payloads)
+            if self._completed_search(context, tools, results):
+                # Facts and final payloads are already rendered by the backend.
+                # Avoid a redundant STOP round (and a provider failure after a
+                # successful search), only when no other action was requested.
+                return Outcome("done", "search_complete", tuple(notices), tuple(tools),
+                               calls, tuple(payloads), frozenset(trusted))
             contents = contents + [
                 response.model_content,
                 {"role": "user", "parts": [
@@ -884,6 +890,17 @@ class TurnEngine:
             detail = "iteration_limit_search"
         return Outcome("done", detail, tuple(notices), tuple(tools), calls,
                        tuple(payloads), frozenset(trusted))
+
+    @staticmethod
+    def _completed_search(context, tools, results):
+        return (context.route == "customer"
+                and isinstance(context.binding, customer_tools.CustomerBinding)
+                and customer_intent.single_search(context.turn_text)
+                and all(name in {"update_requirements", "search_properties"} for name in tools)
+                and bool(results) and results[-1].name == "search_properties"
+                and all(result.ok for result in results)
+                and bool(results[-1].payloads) and context.binding.results
+                and not context.binding.handoff)
 
     @staticmethod
     def _code_search(context, tools, notices, payloads, trusted):

@@ -1,3 +1,31 @@
+2026-11-13 DAY13 CI FAILURE DIAGNOSED: TEST HELPER ONLY.
+Imported owner read-only CI diagnostics for3e24e4e: both Linux runs4124pass/1fail.
+Failure tests/test_handoff_db.py::test_after_the_handoff_the_ai_stays_silent was
+assert st.script after the helper discarded its gated-turn no-model sentinel.
+Added calls guard to STOP cleanup and explicit unchanged model-request assertion;
+kept existing holding reply/sentinel checks. No application or safety gate change.
+Focused affected-path regression128PASS (no skips); lint PASS, disposable loopback
+DB only. The failing handoff test keeps both its sentinel and a direct no-provider
+request-count assertion. App/bench/deploy/schema/data/dependency bytes unchanged
+from3e24e4e; new candidate requires fresh exact-head CI, not an old-run retry.
+Archive old receipts; pin new test/docs-only commit and fresh CI before deployment.
+
+2026-11-12 DAY13 RESUMED: SEARCH COMPLETION AND COST-UNKNOWN FIX.
+Owner asks to complete Day13. Added conservative search-only completion after real
+rendered results, retaining continuation for compound/unknown/error/clarification
+paths. Existing send-time grounding/control gates are unchanged. Fixed benchmark
+call_cost to require all four valid token counts; missing does not mean zero.
+Initial focused217pass/1skip; lint PASS. Full4125cases:4076pass/42skip/7failures
+from obsolete request count, unused scripted STOP responses and missing local CI
+role name. Corrected recheck185PASS covers all seven failures, customer/search
+holds, full webhook replay and role denial. No application/security assertion
+was weakened; original full-run failures retained. No provider/runtime changes.
+Source baseline7b044b3; candidate branch feature/day13-search-completion. Local
+disposable PostgreSQL is loopback55478/manzil_schema_test, never a project.env URL.
+Network GitHub probe failed; publication helper prepared, commit/receipt pinned
+locally at session completion. No new GitHub CI, merge or deployment is claimed.
+Day13 OPEN until measured/coverage gates or explicit concrete owner exceptions.
+
 2026-11-12 GITHUB PUBLICATION PREPARED: CLAUDE AUDIT + PENDING DAY13 NOTES.
 Owner requested pushing Claude prompts and remaining work. GitHub network access
 is blocked in this agent session; remote publication is not yet claimed.

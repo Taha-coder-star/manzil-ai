@@ -25,11 +25,14 @@ SCENARIO_2_PATCH = [p("location", "set", "DHA Phase 6"), p("size", "set", "500 g
 def search_turn(st, body, patch, sender):
     """One customer turn: update_requirements, then search_properties, then a STOP."""
     before = len(st.client.sent)
+    stop = answer()
     st.script.extend([tools_answer(tool("update_requirements", {"patch": patch})),
                       tools_answer(tool("search_properties", call_id="call-2")),
-                      answer()])
+                      stop])
     st.deliver(text(body, sender=sender))
     st.drain()
+    if st.script and st.script[0] is stop:
+        st.script.pop(0)  # Never consume unexecuted tool calls or another turn's response.
     return [payload for _, payload in st.client.sent[before:]]
 
 

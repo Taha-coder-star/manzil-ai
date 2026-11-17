@@ -131,10 +131,13 @@ def call_cost(prices, model, usage):
     priced (unknown model, a token count not reported). Thinking tokens are billed as output
     (assumption, recorded in the report)."""
     rates = (prices or {}).get("models", {}).get(model)
-    if rates is None or usage.input_tokens is None or usage.output_tokens is None:
+    counts = (usage.input_tokens, usage.output_tokens,
+              usage.cached_input_tokens, usage.thinking_tokens)
+    if (rates is None or not all(llm.valid_count(value) for value in counts)
+            or usage.cached_input_tokens > usage.input_tokens):
         return None
-    cached = usage.cached_input_tokens or 0
-    output = usage.output_tokens + (usage.thinking_tokens or 0)
+    cached = usage.cached_input_tokens
+    output = usage.output_tokens + usage.thinking_tokens
     million = Decimal(1_000_000)
     return ((usage.input_tokens - cached) * _price(rates["input_per_mtok"])
             + cached * _price(rates["cached_input_per_mtok"])
