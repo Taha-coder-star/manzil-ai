@@ -67,6 +67,14 @@ class FakeSpeech:
         messages, statuses = [], []
         for message in turn.messages:
             if message.type == "audio":
+                with tenant_transaction(conn, turn.agency_id):
+                    done = conn.execute("SELECT stt_meta->>'status' FROM message "
+                                        "WHERE id = %s AND stt_meta IS NOT NULL",
+                                        (message.id,)).fetchone()
+                if done is not None:  # already decided (e.g. over the voice limit)
+                    statuses.append(done[0])
+                    messages.append(message)
+                    continue
                 transcript = self.transcripts.pop(0)
                 with tenant_transaction(conn, turn.agency_id):
                     conn.execute("UPDATE message SET transcript = %s, stt_meta = %s "

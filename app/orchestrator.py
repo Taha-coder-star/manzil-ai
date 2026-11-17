@@ -57,7 +57,7 @@ import re
 import time
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID
 
 import psycopg
@@ -68,6 +68,7 @@ from app import (
     echo,
     handoff,
     handoff_actions,
+    limits,
     outbound,
     speech,
     staff_actions,
@@ -80,6 +81,7 @@ from app.config import ConfigurationError
 from app.db import tenant_transaction
 from app.gazetteer import GazetteerUnavailable
 from app.queue import PermanentJobError, error_code
+from app.render import ENGLISH, detect_language
 from app.turn_assembly import before_dispatch
 
 logger = logging.getLogger(__name__)
@@ -762,6 +764,29 @@ def answer_turn(conn, client, job, turn, *, engine=None):
     _answer(conn, client, job, turn, None, engine)
 
 
+def _over_limit(conn, client, turn):
+    """Audit MA-006: a customer turn over a usage limit (app.limits) does no AI work. One
+    notice per conversation per clock hour (its dedupe key); the turn closes 'gated' so it
+    does not count towards the limit itself."""
+    with tenant_transaction(conn, turn.agency_id):
+        _set_timeout(conn)
+        limit = limits.customer_turn_limit(conn, turn)
+    if limit is None:
+        return False
+    english = detect_language(" ".join(m.text or "" for m in turn.messages)) == ENGLISH
+    try:
+        outbound.send_message(
+            conn, client, turn.agency_id, turn.conversation_id, turn.sender_wa_id,
+            whatsapp.text((turn_engine.TEMPLATES_EN if english else turn_engine.TEMPLATES)["limit"]),
+            f"limit:{turn.conversation_id}:{datetime.now(UTC):%Y%m%d%H}", ai_generated=False,
+        )
+    except whatsapp.PermanentSendError as exc:
+        logger.warning("Limit notice for turn %s not sent (%s)", turn.id, exc.code)
+    close_turn(conn, turn, "gated")
+    logger.info("Turn %s over limit %s", turn.id, limit)
+    return True
+
+
 def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, storage=None):
     if (turn.route == "customer" and turn.messages
             and all(m.type in NO_CONTENT_TYPES for m in turn.messages)):
@@ -781,6 +806,8 @@ def _answer(conn, client, job, turn, demo, engine=None, speech_service=None, sto
         close_turn(conn, turn, "gated")
         logger.info("Turn %s gated (%s / %s)", turn.id, turn.control_state,
                     turn.conversation_mode)
+        return
+    if turn.route == "customer" and _over_limit(conn, client, turn):
         return
     if turn.staff_segment_id is not None:
         _send(conn, client, turn, _segment_payloads(conn, client, job, turn, engine))

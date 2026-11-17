@@ -32,6 +32,7 @@ worker = `app/worker.py`, `app/handlers.py` and the modules they call.
 | `AI_PROVIDER`, `GEMINI_API_KEY`, `LLM_PRIMARY_MODEL`, `LLM_FAILOVER_MODEL`, `LLM_THINKING_LEVEL` | no | yes | turn engine, L3 summary, STT fallback |
 | `STT_PROVIDER`, `STT_FALLBACK`, `ELEVENLABS_API_KEY` | no | yes | speech |
 | `HANDOFF_ACCEPT_MINUTES`, `LEAD_ALERT_TEMPLATE`, `LEAD_ALERT_LANGUAGE`, `LEAD_ALERT_PARAMS` | no | yes | handoff timers and broker alert |
+| `LIMIT_*` (five, WP4) | no | yes | usage limits (`app/limits.py`); optional, defaults apply |
 | `META_APP_ID`, `META_WABA_ID`, `META_PHONE_NUMBER_ID` | no | no | operator tools only (`provision_agency`), not the runtime |
 
 Not affected: the `DAY13_*` variables of `deploy/compose.day13-budget.yml` are set by that file's
@@ -75,7 +76,7 @@ Nothing below prints a value.
    ```bash
    umask 077
    grep -E '^(DATABASE_URL|WEBHOOK_SENDER_AGENCIES|S3_BUCKET|S3_REGION|S3_ENDPOINT_URL|META_APP_SECRET|WEBHOOK_VERIFY_TOKEN|PRIVACY_CONTACT_EMAIL|PORT)=' .env > .env.web
-   grep -E '^(DATABASE_URL|WEBHOOK_SENDER_AGENCIES|S3_BUCKET|S3_REGION|S3_ENDPOINT_URL|META_ACCESS_TOKEN|META_API_VERSION|WORKER_CONCURRENCY|MEDIA_PUBLIC_BASE_URL|SITE_ADDRESS|AI_PROVIDER|GEMINI_API_KEY|LLM_PRIMARY_MODEL|LLM_FAILOVER_MODEL|LLM_THINKING_LEVEL|STT_PROVIDER|STT_FALLBACK|ELEVENLABS_API_KEY|HANDOFF_ACCEPT_MINUTES|LEAD_ALERT_TEMPLATE|LEAD_ALERT_LANGUAGE|LEAD_ALERT_PARAMS)=' .env > .env.worker
+   grep -E '^(DATABASE_URL|WEBHOOK_SENDER_AGENCIES|S3_BUCKET|S3_REGION|S3_ENDPOINT_URL|META_ACCESS_TOKEN|META_API_VERSION|WORKER_CONCURRENCY|MEDIA_PUBLIC_BASE_URL|SITE_ADDRESS|AI_PROVIDER|GEMINI_API_KEY|LLM_PRIMARY_MODEL|LLM_FAILOVER_MODEL|LLM_THINKING_LEVEL|STT_PROVIDER|STT_FALLBACK|ELEVENLABS_API_KEY|HANDOFF_ACCEPT_MINUTES|LEAD_ALERT_TEMPLATE|LEAD_ALERT_LANGUAGE|LEAD_ALERT_PARAMS|LIMIT_[A-Z_]+)=' .env > .env.worker
    cut -d= -f1 .env.web; echo ---; cut -d= -f1 .env.worker      # names only
    ```
 3. Back up the compose file, apply the diff above, then

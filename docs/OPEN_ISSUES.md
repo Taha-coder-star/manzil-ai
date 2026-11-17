@@ -1,3 +1,11 @@
+2026-11-13 AUDIT WP4 LIMITS: KNOWN LIMITS OF THE FIRST VERSION.
+Units, not money (BD-9 open). Per-agency values are env-wide, not per agency (TD-10).
+Reactions and button taps count as customer turns. A turn over a turn limit is closed
+whole (its voice notes are not transcribed). The agency caps block customers only;
+staff model calls count towards them but are never blocked. A limited voice note in
+the same turn as text: the text is answered, the note gets the voice_limit notice.
+The agency-cap ALERT is logged on every blocked turn (no rate limit on the log line).
+
 2026-11-13 AUDIT WP3: CHECK BEFORE AND AFTER THE FIRST TAG RELEASE.
 Before: read-only SELECT name, checksum FROM schema_migration WHERE name IN
 ('001_schema_v1.sql','002_tenant_rls.sql') must show 001 ffc7c8c2759f48d2...4d9d and
